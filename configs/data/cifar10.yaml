@@ -1,0 +1,6 @@
+name: CIFAR10
+input_size: 3072
+channels: 3
+height: 32
+width: 32
+num_classes: 10

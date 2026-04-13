@@ -1,0 +1,6 @@
+epochs: 10
+learning_rate: 0.001
+label_embedding_dim: 32
+context_hidden_dim: 128
+context_num_layers: 3
+num_mixture_components: 4

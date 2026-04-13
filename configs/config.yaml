@@ -1,0 +1,7 @@
+defaults:
+  - data: mnist
+  - model: autoencoder
+  - model@model.cspn: cspn
+  - _self_
+
+output_dir: ./results
