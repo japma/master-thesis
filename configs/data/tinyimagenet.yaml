@@ -1,0 +1,9 @@
+name: TinyImageNet
+input_size: 12288
+channels: 3
+height: 64
+width: 64
+num_classes: 200
+dataset_kwargs:
+  root: ./data/tiny-imagenet-200
+  image_size: 64
