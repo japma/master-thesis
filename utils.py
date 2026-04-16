@@ -345,7 +345,7 @@ def visualize_cspn(
 
         label_ids = torch.arange(num_labels, device=device, dtype=torch.long)
         proto_latents = cspn.predict_latent(label_ids)
-        proto_images = autoencoder.decoder(proto_latents)
+        proto_images = autoencoder.decode(proto_latents)
         proto_images = _reshape_to_image_batch(proto_images, image_shape)
 
         proto_images = proto_images.detach().cpu()
@@ -379,7 +379,7 @@ def visualize_cspn(
         )
 
         reconstructed = autoencoder(images)
-        transferred = autoencoder.decoder(transformed_z)
+        transferred = autoencoder.decode(transformed_z)
         reconstructed = _reshape_to_image_batch(reconstructed, image_shape)
         transferred = _reshape_to_image_batch(transferred, image_shape)
 

@@ -9,7 +9,8 @@ from torchinfo import summary
 import time
 
 from file_utils import create_run_directories, save_checkpoint
-from models import Autoencoder, CombinedModel
+from models import CombinedModel
+from models.autoencoder.variational_autoencoder import VariationalAutoencoder
 from models.cspn import SPFlowCSPN
 from utils import (
     format_elapsed_time,
@@ -200,9 +201,10 @@ def train_model(cfg: DictConfig):
     run_dirs = create_run_directories(output_dir, dataset_name)
     print(f"Run directory: {run_dirs.run_dir}")
 
-    model = Autoencoder(
+    model = VariationalAutoencoder(
         input_size=input_size,
         latent_size=latent_size,
+        image_shape=(channels, height, width),
     ).to(device)
     summary(
         model,

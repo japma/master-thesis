@@ -13,7 +13,7 @@ class CombinedModel(nn.Module):
         return self.autoencoder.encode(images)
 
     def decode(self, latents):
-        return self.autoencoder.decoder(latents)
+        return self.autoencoder.decode(latents)
 
     def reconstruct(self, images):
         return self.autoencoder(images)

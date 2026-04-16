@@ -1,11 +1,11 @@
 """Autoencoder model for unsupervised learning."""
 
-import torch.nn as nn
-from models.encoder import SimpleEncoder
-from models.decoder import SimpleDecoder
+from .abstract_autoencoder import AbstractAutoencoder
+from ..encoder import SimpleEncoder
+from ..decoder import SimpleDecoder
 
 
-class Autoencoder(nn.Module):
+class SimpleAutoencoder(AbstractAutoencoder):
     def __init__(
         self,
         input_size,
@@ -25,3 +25,6 @@ class Autoencoder(nn.Module):
 
     def encode(self, x):
         return self.encoder(x)
+
+    def decode(self, latent):
+        return self.decoder(latent)
