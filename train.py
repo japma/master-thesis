@@ -6,6 +6,7 @@ import torch.optim as optim
 from tqdm import tqdm
 from omegaconf import DictConfig, OmegaConf
 from torchinfo import summary
+from rtpt import RTPT
 import time
 
 from file_utils import create_run_directories, save_checkpoint
@@ -195,6 +196,14 @@ def train_model(cfg: DictConfig):
     print(f"Using device: {device}")
     print(f"Dataset: {dataset_name}")
 
+    total_epochs = cfg.model.training.epochs + cfg.model.cspn.get("epochs", 10)
+    rtpt = RTPT(
+        name_initials="JM",
+        experiment_name=f"{dataset_name}_training",
+        max_iterations=max(total_epochs, 1),
+    )
+    rtpt.start()
+
     run_dirs = create_run_directories(output_dir, dataset_name)
     print(f"Run directory: {run_dirs.run_dir}")
 
@@ -222,8 +231,8 @@ def train_model(cfg: DictConfig):
         dataset_kwargs=dataset_kwargs,
     )
 
-    train_losses = []
-    test_losses = []
+    ae_train_losses = []
+    ae_test_losses = []
 
     print(f"\nTraining autoencoder for {ae_epochs} epochs...")
     for epoch in range(ae_epochs):
@@ -241,8 +250,8 @@ def train_model(cfg: DictConfig):
             device,
         )
 
-        train_losses.append(train_loss)
-        test_losses.append(test_loss)
+        ae_train_losses.append(train_loss)
+        ae_test_losses.append(test_loss)
 
         print(
             f"AE Epoch {epoch + 1}/{ae_epochs} - "
@@ -250,10 +259,12 @@ def train_model(cfg: DictConfig):
             f"Test Loss: {test_loss:.4f}"
         )
 
+        rtpt.step(subtitle=f"AE {epoch + 1}/{ae_epochs}")
+
     save_checkpoint(model.state_dict(), run_dirs.checkpoints_dir, "autoencoder")
     visualize_losses(
-        train_values=train_losses,
-        test_values=test_losses,
+        train_values=ae_train_losses,
+        test_values=ae_test_losses,
         output_dir=run_dirs.images_dir,
         filename="autoencoder_loss.png",
         title="Autoencoder Reconstruction Loss",
@@ -262,6 +273,15 @@ def train_model(cfg: DictConfig):
         test_label="Test",
     )
 
+    visualize_autoencoder(
+        model,
+        test_loader,
+        device,
+        run_dirs.images_dir,
+        num_samples=10,
+    )
+
+    # Start training CSPN
     num_labels = cfg.data.get("num_classes", 10)
     cspn = SPFlowCSPN(
         latent_size=latent_size,
@@ -286,8 +306,8 @@ def train_model(cfg: DictConfig):
     )
 
     cspn_optimizer = optim.Adam(cspn.parameters(), lr=cspn_learning_rate)
-    cspn_train_nlls = []
-    cspn_test_nlls = []
+    cspn_train_losses = []
+    cspn_test_losses = []
 
     print(f"\nTraining CSPN on latent space for {cspn_epochs} epochs...")
     for epoch in range(cspn_epochs):
@@ -305,8 +325,8 @@ def train_model(cfg: DictConfig):
             device=device,
         )
 
-        cspn_train_nlls.append(train_nll)
-        cspn_test_nlls.append(test_nll)
+        cspn_train_losses.append(train_nll)
+        cspn_test_losses.append(test_nll)
 
         print(
             f"CSPN Epoch {epoch + 1}/{cspn_epochs} - "
@@ -314,10 +334,12 @@ def train_model(cfg: DictConfig):
             f"Test NLL: {test_nll:.4f}"
         )
 
+        rtpt.step(subtitle=f"CSPN {epoch + 1}/{cspn_epochs}")
+
     save_checkpoint(cspn.state_dict(), run_dirs.checkpoints_dir, "cspn")
     visualize_losses(
-        train_values=cspn_train_nlls,
-        test_values=cspn_test_nlls,
+        train_values=cspn_train_losses,
+        test_values=cspn_test_losses,
         output_dir=run_dirs.images_dir,
         filename="cspn_nll.png",
         title="CSPN Negative Log-Likelihood",
@@ -330,14 +352,6 @@ def train_model(cfg: DictConfig):
     elapsed_seconds = end_time - start_time
     elapsed_formatted = format_elapsed_time(elapsed_seconds)
     print(f"Training completed in {elapsed_formatted} ({elapsed_seconds:.2f}s)")
-
-    visualize_autoencoder(
-        model,
-        test_loader,
-        device,
-        run_dirs.images_dir,
-        num_samples=10,
-    )
 
     visualize_cspn(
         autoencoder=model,

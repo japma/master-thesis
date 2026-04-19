@@ -1,0 +1,12 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: jm-master-thesis:latest
+    gpus: all
+    volumes:
+      - ./data:/app/data
+      - ./results:/app/results
+      - ./outputs:/app/outputs
+    command: ["uv", "run", "main.py"]
