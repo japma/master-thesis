@@ -17,4 +17,4 @@ COPY . .
 RUN mkdir -p /app/data /app/results /app/outputs
 VOLUME ["/app/data", "/app/results", "/app/outputs"]
 
-CMD ["uv", "run", "main.py"]
+CMD [".venv/bin/python", "main.py"]

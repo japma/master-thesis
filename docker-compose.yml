@@ -9,4 +9,4 @@ services:
       - ./data:/app/data
       - ./results:/app/results
       - ./outputs:/app/outputs
-    command: ["uv", "run", "main.py"]
+    command: [".venv/bin/python", "main.py"]
