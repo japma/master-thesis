@@ -1,0 +1,13 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: jm-master-thesis:latest
+    devices:
+      - nvidia.com/gpu:all
+    volumes:
+      - ./data:/app/data
+      - ./results:/app/results
+      - ./outputs:/app/outputs
+    command: [".venv/bin/python", "main.py"]

@@ -1,0 +1,8 @@
+.venv
+__pycache__/
+*.pyc
+
+# Keep local datasets and generated artifacts outside the build context.
+data/
+results/
+outputs/
