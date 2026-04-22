@@ -9,13 +9,14 @@ from torchinfo import summary
 from rtpt import RTPT
 import time
 
-from file_utils import create_run_directories, save_checkpoint
 from models import CombinedModel
 from models.autoencoder.variational_autoencoder import VariationalAutoencoder
 from models.cspn import SPFlowCSPN
 from utils import (
+    create_run_directories,
     format_elapsed_time,
     get_data_loaders,
+    save_checkpoint,
     visualize_autoencoder,
     visualize_cspn,
     visualize_losses,
