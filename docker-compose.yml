@@ -11,4 +11,4 @@ services:
       - ./results:/app/results
       - ./outputs:/app/outputs
     entrypoint: [".venv/bin/python", "main.py"]
-    command: []
+    command: ["$HYDRA_ARGS"]
