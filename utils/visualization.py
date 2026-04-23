@@ -1,6 +1,7 @@
 """Visualization helpers for training diagnostics."""
 
 import os
+import math
 
 import matplotlib.pyplot as plt
 import torch
@@ -128,6 +129,46 @@ def _reshape_to_image_batch(batch, image_shape):
     return batch
 
 
+def _normalize_class_names(raw_classes, num_labels):
+    """Return class names aligned with model label IDs [0, num_labels-1]."""
+    class_names = [str(name) for name in raw_classes]
+
+    # EMNIST letters provides classes like ["N/A", "a", ..., "z"] while labels
+    # are remapped to [0, 25], so drop the placeholder to align indices.
+    if (
+        len(class_names) == num_labels + 1
+        and class_names[0].strip().lower() in {"n/a", "na"}
+    ):
+        class_names = class_names[1:]
+
+    if len(class_names) < num_labels:
+        return None
+
+    return class_names[:num_labels]
+
+
+def _resolve_class_names(test_loader, num_labels, explicit_class_names=None):
+    """Resolve class names for visualization titles; fallback to label IDs."""
+    if explicit_class_names is not None:
+        normalized = _normalize_class_names(explicit_class_names, num_labels)
+        if normalized is not None:
+            return normalized
+
+    dataset = getattr(test_loader, "dataset", None)
+    dataset_classes = getattr(dataset, "classes", None)
+    if dataset_classes is not None:
+        normalized = _normalize_class_names(dataset_classes, num_labels)
+        if normalized is not None:
+            return normalized
+
+    return [str(i) for i in range(num_labels)]
+
+
+def _format_label_with_index(class_idx, class_name):
+    """Format labels as '<index>: <name>' for display."""
+    return f"{class_idx}: {class_name}"
+
+
 def visualize_cspn(
     autoencoder,
     cspn,
@@ -136,6 +177,7 @@ def visualize_cspn(
     output_dir,
     num_labels,
     num_samples=8,
+    class_names=None,
 ):
     """Visualize CSPN behavior in latent space.
 
@@ -151,6 +193,11 @@ def visualize_cspn(
     with torch.no_grad():
         preview_images, preview_labels = next(iter(test_loader))
         image_shape = tuple(preview_images.shape[1:])
+        resolved_class_names = _resolve_class_names(
+            test_loader=test_loader,
+            num_labels=num_labels,
+            explicit_class_names=class_names,
+        )
 
         label_ids = torch.arange(num_labels, device=device, dtype=torch.long)
         proto_latents = cspn.predict_latent(label_ids)
@@ -158,13 +205,25 @@ def visualize_cspn(
         proto_images = _reshape_to_image_batch(proto_images, image_shape)
 
         proto_images = proto_images.detach().cpu()
-        fig, _ = plt.subplots(1, num_labels, figsize=(2 * num_labels, 2.5))
+        grid_cols = math.ceil(math.sqrt(num_labels))
+        grid_rows = math.ceil(num_labels / grid_cols)
+        fig, _ = plt.subplots(
+            grid_rows,
+            grid_cols,
+            figsize=(2 * grid_cols, 2.4 * grid_rows),
+        )
         proto_axes = fig.axes
 
         for class_idx, axis in enumerate(proto_axes):
+            if class_idx >= num_labels:
+                axis.axis("off")
+                continue
+
             img = _to_display_image(proto_images[class_idx])
             axis.imshow(img, cmap="gray" if img.ndim == 2 else None)
-            axis.set_title(f"y={class_idx}")
+            axis.set_title(
+                _format_label_with_index(class_idx, resolved_class_names[class_idx])
+            )
             axis.axis("off")
 
         plt.tight_layout()
@@ -205,7 +264,9 @@ def visualize_cspn(
             trans = _to_display_image(transferred_cpu[i])
 
             axes[0, i].imshow(src, cmap="gray" if src.ndim == 2 else None)
-            axes[0, i].set_title(f"orig y={int(labels_cpu[i])}")
+            src_idx = int(labels_cpu[i])
+            src_label = _format_label_with_index(src_idx, resolved_class_names[src_idx])
+            axes[0, i].set_title(f"orig {src_label}")
             axes[0, i].axis("off")
 
             axes[1, i].imshow(recon, cmap="gray" if recon.ndim == 2 else None)
@@ -213,7 +274,12 @@ def visualize_cspn(
             axes[1, i].axis("off")
 
             axes[2, i].imshow(trans, cmap="gray" if trans.ndim == 2 else None)
-            axes[2, i].set_title(f"to y={int(target_labels_cpu[i])}")
+            target_idx = int(target_labels_cpu[i])
+            target_label = _format_label_with_index(
+                target_idx,
+                resolved_class_names[target_idx],
+            )
+            axes[2, i].set_title(f"to {target_label}")
             axes[2, i].axis("off")
 
         plt.tight_layout()
