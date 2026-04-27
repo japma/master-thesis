@@ -6,15 +6,11 @@ WORKDIR /app
 
 ENV UV_LINK_MODE=copy \
 	UV_COMPILE_BYTECODE=1 \
-	UV_PYTHON_DOWNLOADS=automatic
+	UV_PYTHON_DOWNLOADS=automatic \
+	UV_PROJECT_ENVIRONMENT=/opt/venv
 
 COPY pyproject.toml uv.lock .python-version ./
 RUN uv sync --locked --no-dev --no-install-project
-RUN uv pip install --python .venv/bin/python --index-url https://download.pytorch.org/whl/cu128 --upgrade torch torchvision
+RUN uv pip install --python /opt/venv/bin/python --index-url https://download.pytorch.org/whl/cu128 --upgrade torch torchvision
 
-COPY . .
-
-RUN mkdir -p /app/data /app/results /app/outputs
-VOLUME ["/app/data", "/app/results", "/app/outputs"]
-
-CMD [".venv/bin/python", "main.py"]
+CMD ["/opt/venv/bin/python", "main.py"]
