@@ -1,0 +1,4 @@
+autoencoder:
+  epochs: 5
+  batch_size: 32
+  latent_size: 256

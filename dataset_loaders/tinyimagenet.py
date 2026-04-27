@@ -27,6 +27,8 @@ class TinyImageNetDataset(Dataset):
         with wnids_path.open("r", encoding="utf-8") as file:
             self.classes = [line.strip() for line in file if line.strip()]
 
+        self.class_names = self._load_class_names()
+
         self.class_to_idx = {name: index for index, name in enumerate(self.classes)}
         self.samples = []
 
@@ -41,6 +43,25 @@ class TinyImageNetDataset(Dataset):
             raise ValueError(
                 f"No samples found for Tiny ImageNet split '{split}' in {self.root}."
             )
+
+    def _load_class_names(self):
+        """Load human-readable class labels aligned with self.classes."""
+        words_path = self.root / "words.txt"
+        if not words_path.exists():
+            return list(self.classes)
+
+        wnid_to_name = {}
+        with words_path.open("r", encoding="utf-8") as file:
+            for line in file:
+                parts = line.strip().split("\t", maxsplit=1)
+                if len(parts) != 2:
+                    continue
+                wnid, label_text = parts
+                primary_label = label_text.split(",", maxsplit=1)[0].strip()
+                if primary_label:
+                    wnid_to_name[wnid] = primary_label
+
+        return [wnid_to_name.get(wnid, wnid) for wnid in self.classes]
 
     def _load_train_samples(self):
         train_dir = self.root / "train"

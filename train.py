@@ -19,6 +19,8 @@ from utils import (
     save_checkpoint,
     visualize_autoencoder,
     visualize_cspn,
+    visualize_cspn_latent_space,
+    visualize_latent_space,
     visualize_losses,
 )
 
@@ -42,6 +44,41 @@ def infer_image_shape_from_input_size(input_size):
             "Please set channels, height, and width in data config."
         )
     return known_shapes[input_size]
+
+
+def _build_cspn_label_config(cfg: DictConfig):
+    """Build label transform and metadata used for CSPN conditioning."""
+    dataset_name = cfg.data.name
+    default_num_classes = cfg.data.get("num_classes", 10)
+
+    cspn_cfg = cfg.model.cspn
+    label_mode = cfg.data.get("cspn_label_mode", cspn_cfg.get("label_mode", "dataset"))
+
+    if label_mode == "dataset":
+        return {
+            "label_transform": lambda labels: labels,
+            "num_labels": default_num_classes,
+            "class_names": None,
+            "label_mode": label_mode,
+        }
+
+    if label_mode == "mnist_parity":
+        if dataset_name != "MNIST":
+            raise ValueError(
+                "label_mode='mnist_parity' is only supported with data.name='MNIST'."
+            )
+
+        return {
+            "label_transform": lambda labels: labels % 2,
+            "num_labels": 2,
+            "class_names": ["even", "odd"],
+            "label_mode": label_mode,
+        }
+
+    raise ValueError(
+        f"Unsupported CSPN label_mode '{label_mode}'. Supported modes: "
+        "'dataset', 'mnist_parity'."
+    )
 
 
 def train_epoch(model, train_loader, criterion, optimizer, device):
@@ -104,7 +141,14 @@ def evaluate(model, test_loader, criterion, device):
     return total_loss / len(test_loader)
 
 
-def train_cspn_epoch(cspn, autoencoder, train_loader, optimizer, device):
+def train_cspn_epoch(
+    cspn,
+    autoencoder,
+    train_loader,
+    optimizer,
+    device,
+    label_transform=None,
+):
     """Train CSPN for one epoch on latent vectors from a frozen autoencoder."""
     cspn.train()
     autoencoder.eval()
@@ -113,6 +157,8 @@ def train_cspn_epoch(cspn, autoencoder, train_loader, optimizer, device):
     for images, labels in tqdm(train_loader, desc="CSPN Training"):
         images = images.to(device)
         labels = labels.to(device).long()
+        if label_transform is not None:
+            labels = label_transform(labels)
 
         with torch.no_grad():
             z = autoencoder.encode(images)
@@ -129,7 +175,7 @@ def train_cspn_epoch(cspn, autoencoder, train_loader, optimizer, device):
     return total_nll / len(train_loader)
 
 
-def evaluate_cspn(cspn, autoencoder, test_loader, device):
+def evaluate_cspn(cspn, autoencoder, test_loader, device, label_transform=None):
     """Evaluate CSPN on latent vectors from a frozen autoencoder."""
     cspn.eval()
     autoencoder.eval()
@@ -139,6 +185,8 @@ def evaluate_cspn(cspn, autoencoder, test_loader, device):
         for images, labels in tqdm(test_loader, desc="CSPN Evaluating"):
             images = images.to(device)
             labels = labels.to(device).long()
+            if label_transform is not None:
+                labels = label_transform(labels)
 
             z = autoencoder.encode(images)
             log_likelihood = cspn(z, labels)
@@ -190,6 +238,11 @@ def train_model(cfg: DictConfig):
     cspn_context_hidden_dim = cspn_cfg.get("context_hidden_dim", 128)
     cspn_context_num_layers = cspn_cfg.get("context_num_layers", 3)
     cspn_num_mixture_components = cspn_cfg.get("num_mixture_components", 4)
+    cspn_num_sum_components = cspn_cfg.get("num_sum_components", 2)
+    cspn_label_config = _build_cspn_label_config(cfg)
+    cspn_label_transform = cspn_label_config["label_transform"]
+    cspn_num_labels = cspn_label_config["num_labels"]
+    cspn_class_names = cspn_label_config["class_names"]
 
     if torch.cuda.is_available():
         device = torch.device("cuda")
@@ -199,6 +252,10 @@ def train_model(cfg: DictConfig):
         device = torch.device("cpu")
     print(f"Using device: {device}")
     print(f"Dataset: {dataset_name}")
+    print(
+        f"CSPN label mode: {cspn_label_config['label_mode']} "
+        f"(num_labels={cspn_num_labels})"
+    )
 
     total_epochs = cfg.model.training.epochs + cfg.model.cspn.get("epochs", 10)
     rtpt = RTPT(
@@ -286,15 +343,26 @@ def train_model(cfg: DictConfig):
         num_samples=10,
     )
 
+    visualize_latent_space(
+        autoencoder=model,
+        test_loader=test_loader,
+        device=device,
+        output_dir=run_dirs.images_dir,
+        num_labels=cspn_num_labels,
+        max_points=2500,
+        class_names=cspn_class_names,
+        label_transform=cspn_label_transform,
+    )
+
     # Start training CSPN
-    num_labels = cfg.data.get("num_classes", 10)
     cspn = SPFlowCSPN(
         latent_size=latent_size,
-        num_labels=num_labels,
+        num_labels=cspn_num_labels,
         label_embedding_dim=cspn_label_embedding_dim,
         context_hidden_dim=cspn_context_hidden_dim,
         context_num_layers=cspn_context_num_layers,
         num_mixture_components=cspn_num_mixture_components,
+        num_sum_components=cspn_num_sum_components,
     ).to(device)
 
     # Summarize CSPN with representative latent + label inputs.
@@ -322,12 +390,14 @@ def train_model(cfg: DictConfig):
             train_loader=train_loader,
             optimizer=cspn_optimizer,
             device=device,
+            label_transform=cspn_label_transform,
         )
         test_nll = evaluate_cspn(
             cspn,
             autoencoder=model,
             test_loader=test_loader,
             device=device,
+            label_transform=cspn_label_transform,
         )
 
         cspn_train_losses.append(train_nll)
@@ -364,8 +434,23 @@ def train_model(cfg: DictConfig):
         test_loader=test_loader,
         device=device,
         output_dir=run_dirs.images_dir,
-        num_labels=cfg.data.get("num_classes", 10),
+        num_labels=cspn_num_labels,
         num_samples=8,
+        class_names=cspn_class_names,
+        label_transform=cspn_label_transform,
+    )
+
+    visualize_cspn_latent_space(
+        autoencoder=model,
+        cspn=cspn,
+        test_loader=test_loader,
+        device=device,
+        output_dir=run_dirs.images_dir,
+        num_labels=cspn_num_labels,
+        max_points=2500,
+        samples_per_label=250,
+        class_names=cspn_class_names,
+        label_transform=cspn_label_transform,
     )
 
     final_model = CombinedModel(autoencoder=model, cspn=cspn)

@@ -155,6 +155,12 @@ def _resolve_class_names(test_loader, num_labels, explicit_class_names=None):
             return normalized
 
     dataset = getattr(test_loader, "dataset", None)
+    dataset_class_names = getattr(dataset, "class_names", None)
+    if dataset_class_names is not None:
+        normalized = _normalize_class_names(dataset_class_names, num_labels)
+        if normalized is not None:
+            return normalized
+
     dataset_classes = getattr(dataset, "classes", None)
     if dataset_classes is not None:
         normalized = _normalize_class_names(dataset_classes, num_labels)
@@ -169,6 +175,276 @@ def _format_label_with_index(class_idx, class_name):
     return f"{class_idx}: {class_name}"
 
 
+def _project_latents_to_2d(latents: torch.Tensor) -> torch.Tensor:
+    """Project latent vectors to 2D for visualization.
+
+    Uses identity for 2D latents and PCA for higher-dimensional latents.
+    """
+    if latents.dim() != 2:
+        raise ValueError(f"Expected latents with shape (N, D), got {tuple(latents.shape)}")
+
+    n_samples, latent_dim = latents.shape
+    if n_samples == 0:
+        return torch.zeros((0, 2), dtype=latents.dtype)
+
+    if latent_dim == 1:
+        return torch.cat([latents, torch.zeros_like(latents)], dim=1)
+
+    if latent_dim == 2:
+        return latents
+
+    centered = latents - latents.mean(dim=0, keepdim=True)
+    q = min(2, centered.shape[0], centered.shape[1])
+    if q <= 0:
+        return torch.zeros((n_samples, 2), dtype=latents.dtype)
+
+    _, _, right_vectors = torch.pca_lowrank(centered, q=q)
+    projected = centered @ right_vectors[:, :q]
+
+    if projected.shape[1] == 1:
+        projected = torch.cat([projected, torch.zeros_like(projected)], dim=1)
+
+    return projected
+
+
+def visualize_latent_space(
+    autoencoder,
+    test_loader,
+    device,
+    output_dir,
+    num_labels,
+    max_points=2000,
+    class_names=None,
+    label_transform=None,
+):
+    """Visualize encoded test-set latent vectors in 2D.
+
+    The function projects latents with PCA when latent_dim > 2 and colors
+    points by (possibly transformed) conditioning labels.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    autoencoder.eval()
+
+    all_latents = []
+    all_labels = []
+    points_collected = 0
+
+    with torch.no_grad():
+        for images, labels in test_loader:
+            images = images.to(device)
+            labels = labels.to(device).long()
+            if label_transform is not None:
+                labels = label_transform(labels)
+
+            z = autoencoder.encode(images).detach().cpu()
+            labels = labels.detach().cpu()
+
+            remaining = max_points - points_collected
+            if remaining <= 0:
+                break
+
+            if z.shape[0] > remaining:
+                z = z[:remaining]
+                labels = labels[:remaining]
+
+            all_latents.append(z)
+            all_labels.append(labels)
+            points_collected += z.shape[0]
+
+            if points_collected >= max_points:
+                break
+
+    if points_collected == 0:
+        return
+
+    latents = torch.cat(all_latents, dim=0)
+    labels = torch.cat(all_labels, dim=0)
+    projected = _project_latents_to_2d(latents)
+    resolved_class_names = _resolve_class_names(
+        test_loader=test_loader,
+        num_labels=num_labels,
+        explicit_class_names=class_names,
+    )
+
+    plt.figure(figsize=(8, 6))
+    colors = plt.cm.get_cmap("tab10", num_labels)
+
+    for class_idx in range(num_labels):
+        class_mask = labels == class_idx
+        if not class_mask.any():
+            continue
+
+        class_points = projected[class_mask]
+        class_label = _format_label_with_index(class_idx, resolved_class_names[class_idx])
+        plt.scatter(
+            class_points[:, 0],
+            class_points[:, 1],
+            s=12,
+            alpha=0.65,
+            color=colors(class_idx),
+            label=class_label,
+        )
+
+    plt.title("Latent Space (2D projection)")
+    plt.xlabel("Component 1")
+    plt.ylabel("Component 2")
+    plt.grid(True, alpha=0.25)
+    if num_labels <= 20:
+        plt.legend(loc="best", fontsize=8)
+    plt.tight_layout()
+
+    save_path = os.path.join(output_dir, "latent_space.png")
+    plt.savefig(save_path, dpi=140, bbox_inches="tight")
+    print(f"Latent space visualization saved to {save_path}")
+    plt.close()
+
+
+def visualize_cspn_latent_space(
+    autoencoder,
+    cspn,
+    test_loader,
+    device,
+    output_dir,
+    num_labels,
+    max_points=2000,
+    samples_per_label=200,
+    class_names=None,
+    label_transform=None,
+):
+    """Visualize encoded vs CSPN latent distributions in a shared 2D space."""
+    os.makedirs(output_dir, exist_ok=True)
+    autoencoder.eval()
+    cspn.eval()
+
+    encoded_latents = []
+    encoded_labels = []
+    points_collected = 0
+
+    with torch.no_grad():
+        for images, labels in test_loader:
+            images = images.to(device)
+            labels = labels.to(device).long()
+            if label_transform is not None:
+                labels = label_transform(labels)
+
+            z = autoencoder.encode(images).detach().cpu()
+            labels = labels.detach().cpu()
+
+            remaining = max_points - points_collected
+            if remaining <= 0:
+                break
+
+            if z.shape[0] > remaining:
+                z = z[:remaining]
+                labels = labels[:remaining]
+
+            encoded_latents.append(z)
+            encoded_labels.append(labels)
+            points_collected += z.shape[0]
+
+            if points_collected >= max_points:
+                break
+
+    if points_collected == 0:
+        return
+
+    encoded_latents = torch.cat(encoded_latents, dim=0)
+    encoded_labels = torch.cat(encoded_labels, dim=0)
+
+    with torch.no_grad():
+        label_ids = torch.arange(num_labels, device=device, dtype=torch.long)
+        centers = cspn.predict_latent(label_ids).detach().cpu()
+
+    sampled_latents = []
+    sampled_labels = []
+    with torch.no_grad():
+        for class_idx in range(num_labels):
+            class_label = torch.full(
+                (samples_per_label,),
+                fill_value=class_idx,
+                dtype=torch.long,
+                device=device,
+            )
+            class_samples = cspn.sample(class_label, num_samples=samples_per_label)
+            sampled_latents.append(class_samples.detach().cpu())
+            sampled_labels.append(torch.full((samples_per_label,), class_idx, dtype=torch.long))
+
+    sampled_latents = torch.cat(sampled_latents, dim=0)
+    sampled_labels = torch.cat(sampled_labels, dim=0)
+
+    merged = torch.cat([encoded_latents, sampled_latents, centers], dim=0)
+    merged_projected = _project_latents_to_2d(merged)
+
+    n_encoded = encoded_latents.shape[0]
+    n_sampled = sampled_latents.shape[0]
+    encoded_projected = merged_projected[:n_encoded]
+    sampled_projected = merged_projected[n_encoded : n_encoded + n_sampled]
+    centers_projected = merged_projected[n_encoded + n_sampled :]
+
+    resolved_class_names = _resolve_class_names(
+        test_loader=test_loader,
+        num_labels=num_labels,
+        explicit_class_names=class_names,
+    )
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 6), sharex=True, sharey=True)
+    colors = plt.cm.get_cmap("tab20", max(1, num_labels))
+
+    for class_idx in range(num_labels):
+        class_label = _format_label_with_index(class_idx, resolved_class_names[class_idx])
+
+        encoded_mask = encoded_labels == class_idx
+        if encoded_mask.any():
+            points = encoded_projected[encoded_mask]
+            axes[0].scatter(
+                points[:, 0],
+                points[:, 1],
+                s=10,
+                alpha=0.55,
+                color=colors(class_idx),
+                label=class_label,
+            )
+
+        sampled_mask = sampled_labels == class_idx
+        if sampled_mask.any():
+            points = sampled_projected[sampled_mask]
+            axes[1].scatter(
+                points[:, 0],
+                points[:, 1],
+                s=10,
+                alpha=0.45,
+                color=colors(class_idx),
+                label=class_label,
+            )
+
+        center = centers_projected[class_idx]
+        axes[1].scatter(
+            center[0],
+            center[1],
+            marker="*",
+            s=180,
+            color=colors(class_idx),
+            edgecolor="black",
+            linewidth=0.8,
+        )
+
+    axes[0].set_title("Encoded Latents")
+    axes[1].set_title("CSPN Samples + Centers")
+    for axis in axes:
+        axis.set_xlabel("Component 1")
+        axis.grid(True, alpha=0.25)
+    axes[0].set_ylabel("Component 2")
+
+    if num_labels <= 20:
+        axes[0].legend(loc="best", fontsize=8)
+
+    plt.tight_layout()
+    save_path = os.path.join(output_dir, "cspn_latent_space.png")
+    plt.savefig(save_path, dpi=140, bbox_inches="tight")
+    print(f"CSPN latent space visualization saved to {save_path}")
+    plt.close()
+
+
 def visualize_cspn(
     autoencoder,
     cspn,
@@ -178,6 +454,7 @@ def visualize_cspn(
     num_labels,
     num_samples=8,
     class_names=None,
+    label_transform=None,
 ):
     """Visualize CSPN behavior in latent space.
 
@@ -232,10 +509,13 @@ def visualize_cspn(
         print(f"CSPN prototype visualization saved to {prototype_path}")
         plt.close()
 
-        # transfered images
+        # transferred images
         images, labels = preview_images, preview_labels
         images = images[:num_samples].to(device)
-        labels = labels[:num_samples].to(device).long()
+        raw_labels = labels[:num_samples].to(device).long()
+        labels = raw_labels
+        if label_transform is not None:
+            labels = label_transform(labels)
         target_labels = (labels + 1) % num_labels
 
         z = autoencoder.encode(images)
@@ -254,6 +534,7 @@ def visualize_cspn(
         images_cpu = images.detach().cpu()
         reconstructed_cpu = reconstructed.detach().cpu()
         transferred_cpu = transferred.detach().cpu()
+        raw_labels_cpu = raw_labels.detach().cpu()
         labels_cpu = labels.detach().cpu()
         target_labels_cpu = target_labels.detach().cpu()
 
@@ -266,7 +547,11 @@ def visualize_cspn(
             axes[0, i].imshow(src, cmap="gray" if src.ndim == 2 else None)
             src_idx = int(labels_cpu[i])
             src_label = _format_label_with_index(src_idx, resolved_class_names[src_idx])
-            axes[0, i].set_title(f"orig {src_label}")
+            raw_src_idx = int(raw_labels_cpu[i])
+            if raw_src_idx != src_idx:
+                axes[0, i].set_title(f"orig {raw_src_idx} ({src_label})")
+            else:
+                axes[0, i].set_title(f"orig {src_label}")
             axes[0, i].axis("off")
 
             axes[1, i].imshow(recon, cmap="gray" if recon.ndim == 2 else None)

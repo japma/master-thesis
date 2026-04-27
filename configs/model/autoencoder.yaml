@@ -1,6 +1,6 @@
 name: autoencoder
 training:
-  epochs: 5
-  batch_size: 32
-  learning_rate: 0.001
-  latent_size: 256
+  epochs: ${train.autoencoder.epochs}
+  batch_size: ${train.autoencoder.batch_size}
+  learning_rate: ${optimization.autoencoder.learning_rate}
+  latent_size: ${train.autoencoder.latent_size}

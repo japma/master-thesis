@@ -12,3 +12,25 @@ services:
       - ./outputs:/app/outputs
     entrypoint: [".venv/bin/python", "main.py"]
     command: ["$HYDRA_ARGS"]
+
+  train-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ciglspc:latest
+    profiles: ["dev"]
+    devices:
+      - nvidia.com/gpu=all
+    volumes:
+      - ./data:/app/data
+      - ./results:/app/results
+      - ./outputs:/app/outputs
+      - ./configs:/app/configs
+      - ./dataset_loaders:/app/dataset_loaders
+      - ./models:/app/models
+      - ./utils:/app/utils
+      - ./main.py:/app/main.py
+      - ./train.py:/app/train.py
+      - ./losses.py:/app/losses.py
+    entrypoint: [".venv/bin/python", "main.py"]
+    command: ["$HYDRA_ARGS"]

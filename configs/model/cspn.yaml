@@ -1,6 +1,8 @@
-epochs: 5
-learning_rate: 0.001
-label_embedding_dim: 32
-context_hidden_dim: 128
-context_num_layers: 3
-num_mixture_components: 4
+epochs: ${optimization.cspn.epochs}
+learning_rate: ${optimization.cspn.learning_rate}
+label_embedding_dim: ${optimization.cspn.label_embedding_dim}
+context_hidden_dim: ${optimization.cspn.context_hidden_dim}
+context_num_layers: ${optimization.cspn.context_num_layers}
+num_mixture_components: ${optimization.cspn.num_mixture_components}
+num_sum_components: ${optimization.cspn.num_sum_components}
+label_mode: dataset

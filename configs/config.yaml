@@ -1,7 +1,10 @@
 defaults:
   - data: mnist
+  - train: default
+  - optimization: default
   - model: autoencoder
   - model@model.cspn: cspn
+  - runtime: default
   - _self_
 
-output_dir: ./results
+output_dir: ${runtime.output_dir}

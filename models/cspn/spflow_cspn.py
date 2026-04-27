@@ -9,6 +9,7 @@ from spflow.meta.data.scope import Scope
 from spflow.modules.leaves.categorical import Categorical
 from spflow.modules.leaves.normal import Normal
 from spflow.modules.products.product import Product
+from spflow.modules.sums import Sum
 
 
 class _ConditionalNormalParams(nn.Module):
@@ -73,6 +74,7 @@ class SPFlowCSPN(AbstractCSPN):
         context_hidden_dim=128,
         context_num_layers=3,
         num_mixture_components=4,
+        num_sum_components=2,
     ):
         super().__init__()
 
@@ -82,6 +84,7 @@ class SPFlowCSPN(AbstractCSPN):
         self.context_hidden_dim = context_hidden_dim
         self.context_num_layers = context_num_layers
         self.num_mixture_components = num_mixture_components
+        self.num_sum_components = max(1, num_sum_components)
 
         self.label_feature_index = latent_size
         y_scope = Scope(query=[self.label_feature_index])
@@ -94,25 +97,49 @@ class SPFlowCSPN(AbstractCSPN):
             K=num_labels,
         )
 
-        self.conditional_param_fn = _ConditionalNormalParams(
-            latent_size=latent_size,
-            num_labels=num_labels,
-            num_components=self.num_joint_channels,
-            embedding_dim=label_embedding_dim,
-            hidden_dim=context_hidden_dim,
-            num_layers=context_num_layers,
-        )
-
+        self.conditional_param_fns = nn.ModuleList()
         self.z_given_y = Normal(
             scope=Scope(
                 query=list(range(latent_size)),
                 evidence=[self.label_feature_index],
             ),
             out_channels=self.num_joint_channels,
-            parameter_fn=self.conditional_param_fn,
+            parameter_fn=self._build_conditional_param_fn(),
         )
 
-        self.joint_model = Product(inputs=[self.z_given_y, self.label_prior])
+        self.product_branches = [self._build_product_branch(self.z_given_y)]
+        self.product_branches.extend(
+            [
+                self._build_product_branch(
+                    Normal(
+                        scope=Scope(
+                            query=list(range(latent_size)),
+                            evidence=[self.label_feature_index],
+                        ),
+                        out_channels=self.num_joint_channels,
+                        parameter_fn=self._build_conditional_param_fn(),
+                    )
+                )
+                for _ in range(self.num_sum_components - 1)
+            ]
+        )
+
+        self.joint_model = Sum(inputs=self.product_branches)
+
+    def _build_conditional_param_fn(self) -> _ConditionalNormalParams:
+        param_fn = _ConditionalNormalParams(
+            latent_size=self.latent_size,
+            num_labels=self.num_labels,
+            num_components=self.num_joint_channels,
+            embedding_dim=self.label_embedding_dim,
+            hidden_dim=self.context_hidden_dim,
+            num_layers=self.context_num_layers,
+        )
+        self.conditional_param_fns.append(param_fn)
+        return param_fn
+
+    def _build_product_branch(self, conditional_leaf: Normal) -> Product:
+        return Product(inputs=[conditional_leaf, self.label_prior])
 
     def _flatten_ll(self, ll: torch.Tensor) -> torch.Tensor:
         if ll.dim() <= 1:

@@ -5,7 +5,6 @@ from .abstract_encoder import AbstractEncoder
 
 class SimpleEncoder(AbstractEncoder):
     def __init__(self, input_size, latent_size=32):
-
         super().__init__()
         self.input_size = input_size
         self.latent_size = latent_size
@@ -20,7 +19,6 @@ class SimpleEncoder(AbstractEncoder):
         )
 
     def encode(self, x):
-
         x = x.view(x.size(0), -1)
         latent = self.network(x)
         return latent
