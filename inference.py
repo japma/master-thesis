@@ -1,5 +1,6 @@
 """Inference pipeline for loading checkpoints and generating visualizations."""
 
+import logging
 from pathlib import Path
 
 import torch
@@ -16,6 +17,8 @@ from utils import (
     visualize_latent_space,
 )
 
+logger = logging.getLogger(__name__)
+
 
 def _resolve_device() -> torch.device:
     if torch.cuda.is_available():
@@ -31,28 +34,10 @@ def _create_inference_output_dir(base_dir: str | Path) -> Path:
     return output_dir
 
 
-def _resolve_label_transform(label_mode: str, dataset_name: str):
-    if label_mode == "dataset":
-        return lambda labels: labels
-
-    if label_mode == "mnist_parity":
-        if dataset_name != "MNIST":
-            raise ValueError(
-                "label_mode='mnist_parity' is only supported with data.name='MNIST'."
-            )
-        return lambda labels: labels % 2
-
-    raise ValueError(
-        f"Unsupported CSPN label_mode '{label_mode}'. Supported modes: "
-        "'dataset', 'mnist_parity'."
-    )
-
-
 def run_inference(cfg) -> None:
     """Load trained checkpoints and generate inference visualizations."""
     device = _resolve_device()
 
-    dataset_name = cfg.data.name
     input_size = cfg.data.input_size
     channels = cfg.data.channels
     height = cfg.data.height
@@ -61,15 +46,8 @@ def run_inference(cfg) -> None:
     if channels is None or height is None or width is None:
         channels, height, width = infer_image_shape_from_input_size(input_size)
 
-    latent_size = cfg.model.training.latent_size
-    cspn_cfg = cfg.model.cspn
-    cspn_label_config = cfg.cspn_label
-    cspn_label_transform = _resolve_label_transform(
-        cspn_label_config.label_mode,
-        dataset_name,
-    )
-    cspn_num_labels = cspn_label_config.num_labels
-    cspn_class_names = cspn_label_config.class_names
+    latent_size = cfg.data.latent_size
+    cspn_num_labels = cfg.data.num_classes
 
     autoencoder = VariationalAutoencoder(
         input_size=input_size,
@@ -80,11 +58,6 @@ def run_inference(cfg) -> None:
     cspn = SPFlowCSPN(
         latent_size=latent_size,
         num_labels=cspn_num_labels,
-        label_embedding_dim=cspn_cfg.label_embedding_dim,
-        context_hidden_dim=cspn_cfg.context_hidden_dim,
-        context_num_layers=cspn_cfg.context_num_layers,
-        num_mixture_components=cspn_cfg.num_mixture_components,
-        num_sum_components=cspn_cfg.num_sum_components,
     ).to(device)
 
     autoencoder_state_dict = load_checkpoint(
@@ -102,14 +75,14 @@ def run_inference(cfg) -> None:
     cspn.load_state_dict(cspn_state_dict)
 
     _, test_loader = get_data_loaders(
-        dataset_name,
+        cfg.data.name,
         cfg.model.training.batch_size,
         dataset_kwargs=cfg.data.dataset_kwargs,
     )
 
     output_dir = _create_inference_output_dir(cfg.run_dir)
-    print(f"Using device: {device}")
-    print(f"Inference output directory: {output_dir}")
+    logger.info("Using device: %s", device)
+    logger.info("Inference output directory: %s", output_dir)
 
     if cfg.visualize.autoencoder:
         visualize_autoencoder(
@@ -128,8 +101,6 @@ def run_inference(cfg) -> None:
             output_dir=output_dir,
             num_labels=cspn_num_labels,
             max_points=cfg.max_points,
-            class_names=cspn_class_names,
-            label_transform=cspn_label_transform,
         )
 
     if cfg.visualize.cspn:
@@ -141,8 +112,6 @@ def run_inference(cfg) -> None:
             output_dir=output_dir,
             num_labels=cspn_num_labels,
             num_samples=cfg.num_samples,
-            class_names=cspn_class_names,
-            label_transform=cspn_label_transform,
         )
 
     if cfg.visualize.cspn_latent_space:
@@ -155,6 +124,4 @@ def run_inference(cfg) -> None:
             num_labels=cspn_num_labels,
             max_points=cfg.max_points,
             samples_per_label=cfg.samples_per_label,
-            class_names=cspn_class_names,
-            label_transform=cspn_label_transform,
         )

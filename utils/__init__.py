@@ -2,6 +2,7 @@
 
 from dataset_loaders import TinyImageNetDataset, get_data_loaders
 from .io import RunDirectories, create_run_directories, load_checkpoint, save_checkpoint
+from .seed import seed_everything
 from .time_utils import format_elapsed_time
 from .visualization import (
     visualize_autoencoder,
@@ -19,6 +20,7 @@ __all__ = [
     "get_data_loaders",
     "load_checkpoint",
     "save_checkpoint",
+    "seed_everything",
     "visualize_autoencoder",
     "visualize_cspn",
     "visualize_cspn_latent_space",

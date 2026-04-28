@@ -38,35 +38,6 @@ def _resolve_dataset_kwargs(data_cfg: DictConfig):
     raise ValueError("data.dataset_kwargs must resolve to a mapping.")
 
 
-def _resolve_cspn_label_config(data_cfg: DictConfig, cspn_cfg: DictConfig) -> dict:
-    label_mode = data_cfg.get("cspn_label_mode", cspn_cfg.get("label_mode", "dataset"))
-    num_classes = data_cfg.get("num_classes", 10)
-
-    if label_mode == "dataset":
-        return {
-            "label_mode": label_mode,
-            "num_labels": num_classes,
-            "class_names": None,
-        }
-
-    if label_mode == "mnist_parity":
-        if data_cfg.name != "MNIST":
-            raise ValueError(
-                "label_mode='mnist_parity' is only supported with data.name='MNIST'."
-            )
-
-        return {
-            "label_mode": label_mode,
-            "num_labels": 2,
-            "class_names": ["even", "odd"],
-        }
-
-    raise ValueError(
-        f"Unsupported CSPN label_mode '{label_mode}'. Supported modes: "
-        "'dataset', 'mnist_parity'."
-    )
-
-
 def _resolve_data_config(cfg: DictConfig) -> dict:
     data_cfg = cfg.data
     channels = data_cfg.get("channels")
@@ -84,31 +55,25 @@ def _resolve_data_config(cfg: DictConfig) -> dict:
         "width": width,
         "image_shape": (channels, height, width),
         "num_classes": data_cfg.get("num_classes", 10),
+        "latent_size": data_cfg.latent_size,
         "dataset_kwargs": _resolve_dataset_kwargs(data_cfg),
-        "cspn_label_mode": data_cfg.get("cspn_label_mode"),
     }
 
 
 def _resolve_model_config(cfg: DictConfig) -> dict:
     training_cfg = cfg.model.training
     cspn_cfg = cfg.model.cspn
+    cspn_training_cfg = cspn_cfg.training
 
     return {
         "training": {
             "epochs": training_cfg.epochs,
             "batch_size": training_cfg.batch_size,
             "learning_rate": training_cfg.learning_rate,
-            "latent_size": training_cfg.latent_size,
         },
         "cspn": {
-            "epochs": cspn_cfg.epochs,
-            "learning_rate": cspn_cfg.learning_rate,
-            "label_embedding_dim": cspn_cfg.label_embedding_dim,
-            "context_hidden_dim": cspn_cfg.context_hidden_dim,
-            "context_num_layers": cspn_cfg.context_num_layers,
-            "num_mixture_components": cspn_cfg.num_mixture_components,
-            "num_sum_components": cspn_cfg.num_sum_components,
-            "label_mode": cspn_cfg.get("label_mode", "dataset"),
+            "epochs": cspn_training_cfg.epochs,
+            "learning_rate": cspn_training_cfg.learning_rate,
         },
     }
 
@@ -117,7 +82,6 @@ def parse_train_config(cfg: DictConfig) -> DictConfig:
     """Resolve the training config into a compact DictConfig."""
     data_cfg = _resolve_data_config(cfg)
     model_cfg = _resolve_model_config(cfg)
-    cspn_label_cfg = _resolve_cspn_label_config(cfg.data, cfg.model.cspn)
 
     return OmegaConf.create(
         {
@@ -125,7 +89,6 @@ def parse_train_config(cfg: DictConfig) -> DictConfig:
             "run_dir": Path(HydraConfig.get().runtime.output_dir),
             "data": data_cfg,
             "model": model_cfg,
-            "cspn_label": cspn_label_cfg,
         }
     )
 
@@ -134,7 +97,6 @@ def parse_inference_config(cfg: DictConfig) -> DictConfig:
     """Resolve the inference config into a compact DictConfig."""
     data_cfg = _resolve_data_config(cfg)
     model_cfg = _resolve_model_config(cfg)
-    cspn_label_cfg = _resolve_cspn_label_config(cfg.data, cfg.model.cspn)
 
     checkpoint_dir_value = cfg.inference.checkpoint_dir
     if checkpoint_dir_value in (None, ""):
@@ -166,6 +128,5 @@ def parse_inference_config(cfg: DictConfig) -> DictConfig:
                 "cspn": cfg.inference.visualize.cspn,
                 "cspn_latent_space": cfg.inference.visualize.cspn_latent_space,
             },
-            "cspn_label": cspn_label_cfg,
         }
     )

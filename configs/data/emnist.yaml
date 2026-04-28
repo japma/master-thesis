@@ -1,8 +1,6 @@
 name: EMNIST
 input_size: 784
-channels: 1
-height: 28
-width: 28
 num_classes: 26
+latent_size: 8
 dataset_kwargs:
   split: letters

@@ -1,10 +1,13 @@
 """Visualization helpers for training diagnostics."""
 
-import os
+import logging
 import math
+import os
 
 import matplotlib.pyplot as plt
 import torch
+
+logger = logging.getLogger(__name__)
 
 
 def visualize_autoencoder(model, test_loader, device, output_dir, num_samples=10):
@@ -53,7 +56,7 @@ def visualize_autoencoder(model, test_loader, device, output_dir, num_samples=10
 
     save_path = os.path.join(output_dir, "reconstruction.png")
     plt.savefig(save_path, dpi=100, bbox_inches="tight")
-    print(f"Visualization saved to {save_path}")
+    logger.info("Visualization saved to %s", save_path)
     plt.close()
 
 
@@ -103,7 +106,7 @@ def visualize_losses(
 
     save_path = os.path.join(output_dir, filename)
     plt.savefig(save_path, dpi=120, bbox_inches="tight")
-    print(f"Loss plot saved to {save_path}")
+    logger.info("Loss plot saved to %s", save_path)
     plt.close()
 
 
@@ -295,7 +298,7 @@ def visualize_latent_space(
 
     save_path = os.path.join(output_dir, "latent_space.png")
     plt.savefig(save_path, dpi=140, bbox_inches="tight")
-    print(f"Latent space visualization saved to {save_path}")
+    logger.info("Latent space visualization saved to %s", save_path)
     plt.close()
 
 
@@ -441,7 +444,7 @@ def visualize_cspn_latent_space(
     plt.tight_layout()
     save_path = os.path.join(output_dir, "cspn_latent_space.png")
     plt.savefig(save_path, dpi=140, bbox_inches="tight")
-    print(f"CSPN latent space visualization saved to {save_path}")
+    logger.info("CSPN latent space visualization saved to %s", save_path)
     plt.close()
 
 
@@ -506,7 +509,7 @@ def visualize_cspn(
         plt.tight_layout()
         prototype_path = os.path.join(output_dir, "cspn_prototypes.png")
         plt.savefig(prototype_path, dpi=120, bbox_inches="tight")
-        print(f"CSPN prototype visualization saved to {prototype_path}")
+        logger.info("CSPN prototype visualization saved to %s", prototype_path)
         plt.close()
 
         # transferred images
@@ -570,5 +573,5 @@ def visualize_cspn(
         plt.tight_layout()
         transfer_path = os.path.join(output_dir, "cspn_transfer.png")
         plt.savefig(transfer_path, dpi=120, bbox_inches="tight")
-        print(f"CSPN transfer visualization saved to {transfer_path}")
+        logger.info("CSPN transfer visualization saved to %s", transfer_path)
         plt.close()

@@ -1,9 +1,12 @@
 """Helpers for organizing run output directories and saved checkpoints."""
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 
 import torch
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -35,7 +38,7 @@ def create_run_directories(run_dir: str | Path) -> RunDirectories:
 def save_checkpoint(model_state_dict, checkpoints_dir: Path, name: str) -> Path:
     save_path = checkpoints_dir / f"{name}.pt"
     torch.save(model_state_dict, save_path)
-    print(f"\nCheckpoint saved to {save_path}")
+    logger.info("Checkpoint saved to %s", save_path)
     return save_path
 
 
@@ -43,5 +46,5 @@ def load_checkpoint(checkpoints_dir: Path, name: str, map_location=None):
     load_path = checkpoints_dir / f"{name}.pt"
     if not load_path.exists():
         raise FileNotFoundError(f"Checkpoint not found: {load_path}")
-    print(f"Loading checkpoint from {load_path}")
+    logger.info("Loading checkpoint from %s", load_path)
     return torch.load(load_path, map_location=map_location, weights_only=True)

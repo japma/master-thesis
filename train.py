@@ -1,12 +1,13 @@
 """Training script."""
 
+import logging
+import time
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from tqdm import tqdm
-from torchinfo import summary
 from rtpt import RTPT
-import time
+from tqdm import tqdm
 
 from models.autoencoder.variational_autoencoder import VariationalAutoencoder
 from models.cspn import SPFlowCSPN
@@ -17,22 +18,7 @@ from utils import (
     save_checkpoint,
 )
 
-
-def _resolve_label_transform(label_mode: str, dataset_name: str):
-    if label_mode == "dataset":
-        return lambda labels: labels
-
-    if label_mode == "mnist_parity":
-        if dataset_name != "MNIST":
-            raise ValueError(
-                "label_mode='mnist_parity' is only supported with data.name='MNIST'."
-            )
-        return lambda labels: labels % 2
-
-    raise ValueError(
-        f"Unsupported CSPN label_mode '{label_mode}'. Supported modes: "
-        "'dataset', 'mnist_parity'."
-    )
+logger = logging.getLogger(__name__)
 
 
 def reconstruction_target(images, reconstructed):
@@ -160,30 +146,21 @@ def evaluate_cspn(cspn, autoencoder, test_loader, device, label_transform=None):
 def train_autoencoder(cfg, device, train_loader, test_loader, run_dirs, rtpt):
     """Train and checkpoint the autoencoder stage."""
     input_size = cfg.data.input_size
-    channels = cfg.data.channels
-    height = cfg.data.height
-    width = cfg.data.width
 
     ae_epochs = cfg.model.training.epochs
-    ae_batch_size = cfg.model.training.batch_size
     ae_learning_rate = cfg.model.training.learning_rate
-    latent_size = cfg.model.training.latent_size
+    latent_size = cfg.data.latent_size
 
     model = VariationalAutoencoder(
         input_size=input_size,
         latent_size=latent_size,
         image_shape=cfg.data.image_shape,
     ).to(device)
-    summary(
-        model,
-        input_size=(ae_batch_size, channels, height, width),
-        device=device,
-    )
 
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=ae_learning_rate)
 
-    print(f"\nTraining autoencoder for {ae_epochs} epochs...")
+    logger.info("Training autoencoder for %s epochs...", ae_epochs)
     for epoch in range(ae_epochs):
         train_loss = train_epoch(
             model,
@@ -199,10 +176,12 @@ def train_autoencoder(cfg, device, train_loader, test_loader, run_dirs, rtpt):
             device,
         )
 
-        print(
-            f"AE Epoch {epoch + 1}/{ae_epochs} - "
-            f"Train Loss: {train_loss:.4f}, "
-            f"Test Loss: {test_loss:.4f}"
+        logger.info(
+            "AE Epoch %s/%s - Train Loss: %.4f, Test Loss: %.4f",
+            epoch + 1,
+            ae_epochs,
+            train_loss,
+            test_loss,
         )
 
         rtpt.step(subtitle=f"AE {epoch + 1}/{ae_epochs}")
@@ -213,50 +192,20 @@ def train_autoencoder(cfg, device, train_loader, test_loader, run_dirs, rtpt):
 
 def train_cspn(cfg, device, train_loader, test_loader, run_dirs, autoencoder, rtpt):
     """Train and checkpoint the CSPN stage."""
-    dataset_name = cfg.data.name
-    ae_batch_size = cfg.model.training.batch_size
-    latent_size = cfg.model.training.latent_size
+    latent_size = cfg.data.latent_size
+    num_labels = cfg.data.num_classes
 
     cspn_cfg = cfg.model.cspn
     cspn_epochs = cspn_cfg.epochs
     cspn_learning_rate = cspn_cfg.learning_rate
-    cspn_label_embedding_dim = cspn_cfg.label_embedding_dim
-    cspn_context_hidden_dim = cspn_cfg.context_hidden_dim
-    cspn_context_num_layers = cspn_cfg.context_num_layers
-    cspn_num_mixture_components = cspn_cfg.num_mixture_components
-    cspn_num_sum_components = cspn_cfg.num_sum_components
-    cspn_label_config = cfg.cspn_label
-    cspn_label_transform = _resolve_label_transform(
-        cspn_label_config.label_mode,
-        dataset_name,
-    )
-    cspn_num_labels = cspn_label_config.num_labels
 
     cspn = SPFlowCSPN(
         latent_size=latent_size,
-        num_labels=cspn_num_labels,
-        label_embedding_dim=cspn_label_embedding_dim,
-        context_hidden_dim=cspn_context_hidden_dim,
-        context_num_layers=cspn_context_num_layers,
-        num_mixture_components=cspn_num_mixture_components,
-        num_sum_components=cspn_num_sum_components,
+        num_labels=num_labels,
     ).to(device)
 
-    # Summarize CSPN with representative latent + label inputs.
-    cspn_summary_z = torch.zeros((ae_batch_size, latent_size), device=device)
-    cspn_summary_labels = torch.zeros(
-        (ae_batch_size,),
-        dtype=torch.long,
-        device=device,
-    )
-    summary(
-        cspn,
-        input_data=(cspn_summary_z, cspn_summary_labels),
-        device=device,
-    )
-
     cspn_optimizer = optim.Adam(cspn.parameters(), lr=cspn_learning_rate)
-    print(f"\nTraining CSPN on latent space for {cspn_epochs} epochs...")
+    logger.info("Training CSPN on latent space for %s epochs...", cspn_epochs)
     for epoch in range(cspn_epochs):
         train_nll = train_cspn_epoch(
             cspn,
@@ -264,20 +213,20 @@ def train_cspn(cfg, device, train_loader, test_loader, run_dirs, autoencoder, rt
             train_loader=train_loader,
             optimizer=cspn_optimizer,
             device=device,
-            label_transform=cspn_label_transform,
         )
         test_nll = evaluate_cspn(
             cspn,
             autoencoder=autoencoder,
             test_loader=test_loader,
             device=device,
-            label_transform=cspn_label_transform,
         )
 
-        print(
-            f"CSPN Epoch {epoch + 1}/{cspn_epochs} - "
-            f"Train NLL: {train_nll:.4f}, "
-            f"Test NLL: {test_nll:.4f}"
+        logger.info(
+            "CSPN Epoch %s/%s - Train NLL: %.4f, Test NLL: %.4f",
+            epoch + 1,
+            cspn_epochs,
+            train_nll,
+            test_nll,
         )
 
         rtpt.step(subtitle=f"CSPN {epoch + 1}/{cspn_epochs}")
@@ -297,8 +246,6 @@ def train_model(cfg):
     start_time = time.perf_counter()
 
     dataset_name = cfg.data.name
-    cspn_label_config = cfg.cspn_label
-
     output_dir = cfg.run_dir
 
     if torch.cuda.is_available():
@@ -307,11 +254,8 @@ def train_model(cfg):
         device = torch.device("mps")
     else:
         device = torch.device("cpu")
-    print(f"Using device: {device}")
-    print(f"Dataset: {dataset_name}")
-    print(
-        f"CSPN label mode: {cspn_label_config.label_mode} "
-        f"(num_labels={cspn_label_config.num_labels})"
+    logger.info(
+        "Device: %s, Dataset: %s, Output Dir: %s", device, dataset_name, output_dir
     )
 
     total_epochs = cfg.model.training.epochs + cfg.model.cspn.epochs
@@ -323,7 +267,7 @@ def train_model(cfg):
     rtpt.start()
 
     run_dirs = create_run_directories(output_dir)
-    print(f"Run directory: {run_dirs.run_dir}")
+    logger.info("Run directory: %s", run_dirs.run_dir)
 
     train_loader, test_loader = get_data_loaders(
         dataset_name,
@@ -338,6 +282,10 @@ def train_model(cfg):
     end_time = time.perf_counter()
     elapsed_seconds = end_time - start_time
     elapsed_formatted = format_elapsed_time(elapsed_seconds)
-    print(f"Training completed in {elapsed_formatted} ({elapsed_seconds:.2f}s)")
+    logger.info(
+        "Training completed in %s (%.2fs)",
+        elapsed_formatted,
+        elapsed_seconds,
+    )
 
     return None
