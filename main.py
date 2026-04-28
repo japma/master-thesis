@@ -1,11 +1,22 @@
 from hydra import main
-from omegaconf import DictConfig
+from inference import run_inference
 from train import train_model
+from utils.config import parse_inference_config, parse_mode, parse_train_config
 
 
 @main(version_base=None, config_path="configs", config_name="config")
-def main_hydra(cfg: DictConfig) -> None:
-    train_model(cfg)
+def main_hydra(cfg) -> None:
+    mode = parse_mode(cfg)
+    if mode == "train":
+        train_model(parse_train_config(cfg))
+        return
+    if mode == "inference":
+        run_inference(parse_inference_config(cfg))
+        return
+
+    raise ValueError(
+        f"Unsupported mode '{mode}'. Supported modes are: 'train', 'inference'."
+    )
 
 
 if __name__ == "__main__":

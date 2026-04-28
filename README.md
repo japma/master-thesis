@@ -15,8 +15,9 @@ docker-compose up -d
 ```
 
 ## Outputs
-Training outputs are written under `results/<dataset>_<timestamp>/` with separate
-`checkpoints/` and `images/` folders.
+Hydra creates a unique run directory for each execution. Training checkpoints
+are written to `<hydra run dir>/checkpoints/` and generated visualizations are
+written to `<hydra run dir>/images/`.
 
 ## Configuration
 Configuration is done via `hydra`.

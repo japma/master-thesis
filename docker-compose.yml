@@ -4,9 +4,21 @@ services:
       context: .
       dockerfile: Dockerfile
     image: ciglspc:latest
-    # devices:
+    #devices:
     #  - nvidia.com/gpu=all
     volumes:
       - ./:/app
     entrypoint: ["/opt/venv/bin/python", "main.py"]
-    command: ["$HYDRA_ARGS"]
+    command: ["mode=train", "$HYDRA_ARGS"]
+
+  #inference:
+  #  build:
+  #    context: .
+  #    dockerfile: Dockerfile
+  #  image: ciglspc:latest
+  #  #devices:
+    #  - nvidia.com/gpu=all
+  #  volumes:
+  #    - ./:/app
+  #  entrypoint: ["/opt/venv/bin/python", "main.py"]
+  #  command: ["mode=inference", "$HYDRA_ARGS"]
