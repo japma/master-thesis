@@ -1,15 +1,16 @@
 # Master Thesis
 
 ## uv version
-`uv` needs to be installed. Then run 
+`uv` needs to be installed. Then run
 ```bash
 uv sync
-uv run main.py
+uv run train_autoencoder.py
 ```
 
+To train the CSPN, run `uv run train_cspn.py`. For inference, run `uv run inference.py`.
 
 ## Docker
-Run 
+Run
 ```bash
 docker-compose up -d
 ```
@@ -21,4 +22,4 @@ written to `<hydra run dir>/images/`.
 
 ## Configuration
 Configuration is done via `hydra`.
-It is possible to e.g. change the dataset by passing `data=mnist` either to `main.py` directly, or by passing them to Docker via `HYDRA_ARGS="data=mnist"`
+It is possible to e.g. change the dataset by passing `data=mnist` to the task entrypoint directly, or by passing it to Docker via `HYDRA_ARGS="data=mnist"`

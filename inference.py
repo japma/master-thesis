@@ -4,10 +4,12 @@ import logging
 from pathlib import Path
 
 import torch
+from hydra import main
 
 from models.autoencoder.variational_autoencoder import VariationalAutoencoder
 from models.cspn import SPFlowCSPN
-from utils.config import infer_image_shape_from_input_size
+from utils import seed_everything
+from utils.config import infer_image_shape_from_input_size, parse_inference_config
 from utils import (
     get_data_loaders,
     load_checkpoint,
@@ -46,27 +48,24 @@ def run_inference(cfg) -> None:
     if channels is None or height is None or width is None:
         channels, height, width = infer_image_shape_from_input_size(input_size)
 
-    latent_size = cfg.data.latent_size
-    cspn_num_labels = cfg.data.num_classes
-
     autoencoder = VariationalAutoencoder(
         input_size=input_size,
-        latent_size=latent_size,
+        latent_size=cfg.data.latent_size,
         image_shape=(channels, height, width),
     ).to(device)
 
     cspn = SPFlowCSPN(
-        latent_size=latent_size,
-        num_labels=cspn_num_labels,
+        latent_size=cfg.data.latent_size,
+        num_labels=cfg.data.num_classes,
     ).to(device)
 
     autoencoder_state_dict = load_checkpoint(
-        cfg.checkpoint_dir,
+        Path(cfg.checkpoints.autoencoder_dir),
         "autoencoder",
         map_location=device,
     )
     cspn_state_dict = load_checkpoint(
-        cfg.checkpoint_dir,
+        Path(cfg.checkpoints.cspn_dir),
         "cspn",
         map_location=device,
     )
@@ -76,7 +75,7 @@ def run_inference(cfg) -> None:
 
     _, test_loader = get_data_loaders(
         cfg.data.name,
-        cfg.model.training.batch_size,
+        cfg.training.batch_size,
         dataset_kwargs=cfg.data.dataset_kwargs,
     )
 
@@ -99,7 +98,7 @@ def run_inference(cfg) -> None:
             test_loader=test_loader,
             device=device,
             output_dir=output_dir,
-            num_labels=cspn_num_labels,
+            num_labels=cfg.data.num_classes,
             max_points=cfg.max_points,
         )
 
@@ -110,7 +109,7 @@ def run_inference(cfg) -> None:
             test_loader=test_loader,
             device=device,
             output_dir=output_dir,
-            num_labels=cspn_num_labels,
+            num_labels=cfg.data.num_classes,
             num_samples=cfg.num_samples,
         )
 
@@ -121,7 +120,18 @@ def run_inference(cfg) -> None:
             test_loader=test_loader,
             device=device,
             output_dir=output_dir,
-            num_labels=cspn_num_labels,
+            num_labels=cfg.data.num_classes,
             max_points=cfg.max_points,
             samples_per_label=cfg.samples_per_label,
         )
+
+
+@main(version_base=None, config_path="configs", config_name="inference")
+def main_hydra(cfg) -> None:
+    seed = seed_everything(cfg.get("seed"))
+    logger.info("Using seed: %s", seed)
+    run_inference(parse_inference_config(cfg))
+
+
+if __name__ == "__main__":
+    main_hydra()

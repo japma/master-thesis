@@ -20,9 +20,7 @@ class SPFlowCSPN(AbstractCSPN):
         self,
         latent_size,
         num_labels,
-        label_embedding_dim=32,
         context_hidden_dim=128,
-        context_num_layers=3,
         num_mixture_components=4,
         num_sum_components=2,
     ):
@@ -30,9 +28,7 @@ class SPFlowCSPN(AbstractCSPN):
 
         self.latent_size = latent_size
         self.num_labels = num_labels
-        self.label_embedding_dim = label_embedding_dim
         self.context_hidden_dim = context_hidden_dim
-        self.context_num_layers = context_num_layers
         self.num_mixture_components = num_mixture_components
         self.num_sum_components = max(1, num_sum_components)
 
@@ -83,9 +79,7 @@ class SPFlowCSPN(AbstractCSPN):
             latent_size=self.latent_size,
             num_labels=self.num_labels,
             num_components=self.num_joint_channels,
-            embedding_dim=self.label_embedding_dim,
             hidden_dim=self.context_hidden_dim,
-            num_layers=self.context_num_layers,
         )
         self.conditional_param_fns.append(param_fn)
         return param_fn

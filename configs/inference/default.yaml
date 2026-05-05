@@ -1,9 +1,0 @@
-checkpoint_dir: null
-num_samples: 10
-max_points: 2500
-samples_per_label: 250
-visualize:
-  autoencoder: true
-  latent_space: true
-  cspn: true
-  cspn_latent_space: true

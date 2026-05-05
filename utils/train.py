@@ -1,4 +1,6 @@
-"""Time formatting helpers."""
+"""Train helpers."""
+
+import torch
 
 
 def format_elapsed_time(seconds):
@@ -19,3 +21,11 @@ def format_elapsed_time(seconds):
     if minutes > 0:
         return f"{minutes}m {secs}s"
     return f"{secs}s"
+
+
+def resolve_device() -> torch.device:
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    if torch.backends.mps.is_available():
+        return torch.device("mps")
+    return torch.device("cpu")

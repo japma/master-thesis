@@ -1,24 +1,36 @@
 services:
-  train:
+  train-autoencoder:
     build:
       context: .
       dockerfile: Dockerfile
     image: ciglspc:latest
-    #devices:
-    #  - nvidia.com/gpu=all
+    devices:
+      - nvidia.com/gpu=all
     volumes:
       - ./:/app
-    entrypoint: ["/opt/venv/bin/python", "main.py"]
-    command: ["mode=train", "$HYDRA_ARGS"]
+    entrypoint: ["/opt/venv/bin/python", "train_autoencoder.py"]
+    command: ["$HYDRA_ARGS"]
 
-  #inference:
-  #  build:
-  #    context: .
-  #    dockerfile: Dockerfile
-  #  image: ciglspc:latest
-  #  #devices:
-    #  - nvidia.com/gpu=all
-  #  volumes:
-  #    - ./:/app
-  #  entrypoint: ["/opt/venv/bin/python", "main.py"]
-  #  command: ["mode=inference", "$HYDRA_ARGS"]
+  train-cspn:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ciglspc:latest
+    devices:
+      - nvidia.com/gpu=all
+    volumes:
+      - ./:/app
+    entrypoint: ["/opt/venv/bin/python", "train_cspn.py"]
+    command: ["$HYDRA_ARGS"]
+
+  inference:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ciglspc:latest
+    devices:
+      - nvidia.com/gpu=all
+    volumes:
+      - ./:/app
+    entrypoint: ["/opt/venv/bin/python", "inference.py"]
+    command: ["$HYDRA_ARGS"]

@@ -6,37 +6,24 @@ import torch.nn.functional as F
 
 
 class NeuralNetworkForSPN(nn.Module):
-    """Neural parameter function for SPFlow conditional Normal leaves."""
+    """Neural parameter function for SPFlow conditional Normal leaves.
+
+    Simplified single-layer version for debugging and performance.
+    """
 
     def __init__(
         self,
         latent_size: int,
         num_labels: int,
         num_components: int,
-        embedding_dim: int,
         hidden_dim: int,
-        num_layers: int,
     ):
         super().__init__()
         self.latent_size = latent_size
         self.num_labels = num_labels
         self.num_components = num_components
 
-        self.label_embedding = nn.Embedding(num_labels, embedding_dim)
-
-        layers = []
-        in_dim = embedding_dim
-        for _ in range(max(1, num_layers)):
-            layers.extend(
-                [
-                    nn.Linear(in_dim, hidden_dim),
-                    nn.LayerNorm(hidden_dim),
-                    nn.SiLU(),
-                ]
-            )
-            in_dim = hidden_dim
-
-        self.backbone = nn.Sequential(*layers)
+        self.backbone = nn.Linear(num_labels, hidden_dim)
         self.loc_head = nn.Linear(hidden_dim, latent_size * num_components)
         self.scale_head = nn.Linear(hidden_dim, latent_size * num_components)
 
@@ -45,7 +32,7 @@ class NeuralNetworkForSPN(nn.Module):
             evidence = evidence.unsqueeze(1)
 
         labels = evidence[:, 0].long().clamp(min=0, max=self.num_labels - 1)
-        h = self.backbone(self.label_embedding(labels))
+        h = F.silu(self.backbone(F.one_hot(labels, self.num_labels).float()))
 
         loc = self.loc_head(h).view(-1, self.latent_size, self.num_components, 1)
         raw_scale = self.scale_head(h).view(
