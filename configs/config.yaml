@@ -1,0 +1,14 @@
+defaults:
+  - autoencoder: default
+  - cspn: default
+  - inference: default
+  - dataset: mnist
+  - training: default
+  - _self_
+
+# TODO change training mode to train_cspn
+mode: train_ae
+
+seed: null
+
+paths:

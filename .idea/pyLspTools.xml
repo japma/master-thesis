@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="RuffModuleSettingsStorage">
+    <option name="moduleSettings">
+      <map>
+        <entry key="master-thesis">
+          <value>
+            <RuffModuleSettingsData>
+              <option name="enabled" value="true" />
+              <option name="sortImports" value="false" />
+            </RuffModuleSettingsData>
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+</project>

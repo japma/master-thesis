@@ -13,4 +13,7 @@ COPY pyproject.toml uv.lock .python-version ./
 RUN uv sync --locked --no-dev --no-install-project
 RUN uv pip install --python /opt/venv/bin/python --index-url https://download.pytorch.org/whl/cu128 --upgrade torch torchvision
 
-CMD ["/opt/venv/bin/python", "train_autoencoder.py"]
+COPY . .
+
+ENTRYPOINT ["/opt/venv/bin/python", "main.py"]
+CMD []

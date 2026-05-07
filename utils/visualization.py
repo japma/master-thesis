@@ -15,7 +15,7 @@ def visualize_autoencoder(model, test_loader, device, output_dir, num_samples=10
 
     Args:
         model: Trained autoencoder model.
-        test_loader: DataLoader for test data.
+        test_loader: DataLoader for test dataset.
         device: Device to run on (cpu or cuda).
         output_dir: Directory to save visualization.
         num_samples: Number of samples to visualize (default: 10).
@@ -138,10 +138,10 @@ def _normalize_class_names(raw_classes, num_labels):
 
     # EMNIST letters provides classes like ["N/A", "a", ..., "z"] while labels
     # are remapped to [0, 25], so drop the placeholder to align indices.
-    if (
-        len(class_names) == num_labels + 1
-        and class_names[0].strip().lower() in {"n/a", "na"}
-    ):
+    if len(class_names) == num_labels + 1 and class_names[0].strip().lower() in {
+        "n/a",
+        "na",
+    }:
         class_names = class_names[1:]
 
     if len(class_names) < num_labels:
@@ -184,7 +184,9 @@ def _project_latents_to_2d(latents: torch.Tensor) -> torch.Tensor:
     Uses identity for 2D latents and PCA for higher-dimensional latents.
     """
     if latents.dim() != 2:
-        raise ValueError(f"Expected latents with shape (N, D), got {tuple(latents.shape)}")
+        raise ValueError(
+            f"Expected latents with shape (N, D), got {tuple(latents.shape)}"
+        )
 
     n_samples, latent_dim = latents.shape
     if n_samples == 0:
@@ -278,7 +280,9 @@ def visualize_latent_space(
             continue
 
         class_points = projected[class_mask]
-        class_label = _format_label_with_index(class_idx, resolved_class_names[class_idx])
+        class_label = _format_label_with_index(
+            class_idx, resolved_class_names[class_idx]
+        )
         plt.scatter(
             class_points[:, 0],
             class_points[:, 1],
@@ -370,7 +374,9 @@ def visualize_cspn_latent_space(
             )
             class_samples = cspn.sample(class_label, num_samples=samples_per_label)
             sampled_latents.append(class_samples.detach().cpu())
-            sampled_labels.append(torch.full((samples_per_label,), class_idx, dtype=torch.long))
+            sampled_labels.append(
+                torch.full((samples_per_label,), class_idx, dtype=torch.long)
+            )
 
     sampled_latents = torch.cat(sampled_latents, dim=0)
     sampled_labels = torch.cat(sampled_labels, dim=0)
@@ -394,7 +400,9 @@ def visualize_cspn_latent_space(
     colors = plt.cm.get_cmap("tab20", max(1, num_labels))
 
     for class_idx in range(num_labels):
-        class_label = _format_label_with_index(class_idx, resolved_class_names[class_idx])
+        class_label = _format_label_with_index(
+            class_idx, resolved_class_names[class_idx]
+        )
 
         encoded_mask = encoded_labels == class_idx
         if encoded_mask.any():

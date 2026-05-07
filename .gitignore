@@ -7,7 +7,6 @@ wheels/
 *.egg-info
 results/
 /data/
-!configs/data/
 outputs/
 
 # Virtual environments

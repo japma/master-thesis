@@ -1,7 +1,0 @@
-defaults:
-  - data: mnist
-  - model: autoencoder
-  - training: autoencoder
-  - _self_
-
-seed: null

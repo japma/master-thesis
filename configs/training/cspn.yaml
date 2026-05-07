@@ -1,6 +1,0 @@
-defaults:
-  - default
-  - _self_
-
-epochs: 1
-learning_rate: 0.001

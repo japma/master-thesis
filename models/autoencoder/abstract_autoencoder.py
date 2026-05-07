@@ -8,7 +8,7 @@ import torch.nn as nn
 class AbstractAutoencoder(nn.Module, ABC):
     """Abstract base class for autoencoder models.
 
-    An autoencoder learns to encode input data into a latent representation
+    An autoencoder learns to encode input dataset into a latent representation
     and decode it back to reconstruct the original input.
     """
 

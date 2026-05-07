@@ -40,23 +40,23 @@ def run_inference(cfg) -> None:
     """Load trained checkpoints and generate inference visualizations."""
     device = _resolve_device()
 
-    input_size = cfg.data.input_size
-    channels = cfg.data.channels
-    height = cfg.data.height
-    width = cfg.data.width
+    input_size = cfg.dataset.input_size
+    channels = cfg.dataset.channels
+    height = cfg.dataset.height
+    width = cfg.dataset.width
 
     if channels is None or height is None or width is None:
         channels, height, width = infer_image_shape_from_input_size(input_size)
 
     autoencoder = VariationalAutoencoder(
         input_size=input_size,
-        latent_size=cfg.data.latent_size,
+        latent_size=cfg.dataset.latent_size,
         image_shape=(channels, height, width),
     ).to(device)
 
     cspn = SPFlowCSPN(
-        latent_size=cfg.data.latent_size,
-        num_labels=cfg.data.num_classes,
+        latent_size=cfg.dataset.latent_size,
+        num_labels=cfg.dataset.num_classes,
     ).to(device)
 
     autoencoder_state_dict = load_checkpoint(
@@ -74,9 +74,9 @@ def run_inference(cfg) -> None:
     cspn.load_state_dict(cspn_state_dict)
 
     _, test_loader = get_data_loaders(
-        cfg.data.name,
+        cfg.dataset.name,
         cfg.training.batch_size,
-        dataset_kwargs=cfg.data.dataset_kwargs,
+        dataset_kwargs=cfg.dataset.dataset_kwargs,
     )
 
     output_dir = _create_inference_output_dir(cfg.run_dir)
@@ -98,7 +98,7 @@ def run_inference(cfg) -> None:
             test_loader=test_loader,
             device=device,
             output_dir=output_dir,
-            num_labels=cfg.data.num_classes,
+            num_labels=cfg.dataset.num_classes,
             max_points=cfg.max_points,
         )
 
@@ -109,7 +109,7 @@ def run_inference(cfg) -> None:
             test_loader=test_loader,
             device=device,
             output_dir=output_dir,
-            num_labels=cfg.data.num_classes,
+            num_labels=cfg.dataset.num_classes,
             num_samples=cfg.num_samples,
         )
 
@@ -120,7 +120,7 @@ def run_inference(cfg) -> None:
             test_loader=test_loader,
             device=device,
             output_dir=output_dir,
-            num_labels=cfg.data.num_classes,
+            num_labels=cfg.dataset.num_classes,
             max_points=cfg.max_points,
             samples_per_label=cfg.samples_per_label,
         )

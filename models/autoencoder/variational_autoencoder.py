@@ -1,22 +1,31 @@
 """Variational autoencoder model."""
 
+import logging
+
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 from .abstract_autoencoder import AbstractAutoencoder
+
+logger = logging.getLogger(__name__)
+
+
+def reparameterize(mu, logvar):
+    """Sample latent using reparameterization trick."""
+    std = torch.exp(0.5 * logvar)
+    eps = torch.randn_like(std)
+    return mu + eps * std
 
 
 class VariationalAutoencoder(AbstractAutoencoder):
     """VAE with Gaussian latent space and convolutional encoder/decoder."""
 
-    def __init__(self, input_size, latent_size=32, image_shape=None, base_channels=32):
+    def __init__(self, input_shape, latent_size=32, base_channels=32):
         super().__init__()
-        self.input_size = input_size
+        self.input_shape = input_shape
         self.latent_size = latent_size
 
-        self.image_shape = self._resolve_image_shape(input_size, image_shape)
-        channels, height, width = self.image_shape
+        channels, height, width = self.input_shape
 
         self.encoder = nn.Sequential(
             nn.Conv2d(channels, base_channels, kernel_size=4, stride=2, padding=1),
@@ -37,11 +46,12 @@ class VariationalAutoencoder(AbstractAutoencoder):
             example = torch.zeros(1, channels, height, width)
             encoded_example = self.encoder(example)
 
-        self.encoded_channels = encoded_example.shape[1]
-        self.encoded_height = encoded_example.shape[2]
-        self.encoded_width = encoded_example.shape[3]
-        self.encoded_flat_dim = (
-            self.encoded_channels * self.encoded_height * self.encoded_width
+        # Store as a single tuple rather than three separate attributes
+        self.encoded_shape = tuple(encoded_example.shape[1:])  # (C, H, W)
+        self.encoded_flat_dim = encoded_example.numel()
+
+        logger.info(
+            "Encoded shape: %s, flat dim: %d", self.encoded_shape, self.encoded_flat_dim
         )
 
         self.mu_head = nn.Linear(self.encoded_flat_dim, latent_size)
@@ -50,7 +60,7 @@ class VariationalAutoencoder(AbstractAutoencoder):
         self.decoder_input = nn.Linear(latent_size, self.encoded_flat_dim)
         self.decoder = nn.Sequential(
             nn.ConvTranspose2d(
-                self.encoded_channels,
+                self.encoded_shape[0],
                 base_channels * 2,
                 kernel_size=4,
                 stride=2,
@@ -66,34 +76,9 @@ class VariationalAutoencoder(AbstractAutoencoder):
             ),
             nn.ReLU(),
             nn.Conv2d(base_channels, channels, kernel_size=3, stride=1, padding=1),
-        )
-
-    @staticmethod
-    def _resolve_image_shape(input_size, image_shape):
-        if image_shape is not None:
-            if len(image_shape) != 3:
-                raise ValueError(
-                    "image_shape must be a (channels, height, width) tuple"
-                )
-            channels, height, width = image_shape
-            if channels * height * width != input_size:
-                raise ValueError(
-                    "image_shape product must match input_size "
-                    f"({channels}*{height}*{width} != {input_size})"
-                )
-            return image_shape
-
-        known_shapes = {
-            784: (1, 28, 28),
-            3072: (3, 32, 32),
-            12288: (3, 64, 64),
-        }
-        if input_size in known_shapes:
-            return known_shapes[input_size]
-
-        raise ValueError(
-            "Unable to infer image shape from input_size. "
-            "Pass image_shape=(channels, height, width)."
+            # No activation here — apply in the loss or normalise inputs to match.
+            # Use sigmoid if inputs are in [0, 1] with BCE loss;
+            # use tanh (or nothing) if inputs are normalised to [-1, 1] with MSE.
         )
 
     def encode_distribution(self, x):
@@ -104,39 +89,20 @@ class VariationalAutoencoder(AbstractAutoencoder):
         logvar = self.logvar_head(flat_features)
         return mu, logvar
 
-    def reparameterize(self, mu, logvar):
-        """Sample latent using reparameterization trick."""
-        std = torch.exp(0.5 * logvar)
-        eps = torch.randn_like(std)
-        return mu + eps * std
-
     def encode(self, x):
-        """Encode to a sampled latent representation."""
-        mu, logvar = self.encode_distribution(x)
-        return self.reparameterize(mu, logvar)
+        """Encode to a deterministic latent representation (returns µ)."""
+        mu, _ = self.encode_distribution(x)
+        return mu
 
     def decode(self, latent):
+        """Decode a latent vector to an image."""
         decoded = self.decoder_input(latent)
-        decoded = decoded.view(
-            latent.size(0),
-            self.encoded_channels,
-            self.encoded_height,
-            self.encoded_width,
-        )
-        decoded = self.decoder(decoded)
+        decoded = decoded.view(latent.size(0), *self.encoded_shape)
+        return self.decoder(decoded)
 
-        return torch.sigmoid(decoded)
-
-    @staticmethod
-    def kl_divergence(mu, logvar, reduction="mean"):
-        """Compute KL(q(z|x) || p(z))."""
-        kl_per_sample = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=1)
-
-        if reduction == "none":
-            return kl_per_sample
-        if reduction == "sum":
-            return kl_per_sample.sum()
-        if reduction == "mean":
-            return kl_per_sample.mean()
-
-        raise ValueError("reduction must be one of: 'none', 'sum', 'mean'")
+    def forward(self, x):
+        """Full forward pass. Returns (reconstruction, µ, log σ²)."""
+        mu, logvar = self.encode_distribution(x)
+        z = reparameterize(mu, logvar)
+        recon = self.decode(z)
+        return recon, mu, logvar

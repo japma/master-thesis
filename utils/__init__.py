@@ -1,4 +1,4 @@
-"""Utility package for data loading, file I/O, timing, and visualizations."""
+"""Utility package for dataset loading, file I/O, timing, and visualizations."""
 
 from dataset_loaders import TinyImageNetDataset, get_data_loaders
 from .io import RunDirectories, create_run_directories, load_checkpoint, save_checkpoint
