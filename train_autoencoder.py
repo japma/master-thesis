@@ -103,22 +103,26 @@ def run_autoencoder_training(cfg):
 
     ae_epochs = cfg.training.epochs
     ae_learning_rate = cfg.training.learning_rate
-    beta = cfg.training.get("beta", 1.0)
+    # roughly 15% as warmup
+    warmup_epochs = ae_epochs // 7
 
     model = _build_autoencoder(cfg, device)
     optimizer = optim.Adam(model.parameters(), lr=ae_learning_rate)
 
-    logger.info("Training autoencoder for %s epochs (beta=%.2f)...", ae_epochs, beta)
+    logger.info("Training autoencoder for %s epochs...", ae_epochs)
     for epoch in range(ae_epochs):
+        beta = min(1.0, (epoch + 1) / warmup_epochs)
+
         train_loss, train_recon, train_kl = train_epoch(
             model, train_loader, optimizer, device, beta=beta
         )
         test_loss, test_recon, test_kl = evaluate(model, test_loader, device, beta=beta)
 
         logger.info(
-            "Epoch %d/%d | Train loss=%.4f (recon=%.4f, kl=%.4f) | Test loss=%.4f (recon=%.4f, kl=%.4f)",
+            "Epoch %d/%d | beta=%.2f | Train loss=%.4f (recon=%.4f, kl=%.4f) | Test loss=%.4f (recon=%.4f, kl=%.4f)",
             epoch + 1,
             ae_epochs,
+            beta,
             train_loss,
             train_recon,
             train_kl,

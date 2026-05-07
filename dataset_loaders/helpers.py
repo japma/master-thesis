@@ -1,5 +1,7 @@
 """Dataset and dataset loader helpers."""
 
+import os
+
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 
@@ -80,7 +82,25 @@ def _build_data_sets(cfg):
 def get_data_loaders(cfg, batch_size=32):
     train_dataset, test_dataset = _build_data_sets(cfg)
 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+    max_workers = os.cpu_count()
+    if max_workers is None:
+        max_workers = 8
+    else:
+        max_workers = max_workers // 2
+
+    train_loader = DataLoader(
+        train_dataset,
+        num_workers=max_workers,
+        pin_memory=True,
+        batch_size=batch_size,
+        shuffle=True,
+    )
+    test_loader = DataLoader(
+        test_dataset,
+        num_workers=max_workers,
+        pin_memory=True,
+        batch_size=batch_size,
+        shuffle=False,
+    )
 
     return train_loader, test_loader
