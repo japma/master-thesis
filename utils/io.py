@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import torch
+from omegaconf import DictConfig
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,7 @@ def create_run_directories(run_dir: str | Path) -> RunDirectories:
     )
 
 
+# TODO rework this to use model directly
 def save_checkpoint(model_state_dict, checkpoints_dir: Path, name: str) -> Path:
     save_path = checkpoints_dir / f"{name}.pt"
     torch.save(model_state_dict, save_path)
@@ -42,9 +44,16 @@ def save_checkpoint(model_state_dict, checkpoints_dir: Path, name: str) -> Path:
     return save_path
 
 
-def load_checkpoint(checkpoints_dir: Path, name: str, map_location=None):
-    load_path = checkpoints_dir / f"{name}.pt"
+def load_checkpoint(load_path: Path, map_location=None):
     if not load_path.exists():
         raise FileNotFoundError(f"Checkpoint not found: {load_path}")
     logger.info("Loading checkpoint from %s", load_path)
     return torch.load(load_path, map_location=map_location, weights_only=True)
+
+
+def build_ae_path(cfg: DictConfig) -> Path:
+    if cfg.paths.ae_checkpoint is not None:
+        return cfg.paths.ae_checkpoint
+    else:
+        path = f"checkpoints/{cfg.dataset.name}/autoencoder.pt"
+        return Path(path)

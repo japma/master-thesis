@@ -100,7 +100,7 @@ def get_data_loaders(cfg, batch_size=32):
         num_workers=max_workers,
         pin_memory=True,
         batch_size=batch_size,
-        shuffle=False,
+        shuffle=True,
     )
 
     return train_loader, test_loader

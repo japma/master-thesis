@@ -11,4 +11,7 @@ mode: train_ae
 
 seed: null
 
+# TODO update paths
 paths:
+  ae_checkpoint: null
+  cspn_checkpoint: null

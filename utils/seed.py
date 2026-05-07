@@ -5,9 +5,12 @@ from __future__ import annotations
 import os
 import random
 from typing import Any
+import logging
 
 import numpy as np
 import torch
+
+logger = logging.getLogger(__name__)
 
 
 def _normalize_seed(seed: Any) -> int:
@@ -38,6 +41,7 @@ def seed_everything(seed: Any | None = None) -> int:
         The seed that was applied.
     """
     seed_value = _normalize_seed(seed)
+    logger.info("Seed value: %s", seed_value)
 
     os.environ["PYTHONHASHSEED"] = str(seed_value)
 

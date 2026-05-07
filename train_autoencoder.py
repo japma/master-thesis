@@ -24,13 +24,12 @@ logger = logging.getLogger(__name__)
 
 def _build_autoencoder(cfg, device):
     ae_cfg = cfg.autoencoder
-
     input_shape = (cfg.dataset.channels, cfg.dataset.height, cfg.dataset.width)
 
     return VariationalAutoencoder(
         input_shape=input_shape,
         latent_size=cfg.dataset.latent_size,
-        base_channels=ae_cfg.get("base_channels", 32),
+        base_channels=ae_cfg.base_channels,
     ).to(device)
 
 
@@ -41,7 +40,7 @@ def _vae_loss(images, recon, mu, logvar, beta=1.0):
     return recon_loss + beta * kl_loss, recon_loss, kl_loss
 
 
-def train_epoch(model, train_loader, optimizer, device, beta=1.0):
+def train_epoch(model, train_loader, optimizer, device, beta):
     model.train()
     total_loss = total_recon = total_kl = 0.0
     for images, _ in tqdm(train_loader, desc="Training"):
@@ -103,8 +102,7 @@ def run_autoencoder_training(cfg):
 
     ae_epochs = cfg.training.epochs
     ae_learning_rate = cfg.training.learning_rate
-    # roughly 15% as warmup
-    warmup_epochs = ae_epochs // 7
+    warmup_epochs = max(1, ae_epochs // 4)
 
     model = _build_autoencoder(cfg, device)
     optimizer = optim.Adam(model.parameters(), lr=ae_learning_rate)

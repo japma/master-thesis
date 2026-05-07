@@ -8,6 +8,7 @@ wheels/
 results/
 /data/
 outputs/
+checkpoints/
 
 # Virtual environments
 .venv

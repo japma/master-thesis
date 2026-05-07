@@ -20,7 +20,7 @@ def reparameterize(mu, logvar):
 class VariationalAutoencoder(AbstractAutoencoder):
     """VAE with Gaussian latent space and convolutional encoder/decoder."""
 
-    def __init__(self, input_shape, latent_size=32, base_channels=32):
+    def __init__(self, input_shape, latent_size, base_channels):
         super().__init__()
         self.input_shape = input_shape
         self.latent_size = latent_size

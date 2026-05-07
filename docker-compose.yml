@@ -8,5 +8,6 @@ services:
       - nvidia.com/gpu=all
     volumes:
       - ./:/app
-    entrypoint: [ "/opt/venv/bin/python", "main.py" ]
-    command: [ "${HYDRA_ARGS:-}" ]
+    entrypoint: [ "/bin/sh", "-c", "exec /opt/venv/bin/python main.py ${HYDRA_ARGS}" ]
+    stdin_open: true
+    tty: true
