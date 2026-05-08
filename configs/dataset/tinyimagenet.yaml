@@ -3,4 +3,4 @@ channels: 3
 width: 64
 height: 64
 num_classes: 200
-latent_size: 256
+latent_size: 128
