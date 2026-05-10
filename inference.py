@@ -1,7 +1,6 @@
 """Inference pipeline for loading checkpoints and generating visualizations."""
 
 import logging
-from pathlib import Path
 
 import torch
 from hydra.core.hydra_config import HydraConfig
@@ -9,7 +8,7 @@ from omegaconf import DictConfig
 from torch.utils.data import DataLoader
 
 from dataset_loaders import get_data_loaders
-from models.autoencoder import VariationalAutoencoder
+from models.autoencoder import VariationalAutoencoder, AbstractAutoencoder
 
 from utils.io import build_ae_path, load_checkpoint
 from utils.train import resolve_device
@@ -19,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 def _build_reconstructions(
-    ae: VariationalAutoencoder,
+    ae: AbstractAutoencoder,
     dataloader: DataLoader,
     num_images: int,
     device: torch.device,

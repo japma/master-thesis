@@ -69,8 +69,9 @@ class TinyImageNetDataset(Dataset):
             image_dir = train_dir / class_name / "images"
             if not image_dir.exists():
                 continue
-            for image_path in sorted(image_dir.glob("*.JPEG")):
-                self.samples.append((image_path, self.class_to_idx[class_name]))
+            for image_path in image_dir.iterdir():
+                if image_path.suffix.upper() == ".JPEG":
+                    self.samples.append((image_path, self.class_to_idx[class_name]))
 
     def _load_val_samples(self):
         val_dir = self.root / "val"

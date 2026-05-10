@@ -17,16 +17,18 @@ def save_reconstructions(originals, reconstructions, labels, path):
 
     fig, axes = plt.subplots(2, num_images, figsize=(num_images * 2, 4))
 
+    cmap = "gray" if originals.shape[1] == 1 else None
+
     for i in range(num_images):
         # label
         axes[0, i].set_title(f"Label: {labels[i].item()}", fontsize=10)
 
         # original
-        axes[0, i].imshow(originals[i].permute(1, 2, 0).squeeze())
+        axes[0, i].imshow(originals[i].permute(1, 2, 0).squeeze(), cmap=cmap)
         axes[0, i].axis("off")
 
         # reconstructed
-        axes[1, i].imshow(reconstructions[i].permute(1, 2, 0).squeeze())
+        axes[1, i].imshow(reconstructions[i].permute(1, 2, 0).squeeze(), cmap=cmap)
         axes[1, i].axis("off")
 
     plt.tight_layout()

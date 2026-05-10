@@ -30,6 +30,8 @@ def _build_autoencoder(cfg, device):
         input_shape=input_shape,
         latent_size=cfg.dataset.latent_size,
         base_channels=ae_cfg.base_channels,
+        num_blocks=ae_cfg.num_blocks,
+        res_blocks=ae_cfg.res_blocks,
     ).to(device)
 
 

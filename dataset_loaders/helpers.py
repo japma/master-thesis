@@ -94,6 +94,8 @@ def get_data_loaders(cfg, batch_size=32):
         pin_memory=True,
         batch_size=batch_size,
         shuffle=True,
+        persistent_workers=True,
+        drop_last=True,
     )
     test_loader = DataLoader(
         test_dataset,
@@ -101,6 +103,8 @@ def get_data_loaders(cfg, batch_size=32):
         pin_memory=True,
         batch_size=batch_size,
         shuffle=True,
+        persistent_workers=True,
+        drop_last=True,
     )
 
     return train_loader, test_loader
