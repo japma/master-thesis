@@ -5,11 +5,25 @@ import os
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 
+from .binarymnist import BinaryMNISTDataset
 from .tinyimagenet import TinyImageNetDataset
 
 
 def _load_mnist(train=True):
     return datasets.MNIST(
+        root="./data",
+        train=train,
+        download=True,
+        transform=transforms.Compose(
+            [
+                transforms.ToTensor(),
+            ]
+        ),
+    )
+
+
+def _load_binary_mnist(train=True):
+    return BinaryMNISTDataset(
         root="./data",
         train=train,
         download=True,
@@ -61,6 +75,7 @@ def _load_tinyimagenet(split="train"):
 
 _DATASETS = {
     "MNIST": _load_mnist,
+    "BinaryMNIST": _load_binary_mnist,
     "FashionMNIST": _load_fashion_mnist,
     "CIFAR10": _load_cifar10,
     "TinyImageNet": _load_tinyimagenet,

@@ -9,10 +9,11 @@ from torch.utils.data import DataLoader
 
 from dataset_loaders import get_data_loaders
 from models.autoencoder import VariationalAutoencoder, AbstractAutoencoder
+from models import SPFlowCSPN
 
-from utils.io import build_ae_path, load_checkpoint
+from utils.io import build_ae_path, load_checkpoint, build_cspn_path
 from utils.train import resolve_device
-from utils.visualization import save_reconstructions
+from utils.visualization import save_reconstructions, save_latent_umap
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +52,46 @@ def _build_reconstructions(
     return originals_tensor, reconstructed_tensor, labels_tensor
 
 
+def _extract_latents(
+    ae: AbstractAutoencoder,
+    dataloader: DataLoader,
+    num_samples: int,
+    device: torch.device,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    if num_samples <= 0:
+        raise ValueError("num_samples must be > 0")
+
+    latents_list = []
+    labels_list = []
+    total = 0
+
+    with torch.no_grad():
+        for images, labels in dataloader:
+            images = images.to(device)
+            z = ae.encode(images)
+            latents_list.append(z.cpu())
+            labels_list.append(labels.cpu())
+            total += images.size(0)
+            if total >= num_samples:
+                break
+
+    if not latents_list:
+        raise ValueError("No images available in dataloader")
+
+    latents_tensor = torch.cat(latents_list, dim=0)[:num_samples]
+    labels_tensor = torch.cat(labels_list, dim=0)[:num_samples].view(-1)
+    return latents_tensor, labels_tensor
+
+
+def _generate_cspn_latents(
+    cspn: SPFlowCSPN,
+    labels: torch.Tensor,
+    device: torch.device,
+) -> torch.Tensor:
+    with torch.no_grad():
+        return cspn.predict_latent(labels).to(device="cpu")
+
+
 def run_inference(cfg: DictConfig) -> None:
     dataset_cfg = cfg.dataset
     logger.info(f"Dataset: {dataset_cfg.name}")
@@ -71,6 +112,8 @@ def run_inference(cfg: DictConfig) -> None:
         input_shape=input_shape,
         latent_size=dataset_cfg.latent_size,
         base_channels=ae_cfg.base_channels,
+        num_blocks=ae_cfg.num_blocks,
+        res_blocks=ae_cfg.res_blocks,
     )
     ae.load_state_dict(ae_checkpoint)
     ae.to(device)
@@ -88,3 +131,56 @@ def run_inference(cfg: DictConfig) -> None:
 
     recon_path = f"{hydra_cfg.runtime.output_dir}/reconstructions.png"
     save_reconstructions(originals, reconstructed, labels, recon_path)
+
+    logger.info("Extracting autoencoder latents...")
+    ae_latents, ae_labels = _extract_latents(
+        ae=ae,
+        dataloader=test,
+        num_samples=inference_cfg.umap_count,
+        device=device,
+    )
+
+    ae_umap_path = f"{hydra_cfg.runtime.output_dir}/ae_latents_umap.png"
+    save_latent_umap(
+        ae_latents,
+        labels=ae_labels,
+        path=ae_umap_path,
+        title="Autoencoder Latent Space",
+    )
+    logger.info("Saved autoencoder latent UMAP to %s", ae_umap_path)
+
+    cspn_path = build_cspn_path(cfg)
+    if cspn_path.exists():
+        logger.info("CSPN checkpoint: %s", cspn_path)
+        cspn_checkpoint = load_checkpoint(cspn_path, map_location="cpu")
+
+        cspn_cfg = cfg.get("cspn", {})
+        cspn = SPFlowCSPN(
+            latent_dim=dataset_cfg.latent_size,
+            num_classes=dataset_cfg.num_classes,
+            num_sums=cspn_cfg.get("num_sums", 20),
+            num_leaves=cspn_cfg.get("num_leaves", 10),
+            depth=cspn_cfg.get("depth", 3),
+            num_reps=cspn_cfg.get("num_reps", 5),
+            hidden_dim=cspn_cfg.get("hidden_dim", 256),
+            num_layers=cspn_cfg.get("num_layers", 3),
+        )
+        cspn.load_state_dict(cspn_checkpoint)
+        cspn.to(device)
+        cspn.eval()
+
+        logger.info("Generating CSPN latents...")
+        cspn_latents = _generate_cspn_latents(cspn, ae_labels, device)
+
+        cspn_umap_path = f"{hydra_cfg.runtime.output_dir}/cspn_latents_umap.png"
+        save_latent_umap(
+            cspn_latents,
+            labels=ae_labels,
+            path=cspn_umap_path,
+            title="CSPN Generated Latent Space",
+        )
+        logger.info("Saved CSPN latent UMAP to %s", cspn_umap_path)
+    else:
+        logger.info(
+            "CSPN checkpoint not found at %s; skipping CSPN visualization", cspn_path
+        )

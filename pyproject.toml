@@ -16,6 +16,7 @@ dependencies = [
     "torchinfo==1.8.0",
     "torchvision==0.26.0",
     "tqdm==4.67.3",
+    "umap-learn==0.5.12",
 ]
 
 [dependency-groups]
@@ -33,7 +34,7 @@ environments = [
 [[tool.uv.index]]
 name = "pytorch-cu128"
 url = "https://download.pytorch.org/whl/cu128"
-explicit = true   # only used when explicitly requested
+explicit = true
 
 [tool.uv.sources]
 torch = [

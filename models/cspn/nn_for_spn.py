@@ -2,42 +2,41 @@ from __future__ import annotations
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+from typing import Tuple
 
 
 class NeuralNetworkForSPN(nn.Module):
-    """Neural parameter function for SPFlow conditional Normal leaves.
-
-    Simplified single-layer version for debugging and performance.
-    """
+    """Neural parameter function for SPFlow conditional Normal leaves."""
 
     def __init__(
         self,
-        latent_size: int,
-        num_labels: int,
-        num_components: int,
-        hidden_dim: int,
+        conditional_dim: int,
+        latent_dim: int,
+        num_leaves: int,
+        num_layers: int,
+        hidden_dim: int = 256,
     ):
         super().__init__()
-        self.latent_size = latent_size
-        self.num_labels = num_labels
-        self.num_components = num_components
+        self.conditional_dim = conditional_dim
+        self.latent_dim = latent_dim
+        self.num_leaves = num_leaves
 
-        self.backbone = nn.Linear(num_labels, hidden_dim)
-        self.loc_head = nn.Linear(hidden_dim, latent_size * num_components)
-        self.scale_head = nn.Linear(hidden_dim, latent_size * num_components)
+        layers = []
+        in_dim = conditional_dim
+        for _ in range(num_layers):
+            layers += [nn.Linear(in_dim, hidden_dim), nn.ReLU()]
+            in_dim = hidden_dim
+        self.backbone = nn.Sequential(*layers)
 
-    def forward(self, evidence: torch.Tensor) -> dict[str, torch.Tensor]:
-        if evidence.dim() == 1:
-            evidence = evidence.unsqueeze(1)
+        out_dim = latent_dim * num_leaves
+        self.loc_head = nn.Linear(hidden_dim, out_dim)
+        self.scale_head = nn.Linear(hidden_dim, out_dim)
 
-        labels = evidence[:, 0].long().clamp(min=0, max=self.num_labels - 1)
-        h = F.silu(self.backbone(F.one_hot(labels, self.num_labels).float()))
+    def forward(self, z: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        B = z.size(0)
+        h = self.backbone(z)
+        shape = (B, self.latent_dim, self.num_leaves)
 
-        loc = self.loc_head(h).view(-1, self.latent_size, self.num_components, 1)
-        raw_scale = self.scale_head(h).view(
-            -1, self.latent_size, self.num_components, 1
-        )
-        scale = F.softplus(raw_scale) + 1e-3
-
-        return {"loc": loc, "scale": scale}
+        loc = self.loc_head(h).view(shape)
+        scale = self.scale_head(h).view(shape).exp().clamp(min=1e-4)
+        return loc, scale

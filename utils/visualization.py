@@ -1,8 +1,12 @@
 """Visualization helpers for training diagnostics."""
 
 import logging
+from pathlib import Path
 
 import matplotlib.pyplot as plt
+import numpy as np
+import torch
+import umap
 
 logger = logging.getLogger(__name__)
 
@@ -35,3 +39,77 @@ def save_reconstructions(originals, reconstructions, labels, path):
     plt.savefig(path)
     plt.close(fig)
     logger.info(f"Saved reconstructions to {path}")
+
+
+def _to_numpy(array_like):
+    if torch.is_tensor(array_like):
+        return array_like.detach().cpu().numpy()
+    return np.asarray(array_like)
+
+
+def save_latent_umap(
+    latents,
+    labels=None,
+    path=None,
+    *,
+    title="Latent UMAP",
+    n_neighbors=15,
+    min_dist=0.1,
+    metric="euclidean",
+    random_state=42,
+):
+
+    latents_np = _to_numpy(latents)
+    if latents_np.ndim != 2:
+        raise ValueError(
+            f"Expected latents with shape (num_samples, latent_dim), got {latents_np.shape}"
+        )
+
+    logger.info(
+        "Generating UMAP visualization for %d latent samples", latents_np.shape[0]
+    )
+
+    reducer = umap.UMAP(
+        n_components=2,
+        n_neighbors=n_neighbors,
+        min_dist=min_dist,
+        metric=metric,
+        random_state=random_state,
+    )
+    embedding = reducer.fit_transform(latents_np)
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+
+    if labels is not None:
+        labels_np = _to_numpy(labels).reshape(-1)
+        if labels_np.shape[0] != embedding.shape[0]:
+            raise ValueError(
+                "labels must have the same number of entries as latents "
+                f"({labels_np.shape[0]} != {embedding.shape[0]})"
+            )
+        scatter = ax.scatter(
+            embedding[:, 0],
+            embedding[:, 1],
+            c=labels_np,
+            cmap="tab10",
+            s=12,
+            alpha=0.85,
+        )
+        fig.colorbar(scatter, ax=ax, label="Label")
+    else:
+        ax.scatter(embedding[:, 0], embedding[:, 1], s=12, alpha=0.85)
+
+    ax.set_title(title)
+    ax.set_xlabel("UMAP-1")
+    ax.set_ylabel("UMAP-2")
+    ax.grid(True, linewidth=0.3, alpha=0.3)
+    plt.tight_layout()
+
+    if path is not None:
+        save_path = Path(path)
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        plt.savefig(save_path)
+        logger.info("Saved UMAP visualization to %s", save_path)
+
+    plt.close(fig)
+    return embedding

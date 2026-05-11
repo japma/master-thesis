@@ -1,6 +1,7 @@
 """Dataset loader package."""
 
 from .helpers import get_data_loaders
+from .binarymnist import BinaryMNISTDataset
 from .tinyimagenet import TinyImageNetDataset
 
-__all__ = ["TinyImageNetDataset", "get_data_loaders"]
+__all__ = ["BinaryMNISTDataset", "TinyImageNetDataset", "get_data_loaders"]

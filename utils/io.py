@@ -57,3 +57,13 @@ def build_ae_path(cfg: DictConfig) -> Path:
     else:
         path = f"checkpoints/{cfg.dataset.name}/autoencoder.pt"
         return Path(path)
+
+
+def build_cspn_path(cfg: DictConfig) -> Path:
+    if cfg.paths.cspn_checkpoint is not None:
+        return Path(cfg.paths.cspn_checkpoint)
+    else:
+        path = f"checkpoints/{cfg.dataset.name}/cspn.pt"
+        return Path(path)
+
+
