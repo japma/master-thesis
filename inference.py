@@ -1,7 +1,5 @@
 """Inference pipeline for loading checkpoints and generating visualizations."""
 
-import logging
-
 import torch
 from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig
@@ -14,8 +12,6 @@ from models import SPFlowCSPN
 from utils.io import build_ae_path, load_checkpoint, build_cspn_path
 from utils.train import resolve_device
 from utils.visualization import save_reconstructions, save_latent_umap
-
-logger = logging.getLogger(__name__)
 
 
 def _build_reconstructions(
@@ -83,29 +79,17 @@ def _extract_latents(
     return latents_tensor, labels_tensor
 
 
-def _generate_cspn_latents(
-    cspn: SPFlowCSPN,
-    labels: torch.Tensor,
-    device: torch.device,
-) -> torch.Tensor:
-    with torch.no_grad():
-        return cspn.predict_latent(labels).to(device="cpu")
-
-
 def run_inference(cfg: DictConfig) -> None:
     dataset_cfg = cfg.dataset
-    logger.info(f"Dataset: {dataset_cfg.name}")
 
     inference_cfg = cfg.inference
     hydra_cfg = HydraConfig().get()
     device = resolve_device()
-    logger.info(f"Inference device: {device}")
 
     ae_cfg = cfg.autoencoder
     input_shape = (cfg.dataset.channels, cfg.dataset.height, cfg.dataset.width)
 
     ae_path = build_ae_path(cfg)
-    logger.info(f"Autoencoder checkpoint: {ae_path}")
     ae_checkpoint = load_checkpoint(ae_path, map_location="cpu")
 
     ae = VariationalAutoencoder(
@@ -121,7 +105,6 @@ def run_inference(cfg: DictConfig) -> None:
 
     _, test = get_data_loaders(dataset_cfg)
 
-    logger.info("Reconstructing...")
     originals, reconstructed, labels = _build_reconstructions(
         ae=ae,
         dataloader=test,
@@ -132,7 +115,6 @@ def run_inference(cfg: DictConfig) -> None:
     recon_path = f"{hydra_cfg.runtime.output_dir}/reconstructions.png"
     save_reconstructions(originals, reconstructed, labels, recon_path)
 
-    logger.info("Extracting autoencoder latents...")
     ae_latents, ae_labels = _extract_latents(
         ae=ae,
         dataloader=test,
@@ -147,40 +129,15 @@ def run_inference(cfg: DictConfig) -> None:
         path=ae_umap_path,
         title="Autoencoder Latent Space",
     )
-    logger.info("Saved autoencoder latent UMAP to %s", ae_umap_path)
 
     cspn_path = build_cspn_path(cfg)
     if cspn_path.exists():
-        logger.info("CSPN checkpoint: %s", cspn_path)
         cspn_checkpoint = load_checkpoint(cspn_path, map_location="cpu")
 
-        cspn_cfg = cfg.get("cspn", {})
         cspn = SPFlowCSPN(
             latent_dim=dataset_cfg.latent_size,
             num_classes=dataset_cfg.num_classes,
-            num_sums=cspn_cfg.get("num_sums", 20),
-            num_leaves=cspn_cfg.get("num_leaves", 10),
-            depth=cspn_cfg.get("depth", 3),
-            num_reps=cspn_cfg.get("num_reps", 5),
-            hidden_dim=cspn_cfg.get("hidden_dim", 256),
-            num_layers=cspn_cfg.get("num_layers", 3),
         )
         cspn.load_state_dict(cspn_checkpoint)
         cspn.to(device)
         cspn.eval()
-
-        logger.info("Generating CSPN latents...")
-        cspn_latents = _generate_cspn_latents(cspn, ae_labels, device)
-
-        cspn_umap_path = f"{hydra_cfg.runtime.output_dir}/cspn_latents_umap.png"
-        save_latent_umap(
-            cspn_latents,
-            labels=ae_labels,
-            path=cspn_umap_path,
-            title="CSPN Generated Latent Space",
-        )
-        logger.info("Saved CSPN latent UMAP to %s", cspn_umap_path)
-    else:
-        logger.info(
-            "CSPN checkpoint not found at %s; skipping CSPN visualization", cspn_path
-        )

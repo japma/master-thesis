@@ -23,3 +23,4 @@ written to `<hydra run dir>/images/`.
 ## Configuration
 Configuration is done via `hydra`.
 It is possible to e.g. change the dataset by passing `data=mnist` to the task entrypoint directly, or by passing it to Docker via `HYDRA_ARGS="data=mnist"`
+

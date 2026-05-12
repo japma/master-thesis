@@ -9,6 +9,9 @@ results/
 /data/
 outputs/
 checkpoints/
+wandb/
+
+.env
 
 # Virtual environments
 .venv

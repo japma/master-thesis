@@ -1,8 +1,5 @@
 """CSPN training."""
 
-import logging
-import time
-
 import torch
 import torch.optim as optim
 from hydra.core.hydra_config import HydraConfig
@@ -12,14 +9,12 @@ from tqdm import tqdm
 from models import SPFlowCSPN, VariationalAutoencoder
 from utils import (
     create_run_directories,
-    format_elapsed_time,
-    get_data_loaders,
     save_checkpoint,
 )
 from utils.io import build_ae_path, load_checkpoint
+from utils.tracking import WandbTracker
+from dataset_loaders import get_data_loaders
 from utils.train import resolve_device
-
-logger = logging.getLogger(__name__)
 
 
 def _build_autoencoder(cfg, device):
@@ -36,7 +31,6 @@ def _build_autoencoder(cfg, device):
 
 
 def _build_cspn(cfg, device):
-    cspn_cfg = cfg.get("cspn", {})
     return SPFlowCSPN(
         latent_dim=cfg.dataset.latent_size,
         num_classes=cfg.dataset.num_classes,
@@ -100,16 +94,11 @@ def evaluate(model, ae, test_loader, device):
 
 
 def run_cspn_training(cfg):
-    start_time = time.perf_counter()
-
     dataset_cfg = cfg.dataset
     hydra_cfg = HydraConfig().get()
     output_dir = hydra_cfg.runtime.output_dir
 
     device = resolve_device()
-    logger.info("Device: %s", device)
-    logger.info("Dataset: %s", dataset_cfg.name)
-    logger.info("Output Directory: %s", output_dir)
 
     rtpt = RTPT(
         name_initials="JM",
@@ -118,8 +107,9 @@ def run_cspn_training(cfg):
     )
     rtpt.start()
 
+    wandb_run = WandbTracker(cfg)
+
     run_dirs = create_run_directories(output_dir)
-    logger.info("Run directory: %s", run_dirs.run_dir)
 
     train_loader, test_loader = get_data_loaders(
         dataset_cfg,
@@ -127,7 +117,6 @@ def run_cspn_training(cfg):
     )
 
     ae_path = build_ae_path(cfg)
-    logger.info("Autoencoder checkpoint: %s", ae_path)
     ae = _build_autoencoder(cfg, device)
     ae.load_state_dict(load_checkpoint(ae_path, map_location=device))
     ae.eval()
@@ -137,31 +126,20 @@ def run_cspn_training(cfg):
     model = _build_cspn(cfg, device)
     optimizer = optim.Adam(model.parameters(), lr=cfg.training.learning_rate)
 
-    logger.info("Training CSPN for %d epochs...", cfg.training.epochs)
     for epoch in range(cfg.training.epochs):
         train_loss, train_log_prob = train_epoch(
             model, ae, train_loader, optimizer, device
         )
         test_loss, test_log_prob = evaluate(model, ae, test_loader, device)
 
-        logger.info(
-            "Epoch %d/%d | Train loss=%.4f (log_prob=%.4f) | Test loss=%.4f (log_prob=%.4f)",
-            epoch + 1,
-            cfg.training.epochs,
-            train_loss,
-            train_log_prob,
-            test_loss,
-            test_log_prob,
+        wandb_run.log(
+            {
+                "train_loss": train_loss,
+                "train_log_prob": train_log_prob,
+                "test_loss": test_loss,
+                "test_log_prob": test_log_prob,
+            }
         )
-
         rtpt.step(subtitle=f"CSPN {epoch + 1}/{cfg.training.epochs}")
 
     save_checkpoint(model.state_dict(), run_dirs.checkpoints_dir, "cspn")
-
-    end_time = time.perf_counter()
-    elapsed_seconds = end_time - start_time
-    logger.info(
-        "CSPN training completed in %s (%.2fs)",
-        format_elapsed_time(elapsed_seconds),
-        elapsed_seconds,
-    )

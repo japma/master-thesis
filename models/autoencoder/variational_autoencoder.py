@@ -1,14 +1,10 @@
 """Variational autoencoder model."""
 
-import logging
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 from .abstract_autoencoder import AbstractAutoencoder
-
-logger = logging.getLogger(__name__)
 
 
 def reparameterize(mu, logvar):
@@ -85,13 +81,6 @@ class VariationalAutoencoder(AbstractAutoencoder):
 
         self.encoded_shape = tuple(encoded_example.shape[1:])
         self.encoded_flat_dim = encoded_example.numel()
-
-        logger.info(
-            "Encoded shape: %s, flat dim: %d → latent dim: %d",
-            self.encoded_shape,
-            self.encoded_flat_dim,
-            latent_size,
-        )
 
         self.mu_head = nn.Linear(self.encoded_flat_dim, latent_size)
         self.logvar_head = nn.Linear(self.encoded_flat_dim, latent_size)

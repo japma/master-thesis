@@ -2,19 +2,14 @@
 
 from __future__ import annotations
 
-import logging
-
 import torch
 import torch.nn as nn
-from torch.distributions import Normal as TorchNormal
 
 from spflow.meta import Scope
 from spflow.modules.leaves import Normal
 from spflow.zoo.einet import Einet
 
 from .nn_for_spn import NeuralNetworkForSPN
-
-logger = logging.getLogger(__name__)
 
 
 class SPFlowCSPN(nn.Module):
@@ -41,14 +36,11 @@ class SPFlowCSPN(nn.Module):
             for i in range(latent_dim)
         ]
 
+        # TODO increase depth to max
         self.einet = Einet(
             leaf_modules=list(leaves),
             num_classes=num_classes,
             num_leaves=self.num_leaves,
-        )
-
-        logger.info(
-            "SPFlowCSPN: latent_dim=%d, num_classes=%d", latent_dim, num_classes
         )
 
     def forward(self, labels: torch.Tensor, z: torch.Tensor) -> torch.Tensor:
@@ -57,3 +49,28 @@ class SPFlowCSPN(nn.Module):
 
         log_prob = self.einet.log_likelihood(z)
         return log_prob
+
+    def sample_all_classes(
+        self,
+        num_samples: int,
+        device: torch.device | None = None,
+    ) -> torch.Tensor:
+        """Return latent samples for all classes.
+
+        Shape: (num_classes, num_samples, latent_dim)
+        """
+        if num_samples <= 0:
+            raise ValueError("num_samples must be > 0")
+
+        device = device or self.label_embedding.weight.device
+        class_ids = torch.arange(self.num_classes, device=device)
+        class_cond = self.label_embedding(class_ids)
+        class_loc, class_scale = self.nn(class_cond)
+
+        mean = class_loc.mean(dim=-1)
+        std = class_scale.mean(dim=-1)
+
+        noise = torch.randn(
+            self.num_classes, num_samples, self.latent_dim, device=device
+        )
+        return mean.unsqueeze(1) + noise * std.unsqueeze(1)

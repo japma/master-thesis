@@ -1,6 +1,5 @@
 """Visualization helpers for training diagnostics."""
 
-import logging
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -8,13 +7,10 @@ import numpy as np
 import torch
 import umap
 
-logger = logging.getLogger(__name__)
-
 
 def save_reconstructions(originals, reconstructions, labels, path):
     assert originals.shape == reconstructions.shape
     num_images = len(originals)
-    logger.info(f"Generating reconstruction visualization for {num_images} images")
 
     originals = originals.clamp(min=0, max=1)
     reconstructions = reconstructions.clamp(min=0, max=1)
@@ -38,7 +34,6 @@ def save_reconstructions(originals, reconstructions, labels, path):
     plt.tight_layout()
     plt.savefig(path)
     plt.close(fig)
-    logger.info(f"Saved reconstructions to {path}")
 
 
 def _to_numpy(array_like):
@@ -64,10 +59,6 @@ def save_latent_umap(
         raise ValueError(
             f"Expected latents with shape (num_samples, latent_dim), got {latents_np.shape}"
         )
-
-    logger.info(
-        "Generating UMAP visualization for %d latent samples", latents_np.shape[0]
-    )
 
     reducer = umap.UMAP(
         n_components=2,
@@ -109,7 +100,6 @@ def save_latent_umap(
         save_path = Path(path)
         save_path.parent.mkdir(parents=True, exist_ok=True)
         plt.savefig(save_path)
-        logger.info("Saved UMAP visualization to %s", save_path)
 
     plt.close(fig)
     return embedding

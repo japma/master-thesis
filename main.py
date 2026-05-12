@@ -1,5 +1,3 @@
-import logging
-
 from hydra import main
 from omegaconf import DictConfig
 
@@ -7,8 +5,6 @@ from train_autoencoder import run_autoencoder_training
 from train_cspn import run_cspn_training
 from inference import run_inference
 from utils import seed_everything
-
-logger = logging.getLogger(__name__)
 
 
 @main(version_base=None, config_path="configs", config_name="config")

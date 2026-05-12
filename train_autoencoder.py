@@ -1,8 +1,5 @@
 """Autoencoder training."""
 
-import logging
-import time
-
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -13,13 +10,11 @@ from tqdm import tqdm
 from models import VariationalAutoencoder
 from utils import (
     create_run_directories,
-    format_elapsed_time,
-    get_data_loaders,
     save_checkpoint,
 )
+from dataset_loaders import get_data_loaders
+from utils.tracking import WandbTracker
 from utils.train import resolve_device
-
-logger = logging.getLogger(__name__)
 
 
 def _build_autoencoder(cfg, device):
@@ -75,17 +70,11 @@ def evaluate(model, test_loader, device, beta=1.0):
 
 
 def run_autoencoder_training(cfg):
-    start_time = time.perf_counter()
-
     dataset_cfg = cfg.dataset
     hydra_cfg = HydraConfig().get()
     output_dir = hydra_cfg.runtime.output_dir
 
     device = resolve_device()
-
-    logger.info("Device: %s", device)
-    logger.info("Dataset: %s", dataset_cfg.name)
-    logger.info("Output Directory: %s", output_dir)
 
     rtpt = RTPT(
         name_initials="JM",
@@ -94,8 +83,9 @@ def run_autoencoder_training(cfg):
     )
     rtpt.start()
 
+    wandb_run = WandbTracker(cfg)
+
     run_dirs = create_run_directories(output_dir)
-    logger.info("Run directory: %s", run_dirs.run_dir)
 
     train_loader, test_loader = get_data_loaders(
         dataset_cfg,
@@ -109,7 +99,6 @@ def run_autoencoder_training(cfg):
     model = _build_autoencoder(cfg, device)
     optimizer = optim.Adam(model.parameters(), lr=ae_learning_rate)
 
-    logger.info("Training autoencoder for %s epochs...", ae_epochs)
     for epoch in range(ae_epochs):
         beta = min(1.0, (epoch + 1) / warmup_epochs)
 
@@ -118,27 +107,19 @@ def run_autoencoder_training(cfg):
         )
         test_loss, test_recon, test_kl = evaluate(model, test_loader, device, beta=beta)
 
-        logger.info(
-            "Epoch %d/%d | beta=%.2f | Train loss=%.4f (recon=%.4f, kl=%.4f) | Test loss=%.4f (recon=%.4f, kl=%.4f)",
-            epoch + 1,
-            ae_epochs,
-            beta,
-            train_loss,
-            train_recon,
-            train_kl,
-            test_loss,
-            test_recon,
-            test_kl,
+        wandb_run.log(
+            {
+                "train_loss": train_loss,
+                "train_recon": train_recon,
+                "train_kl": train_kl,
+                "test_loss": test_loss,
+                "test_recon": test_recon,
+                "test_kl": test_kl,
+                "beta": beta,
+            }
         )
-
         rtpt.step(subtitle=f"AE {epoch + 1}/{ae_epochs}")
 
     save_checkpoint(model.state_dict(), run_dirs.checkpoints_dir, "autoencoder")
 
-    end_time = time.perf_counter()
-    elapsed_seconds = end_time - start_time
-    logger.info(
-        "Autoencoder training completed in %s (%.2fs)",
-        format_elapsed_time(elapsed_seconds),
-        elapsed_seconds,
-    )
+    wandb_run.finish()
