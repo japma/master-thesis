@@ -1,13 +1,11 @@
 """Autoencoder training."""
 
 import torch
-import torch.nn as nn
 import torch.optim as optim
 from hydra.core.hydra_config import HydraConfig
 from rtpt import RTPT
 from tqdm import tqdm
 
-from models import VariationalAutoencoder
 from utils import (
     create_run_directories,
     save_checkpoint,
@@ -15,26 +13,8 @@ from utils import (
 from dataset_loaders import get_data_loaders
 from utils.tracking import WandbTracker
 from utils.train import resolve_device
-
-
-def _build_autoencoder(cfg, device):
-    ae_cfg = cfg.autoencoder
-    input_shape = (cfg.dataset.channels, cfg.dataset.height, cfg.dataset.width)
-
-    return VariationalAutoencoder(
-        input_shape=input_shape,
-        latent_size=cfg.dataset.latent_size,
-        base_channels=ae_cfg.base_channels,
-        num_blocks=ae_cfg.num_blocks,
-        res_blocks=ae_cfg.res_blocks,
-    ).to(device)
-
-
-def _vae_loss(images, recon, mu, logvar, beta=1.0):
-    """ELBO loss: reconstruction (MSE) + β · KL divergence."""
-    recon_loss = nn.functional.mse_loss(recon, images, reduction="sum") / images.size(0)
-    kl_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp()) / images.size(0)
-    return recon_loss + beta * kl_loss, recon_loss, kl_loss
+from utils.models import build_autoencoder
+from losses import vae_loss
 
 
 def train_epoch(model, train_loader, optimizer, device, beta):
@@ -43,7 +23,7 @@ def train_epoch(model, train_loader, optimizer, device, beta):
     for images, _ in tqdm(train_loader, desc="Training"):
         images = images.to(device)
         recon, mu, logvar = model(images)
-        loss, recon_loss, kl_loss = _vae_loss(images, recon, mu, logvar, beta=beta)
+        loss, recon_loss, kl_loss = vae_loss(images, recon, mu, logvar, beta=beta)
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -61,7 +41,7 @@ def evaluate(model, test_loader, device, beta=1.0):
         for images, _ in tqdm(test_loader, desc="Evaluating"):
             images = images.to(device)
             recon, mu, logvar = model(images)
-            loss, recon_loss, kl_loss = _vae_loss(images, recon, mu, logvar, beta=beta)
+            loss, recon_loss, kl_loss = vae_loss(images, recon, mu, logvar, beta=beta)
             total_loss += loss.item()
             total_recon += recon_loss.item()
             total_kl += kl_loss.item()
@@ -96,7 +76,7 @@ def run_autoencoder_training(cfg):
     ae_learning_rate = cfg.training.learning_rate
     warmup_epochs = max(1, ae_epochs // 4)
 
-    model = _build_autoencoder(cfg, device)
+    model = build_autoencoder(cfg, device)
     optimizer = optim.Adam(model.parameters(), lr=ae_learning_rate)
 
     for epoch in range(ae_epochs):

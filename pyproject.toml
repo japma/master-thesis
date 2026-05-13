@@ -17,27 +17,11 @@ dependencies = [
     "torchvision==0.26.0",
     "tqdm==4.67.3",
     "umap-learn==0.5.12",
-    "wandb>=0.26.1",
+    "wandb==0.26.1",
 ]
 
 [dependency-groups]
 dev = [
     "ruff==0.15.12",
     "pyrefly==0.63.1",
-]
-
-[tool.uv]
-environments = [
-    "sys_platform == 'darwin'",
-    "sys_platform == 'linux'",
-]
-
-[[tool.uv.index]]
-name = "pytorch-cu128"
-url = "https://download.pytorch.org/whl/cu128"
-explicit = true
-
-[tool.uv.sources]
-torch = [
-    { index = "pytorch-cu128", marker = "sys_platform == 'linux'" },
 ]

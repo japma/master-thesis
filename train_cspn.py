@@ -6,48 +6,16 @@ from hydra.core.hydra_config import HydraConfig
 from rtpt import RTPT
 from tqdm import tqdm
 
-from models import SPFlowCSPN, VariationalAutoencoder
+from losses import compute_nll
 from utils import (
     create_run_directories,
     save_checkpoint,
 )
 from utils.io import build_ae_path, load_checkpoint
+from utils.models import build_autoencoder, build_cspn
 from utils.tracking import WandbTracker
 from dataset_loaders import get_data_loaders
 from utils.train import resolve_device
-
-
-def _build_autoencoder(cfg, device):
-    ae_cfg = cfg.autoencoder
-    input_shape = (cfg.dataset.channels, cfg.dataset.height, cfg.dataset.width)
-
-    return VariationalAutoencoder(
-        input_shape=input_shape,
-        latent_size=cfg.dataset.latent_size,
-        base_channels=ae_cfg.base_channels,
-        num_blocks=ae_cfg.num_blocks,
-        res_blocks=ae_cfg.res_blocks,
-    ).to(device)
-
-
-def _build_cspn(cfg, device):
-    return SPFlowCSPN(
-        latent_dim=cfg.dataset.latent_size,
-        num_classes=cfg.dataset.num_classes,
-    ).to(device)
-
-
-def _encode(ae, images):
-    """Encode images to latents with no gradient tracking."""
-    with torch.no_grad():
-        return ae.encode(images)
-
-
-def _compute_nll(model, z_target, z_cond):
-    """Evaluate CSPN log-likelihood and return (nll_loss, mean_log_prob)."""
-    log_prob = model(z_cond, z_target)
-    loss = -log_prob.mean()
-    return loss, log_prob.mean().item()
 
 
 def train_epoch(model, ae, train_loader, optimizer, device):
@@ -59,8 +27,10 @@ def train_epoch(model, ae, train_loader, optimizer, device):
         images = images.to(device)
         labels = labels.to(device)
 
-        z_target = _encode(ae, images)
-        loss, log_prob = _compute_nll(model, z_target, labels)
+        with torch.no_grad():
+            z_target = ae.encode(images)
+
+        loss, log_prob = compute_nll(model, z_target, labels)
 
         optimizer.zero_grad()
         loss.backward()
@@ -83,8 +53,9 @@ def evaluate(model, ae, test_loader, device):
             images = images.to(device)
             labels = labels.to(device)
 
-            z_target = _encode(ae, images)
-            loss, log_prob = _compute_nll(model, z_target, labels)
+            with torch.no_grad():
+                z_target = ae.encode(images)
+            loss, log_prob = compute_nll(model, z_target, labels)
 
             total_loss += loss.item()
             total_log_prob += log_prob
@@ -117,13 +88,13 @@ def run_cspn_training(cfg):
     )
 
     ae_path = build_ae_path(cfg)
-    ae = _build_autoencoder(cfg, device)
+    ae = build_autoencoder(cfg, device)
     ae.load_state_dict(load_checkpoint(ae_path, map_location=device))
     ae.eval()
     for p in ae.parameters():
         p.requires_grad = False
 
-    model = _build_cspn(cfg, device)
+    model = build_cspn(cfg, device)
     optimizer = optim.Adam(model.parameters(), lr=cfg.training.learning_rate)
 
     for epoch in range(cfg.training.epochs):

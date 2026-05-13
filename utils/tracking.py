@@ -32,8 +32,4 @@ class WandbTracker:
         self.run.log(metrics, step=step)
 
     def finish(self):
-        self.run.alert(
-            title=f"{self.name} finished",
-            text=f"Model: {self.model}, Dataset: {self.dataset}",
-        )
         self.run.finish()

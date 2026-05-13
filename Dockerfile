@@ -11,7 +11,6 @@ ENV UV_LINK_MODE=copy \
 
 COPY pyproject.toml uv.lock .python-version ./
 RUN uv sync --locked --no-dev --no-install-project
-RUN uv pip install --python /opt/venv/bin/python --index-url https://download.pytorch.org/whl/cu128 --upgrade torch torchvision
 
 COPY . .
 
