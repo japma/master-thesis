@@ -12,7 +12,7 @@ def vae_loss(images, recon, mu, logvar, beta=1.0):
     return recon_loss + beta * kl_loss, recon_loss, kl_loss
 
 
-def compute_nll(model, z_target, z_cond):
+def nll_loss(model, z_target, z_cond):
     """Evaluate CSPN log-likelihood and return (nll_loss, mean_log_prob)."""
     log_prob = model(z_cond, z_target)
     loss = -log_prob.mean()

@@ -16,13 +16,3 @@ class AbstractCSPN(nn.Module, ABC):
     def forward(self, z, labels):
         """Return log p(z | labels)."""
         raise NotImplementedError
-
-    @abstractmethod
-    def predict_latent(self, labels):
-        """Return a label-conditioned latent prototype."""
-        raise NotImplementedError
-
-    @abstractmethod
-    def transform_latent(self, z, source_labels, target_labels, strength=1.0):
-        """Transform latent vectors from source labels to target labels."""
-        raise NotImplementedError

@@ -1,7 +1,9 @@
 from models import VariationalAutoencoder, SPFlowCSPN
+from models.autoencoder import AbstractAutoencoder
+from models.cspn import AbstractCSPN
 
 
-def build_autoencoder(cfg, device):
+def build_autoencoder(cfg, device) -> AbstractAutoencoder:
     ae_cfg = cfg.autoencoder
     input_shape = (cfg.dataset.channels, cfg.dataset.height, cfg.dataset.width)
 
@@ -14,7 +16,7 @@ def build_autoencoder(cfg, device):
     ).to(device)
 
 
-def build_cspn(cfg, device):
+def build_cspn(cfg, device) -> AbstractCSPN:
     return SPFlowCSPN(
         latent_dim=cfg.dataset.latent_size,
         num_classes=cfg.dataset.num_classes,

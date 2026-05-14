@@ -34,9 +34,9 @@ def create_run_directories(run_dir: str | Path) -> RunDirectories:
 
 
 # TODO rework this to use model directly
-def save_checkpoint(model_state_dict, checkpoints_dir: Path, name: str) -> Path:
+def save_checkpoint(model: torch.nn.Module, checkpoints_dir: Path, name: str) -> Path:
     save_path = checkpoints_dir / f"{name}.pt"
-    torch.save(model_state_dict, save_path)
+    torch.save(model.state_dict(), save_path)
     return save_path
 
 

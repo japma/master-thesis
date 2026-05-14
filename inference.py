@@ -5,7 +5,7 @@ from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig
 from torch.utils.data import DataLoader
 
-from dataset_loaders import get_data_loaders
+from dataset_loaders import build_data_loaders
 from models.autoencoder import VariationalAutoencoder, AbstractAutoencoder
 from models import SPFlowCSPN
 
@@ -103,7 +103,7 @@ def run_inference(cfg: DictConfig) -> None:
     ae.to(device)
     ae.eval()
 
-    _, test = get_data_loaders(dataset_cfg)
+    _, test = build_data_loaders(dataset_cfg)
 
     originals, reconstructed, labels = _build_reconstructions(
         ae=ae,

@@ -94,7 +94,7 @@ def _build_data_sets(cfg):
         return loader_fn(train=True), loader_fn(train=False)
 
 
-def get_data_loaders(cfg, batch_size=32):
+def build_data_loaders(cfg, batch_size=32):
     train_dataset, test_dataset = _build_data_sets(cfg)
 
     max_workers = os.cpu_count()
