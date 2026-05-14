@@ -20,6 +20,14 @@ def train_autoencoder(
     rtpt: RTPT,
 ) -> None:
     model.to(device)
+    sample_images = next(iter(train_loader))[0][:16].to(device)
+    sample_images_u8 = (sample_images.clamp(0, 1) * 255).byte().cpu()
+    wandb.log(
+        {
+            "samples/input": [wandb.Image(sample) for sample in sample_images_u8],
+        },
+        step=0,
+    )
     for epoch in range(epochs):
         model.train()
         total_train_loss = total_train_recon = total_train_kl = 0.0
@@ -58,16 +66,11 @@ def train_autoencoder(
                 total_val_kl += kl_loss.item()
 
             if epoch % 10 == 9 or epoch == 0:
-                sample_images = images[:16]
                 recon_images, _, _ = model(sample_images)
-                sample_images_u8 = (sample_images.clamp(0, 1) * 255).byte().cpu()
                 recon_images_u8 = (recon_images.clamp(0, 1) * 255).byte().cpu()
 
                 wandb.log(
                     {
-                        "sample_images": [
-                            wandb.Image(sample) for sample in sample_images_u8
-                        ],
                         "recon_images": [
                             wandb.Image(recon) for recon in recon_images_u8
                         ],
