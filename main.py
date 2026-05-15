@@ -9,7 +9,7 @@ from dataset_loaders import build_data_loaders
 
 from inference import run_inference
 from utils import seed_everything, load_checkpoint, save_checkpoint
-from utils.models import build_autoencoder, build_cspn
+from utils.models import build_autoencoder, build_cspn, build_einet_cspn
 from utils.train import resolve_device
 from train import train_autoencoder, train_cspn
 
@@ -49,7 +49,7 @@ def main_hydra(cfg: DictConfig) -> None:
             project="master-thesis",
             name=name,
             config=wandb_cfg,
-            mode="online",
+            mode="offline",
         )
 
         ae = build_autoencoder(cfg, device)
@@ -81,8 +81,10 @@ def main_hydra(cfg: DictConfig) -> None:
 
         elif cfg.mode == "train_cspn":
             print("Training CSPN")
-            cspn = build_cspn(cfg, device)
-            # ae = load_checkpoint()
+            # cspn = build_cspn(cfg, device)
+            ae = load_checkpoint(Path("checkpoints/MNIST/autoencoder.pt"))
+            ae.to(device)
+            cspn = build_einet_cspn(cfg, device)
             optimizer = torch.optim.Adam(
                 cspn.parameters(), lr=cfg.training.learning_rate
             )

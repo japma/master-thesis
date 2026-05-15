@@ -12,7 +12,7 @@ from spflow.modules.leaves import Normal
 from spflow.zoo.einet import Einet
 
 from . import AbstractCSPN
-from .nn_for_spn import NeuralNetworkForSPN
+from .nn_for_spflow import NeuralNetworkForSPFlow
 
 
 class SPFlowCSPN(AbstractCSPN, ABC):
@@ -25,7 +25,7 @@ class SPFlowCSPN(AbstractCSPN, ABC):
 
         self.label_embedding = nn.Embedding(num_classes, latent_dim)
 
-        self.nn = NeuralNetworkForSPN(
+        self.nn = NeuralNetworkForSPFlow(
             conditional_dim=latent_dim,
             latent_dim=latent_dim,
             num_leaves=self.num_leaves,

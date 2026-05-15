@@ -5,7 +5,7 @@ import torch.nn as nn
 from typing import Tuple
 
 
-class NeuralNetworkForSPN(nn.Module):
+class NeuralNetworkForSPFlow(nn.Module):
     """Neural parameter function for SPFlow conditional Normal leaves."""
 
     def __init__(

@@ -1,6 +1,8 @@
 import torch
 import tqdm
+import torch.nn.functional as F
 from rtpt import RTPT
+from torch import nn
 
 import wandb
 from losses import vae_loss
@@ -71,7 +73,7 @@ def train_autoencoder(
 
                 wandb.log(
                     {
-                        "recon_images": [
+                        "samples/recon_images": [
                             wandb.Image(recon) for recon in recon_images_u8
                         ],
                     },
@@ -98,7 +100,7 @@ def train_autoencoder(
 
 
 def train_cspn(
-    model: AbstractCSPN,
+    model: nn.Module,
     autoencoder: AbstractAutoencoder,
     device: torch.device,
     epochs: int,
@@ -118,10 +120,15 @@ def train_cspn(
         ):
             images = images.to(device)
             labels = labels.to(device)
+            if hasattr(model, "cond_net"):
+                context_dim = model.cond_net.mlp[0].in_features
+                context = F.one_hot(labels, num_classes=context_dim).float().to(device)
+            else:
+                context = labels.view(-1, 1).float()
             with torch.no_grad():
                 latent = autoencoder.encode(images)
 
-            log_prob = model(latent, labels)
+            log_prob = model(latent, context)
             loss = -log_prob.mean()
             optimizer.zero_grad()
             loss.backward()
@@ -137,12 +144,20 @@ def train_cspn(
         model.eval()
         total_val_loss = total_val_log_prob = 0.0
         with torch.no_grad():
-            for images, _ in tqdm.tqdm(
+            for images, labels in tqdm.tqdm(
                 test_loader, desc=f"Validation Epoch {epoch + 1}/{epochs}"
             ):
                 images = images.to(device)
+                labels = labels.to(device)
                 latent = autoencoder.encode(images)
-                log_prob = model(latent, images)
+                if hasattr(model, "cond_net"):
+                    context_dim = model.cond_net.mlp[0].in_features
+                    context = (
+                        F.one_hot(labels, num_classes=context_dim).float().to(device)
+                    )
+                else:
+                    context = labels.view(-1, 1).float()
+                log_prob = model(latent, context)
                 loss = -log_prob.mean()
 
                 total_val_loss += loss.item()

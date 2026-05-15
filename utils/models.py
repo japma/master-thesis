@@ -1,6 +1,9 @@
+from torch import nn
+
 from models import VariationalAutoencoder, SPFlowCSPN
 from models.autoencoder import AbstractAutoencoder
 from models.cspn import AbstractCSPN
+from models.cspn.einet import Einet
 
 
 def build_autoencoder(cfg, device) -> AbstractAutoencoder:
@@ -20,4 +23,14 @@ def build_cspn(cfg, device) -> AbstractCSPN:
     return SPFlowCSPN(
         latent_dim=cfg.dataset.latent_size,
         num_classes=cfg.dataset.num_classes,
+    ).to(device)
+
+
+def build_einet_cspn(cfg, device) -> nn.Module:
+    return Einet(
+        num_vars=cfg.dataset.latent_size,
+        # context is label-conditioned; use number of classes as input dim
+        context_dim=cfg.dataset.num_classes,
+        num_leaves=10,
+        num_nodes=5,
     ).to(device)
