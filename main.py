@@ -49,7 +49,7 @@ def main_hydra(cfg: DictConfig) -> None:
             project="master-thesis",
             name=name,
             config=wandb_cfg,
-            mode="offline",
+            mode="online",
         )
 
         ae = build_autoencoder(cfg, device)
@@ -82,8 +82,8 @@ def main_hydra(cfg: DictConfig) -> None:
         elif cfg.mode == "train_cspn":
             print("Training CSPN")
             # cspn = build_cspn(cfg, device)
-            ae = load_checkpoint(Path("checkpoints/MNIST/autoencoder.pt"))
-            ae.to(device)
+            ae_ckpt = load_checkpoint(Path("checkpoints/MNIST/autoencoder.pt"), device)
+            ae.load_state_dict(ae_ckpt)
             cspn = build_einet_cspn(cfg, device)
             optimizer = torch.optim.Adam(
                 cspn.parameters(), lr=cfg.training.learning_rate

@@ -3,11 +3,21 @@ import tqdm
 import torch.nn.functional as F
 from rtpt import RTPT
 from torch import nn
+from typing import Any
 
 import wandb
 from losses import vae_loss
 from models.autoencoder import AbstractAutoencoder
-from models.cspn import AbstractCSPN
+
+
+def _build_cspn_context(model: nn.Module, labels: torch.Tensor) -> torch.Tensor:
+    cond_net: Any = getattr(model, "cond_net", None)
+    if cond_net is not None:
+        mlp: Any = getattr(cond_net, "mlp", None)
+        context_dim = mlp[0].in_features
+        return F.one_hot(labels, num_classes=context_dim).float()
+
+    return labels.view(-1, 1).float()
 
 
 def train_autoencoder(
@@ -120,11 +130,7 @@ def train_cspn(
         ):
             images = images.to(device)
             labels = labels.to(device)
-            if hasattr(model, "cond_net"):
-                context_dim = model.cond_net.mlp[0].in_features
-                context = F.one_hot(labels, num_classes=context_dim).float().to(device)
-            else:
-                context = labels.view(-1, 1).float()
+            context = _build_cspn_context(model, labels).to(device)
             with torch.no_grad():
                 latent = autoencoder.encode(images)
 
@@ -150,23 +156,35 @@ def train_cspn(
                 images = images.to(device)
                 labels = labels.to(device)
                 latent = autoencoder.encode(images)
-                if hasattr(model, "cond_net"):
-                    context_dim = model.cond_net.mlp[0].in_features
-                    context = (
-                        F.one_hot(labels, num_classes=context_dim).float().to(device)
-                    )
-                else:
-                    context = labels.view(-1, 1).float()
+                context = _build_cspn_context(model, labels).to(device)
                 log_prob = model(latent, context)
                 loss = -log_prob.mean()
 
                 total_val_loss += loss.item()
-                total_val_loss += loss.item()
                 total_val_log_prob += log_prob.mean().item()
 
-        if epoch % 10 == 0:
-            # TODO sample all classes and write to wandb
-            pass
+        if epoch % 10 == 9 or epoch == 0:
+            num_classes = 10
+            samples_per_class = 3
+            sample_labels = torch.arange(num_classes, device=device).repeat(
+                samples_per_class
+            )
+            sample_context = _build_cspn_context(model, sample_labels).to(device)
+
+            with torch.no_grad():
+                sample_fn: Any = getattr(model, "sample", None)
+                sampled_latent = sample_fn(sample_context)
+                sampled_images = autoencoder.decode(sampled_latent)
+
+            sampled_images_u8 = (sampled_images.clamp(0, 1) * 255).byte().cpu()
+            wandb.log(
+                {
+                    "samples/cspn_generated_images": [
+                        wandb.Image(sample) for sample in sampled_images_u8
+                    ],
+                },
+                step=epoch,
+            )
 
         n_val = len(test_loader)
         avg_val_loss = total_val_loss / n_val
