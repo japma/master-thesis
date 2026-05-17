@@ -46,9 +46,12 @@ class SPFlowCSPN(AbstractCSPN, ABC):
             num_leaves=self.num_leaves,
         )
 
-    def forward(self, z: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
-        label_emb = self.label_embedding(labels)
+    def forward(self, z: torch.Tensor, context: torch.Tensor) -> torch.Tensor:
+        label_emb = self.label_embedding(context)
         loc, scale = self.nn(label_emb)
 
         log_prob = self.einet.log_likelihood(z)
         return log_prob
+
+    def sample(self, context: torch.Tensor) -> torch.Tensor:
+        raise NotImplementedError

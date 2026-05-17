@@ -101,5 +101,6 @@ def save_latent_umap(
         save_path.parent.mkdir(parents=True, exist_ok=True)
         plt.savefig(save_path)
 
+    # plt.show()
     plt.close(fig)
     return embedding

@@ -1,3 +1,7 @@
+from torchinfo import summary
+
+from inference import run_cspn_inference
+from inference import run_ae_inference
 from pathlib import Path
 
 import torch
@@ -7,9 +11,8 @@ from rtpt import RTPT
 import wandb
 from dataset_loaders import build_data_loaders
 
-from inference import run_inference
-from utils import seed_everything, load_checkpoint, save_checkpoint
-from utils.models import build_autoencoder, build_cspn, build_einet_cspn
+from utils import seed_everything, load_checkpoint
+from utils.models import build_autoencoder, build_einet_cspn
 from utils.train import resolve_device
 from train import train_autoencoder, train_cspn
 
@@ -25,6 +28,16 @@ def main_hydra(cfg: DictConfig) -> None:
     device = resolve_device()
     epochs = cfg.training.epochs
 
+    if cfg.mode == "train_ae" or cfg.mode == "train_cspn" or cfg.mode == "inference_ae":
+        ae = build_autoencoder(cfg, device)
+    else:
+        ae = None
+
+    if cfg.mode == "train_cspn" or cfg.mode == "inference_cspn":
+        cspn = build_einet_cspn(cfg, device)
+    else:
+        cspn = None
+
     if cfg.mode == "train_ae" or cfg.mode == "train_cspn":
         rtpt = RTPT(
             name_initials="JM",
@@ -39,12 +52,15 @@ def main_hydra(cfg: DictConfig) -> None:
             "epochs": epochs,
             "latent_dim": cfg.dataset.latent_size,
             "learning_rate": cfg.training.learning_rate,
+            "beta_start": cfg.training.beta_start,
+            "beta_end": cfg.training.beta_end,
+            "beta_anneal_epochs": cfg.training.beta_anneal_epochs,
             "seed": seed,
         }
 
         print(wandb_cfg)
 
-        wandb_run = wandb.init(
+        wandb.init(
             entity="jmartini-tu-darmstadt",
             project="master-thesis",
             name=name,
@@ -52,13 +68,14 @@ def main_hydra(cfg: DictConfig) -> None:
             mode="online",
         )
 
-        ae = build_autoencoder(cfg, device)
         train_loader, test_load = build_data_loaders(
             dataset_cfg, batch_size=cfg.training.batch_size
         )
 
         if cfg.mode == "train_ae":
             print("Training Autoencoder")
+            if ae is None:
+                raise ValueError("Autoencoder model not initialized")
             optimizer = torch.optim.Adam(ae.parameters(), lr=cfg.training.learning_rate)
             train_autoencoder(
                 model=ae,
@@ -67,24 +84,31 @@ def main_hydra(cfg: DictConfig) -> None:
                 train_loader=train_loader,
                 test_loader=test_load,
                 optimizer=optimizer,
-                beta=1.0,
+                beta_start=cfg.training.beta_start,
+                beta_end=cfg.training.beta_end,
+                beta_anneal_epochs=cfg.training.beta_anneal_epochs,
                 rtpt=rtpt,
             )
 
-            checkpoint_path = "ae.pt"
+            checkpoint_path = Path(f"checkpoints/{dataset_name}/autoencoder.pt")
+            checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
             torch.save(ae.state_dict(), checkpoint_path)
             ae_artifact = wandb.Artifact(
                 name=name, type="autoencoder", metadata=wandb_cfg
             )
-            ae_artifact.add_file(checkpoint_path)
+            ae_artifact.add_file(str(checkpoint_path))
             wandb.log_artifact(ae_artifact)
 
         elif cfg.mode == "train_cspn":
             print("Training CSPN")
-            # cspn = build_cspn(cfg, device)
-            ae_ckpt = load_checkpoint(Path("checkpoints/MNIST/autoencoder.pt"), device)
+            if ae is None:
+                raise ValueError("Autoencoder model not initialized")
+            if cspn is None:
+                raise ValueError("CSPN model not initialized")
+            summary(cspn)
+
+            ae_ckpt = load_checkpoint(Path(f"checkpoints/{dataset_name}/autoencoder.pt"), device)
             ae.load_state_dict(ae_ckpt)
-            cspn = build_einet_cspn(cfg, device)
             optimizer = torch.optim.Adam(
                 cspn.parameters(), lr=cfg.training.learning_rate
             )
@@ -98,10 +122,29 @@ def main_hydra(cfg: DictConfig) -> None:
                 optimizer=optimizer,
                 rtpt=rtpt,
             )
+            checkpoint_path = Path(f"checkpoints/{dataset_name}/cspn.pt")
+            checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+            torch.save(cspn.state_dict(), checkpoint_path)
+            cspn_artifact = wandb.Artifact(name=name, type="cspn", metadata=wandb_cfg)
+            cspn_artifact.add_file(str(checkpoint_path))
+            wandb.log_artifact(cspn_artifact)
 
         wandb.finish()
-    elif cfg.mode == "inference":
-        run_inference(cfg)
+    elif cfg.mode == "inference_ae":
+        if ae is None:
+            raise ValueError("Autoencoder model not initialized")
+        ae_ckpt = load_checkpoint(Path(f"checkpoints/{dataset_name}/autoencoder.pt"), device)
+        ae.load_state_dict(ae_ckpt)
+        _, test_loader = build_data_loaders(
+            dataset_cfg, batch_size=cfg.training.batch_size
+        )
+        run_ae_inference(model=ae, data_loader=test_loader, device=device)
+    elif cfg.mode == "inference_cspn":
+        if cspn is None:
+            raise ValueError("CSPN model not initialized")
+        cspn_ckpt = load_checkpoint(Path(f"checkpoints/{dataset_name}/cspn.pt"), device)
+        cspn.load_state_dict(cspn_ckpt)
+        run_cspn_inference(model=cspn, data_loader=None, device=device)
     else:
         raise ValueError(f"Unknown mode: {cfg.mode}")
 

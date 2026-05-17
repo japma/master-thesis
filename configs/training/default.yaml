@@ -1,3 +1,6 @@
 epochs: 50
 learning_rate: 0.001
 batch_size: 32
+beta_start: 0.0
+beta_end: 1.0
+beta_anneal_epochs: 25

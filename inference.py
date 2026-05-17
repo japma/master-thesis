@@ -1,143 +1,81 @@
 """Inference pipeline for loading checkpoints and generating visualizations."""
 
+from models.autoencoder import AbstractAutoencoder
 import torch
-from hydra.core.hydra_config import HydraConfig
-from omegaconf import DictConfig
+from torch import nn
 from torch.utils.data import DataLoader
+import torch.nn.functional as F
+from typing import Any
 
-from dataset_loaders import build_data_loaders
-from models.autoencoder import VariationalAutoencoder, AbstractAutoencoder
-from models import SPFlowCSPN
-
-from utils.io import build_ae_path, load_checkpoint, build_cspn_path
-from utils.train import resolve_device
-from utils.visualization import save_reconstructions, save_latent_umap
+from models.cspn import AbstractCSPN
+from utils.visualization import save_latent_umap
 
 
-def _build_reconstructions(
-    ae: AbstractAutoencoder,
-    dataloader: DataLoader,
-    num_images: int,
-    device: torch.device,
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    if num_images <= 0:
-        raise ValueError("inference.image_count must be > 0")
-
-    originals = []
-    reconstructed = []
-    labels_list = []
-    total = 0
-
-    with torch.no_grad():
-        for images, labels in dataloader:
-            images = images.to(device)
-            recon, _, _ = ae(images)
-            originals.append(images.cpu())
-            reconstructed.append(recon.cpu())
-            labels_list.append(labels.cpu())
-            total += images.size(0)
-            if total >= num_images:
-                break
-
-    if not originals:
-        raise ValueError("No images available in dataloader for inference")
-
-    originals_tensor = torch.cat(originals, dim=0)[:num_images]
-    reconstructed_tensor = torch.cat(reconstructed, dim=0)[:num_images]
-    labels_tensor = torch.cat(labels_list, dim=0)[:num_images].view(-1)
-    return originals_tensor, reconstructed_tensor, labels_tensor
+NUM_CLASSES = 10
+SAMPLES_PER_CLASS = 100
 
 
-def _extract_latents(
-    ae: AbstractAutoencoder,
-    dataloader: DataLoader,
-    num_samples: int,
-    device: torch.device,
+def _collect_labeled_batch(
+    data_loader: DataLoader, target_count: int, device: torch.device
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    if num_samples <= 0:
-        raise ValueError("num_samples must be > 0")
+    images_parts: list[torch.Tensor] = []
+    labels_parts: list[torch.Tensor] = []
+    collected = 0
 
-    latents_list = []
-    labels_list = []
-    total = 0
+    for images, labels in data_loader:
+        remaining = target_count - collected
+        if remaining <= 0:
+            break
+        take = min(images.shape[0], remaining)
+        images_parts.append(images[:take].to(device))
+        labels_parts.append(labels[:take].to(device))
+        collected += take
+
+    if collected < target_count:
+        raise ValueError(
+            f"Requested {target_count} samples, but data_loader only provided {collected}."
+        )
+
+    return torch.cat(images_parts, dim=0), torch.cat(labels_parts, dim=0)
+
+
+def _build_cspn_context(model: nn.Module, labels: torch.Tensor) -> torch.Tensor:
+    cond_net: Any = getattr(model, "cond_net", None)
+    if cond_net is not None:
+        mlp: Any = getattr(cond_net, "mlp", None)
+        context_dim = mlp[0].in_features
+        return F.one_hot(labels, num_classes=context_dim).float()
+
+    return labels.view(-1, 1).float()
+
+
+def run_ae_inference(
+    model: AbstractAutoencoder, data_loader: DataLoader | None, device: torch.device
+):
+    if data_loader is None:
+        raise ValueError("run_ae_inference requires a data_loader with class labels.")
+
+    model.eval()
+    target_count = NUM_CLASSES * SAMPLES_PER_CLASS
 
     with torch.no_grad():
-        for images, labels in dataloader:
-            images = images.to(device)
-            z = ae.encode(images)
-            latents_list.append(z.cpu())
-            labels_list.append(labels.cpu())
-            total += images.size(0)
-            if total >= num_samples:
-                break
-
-    if not latents_list:
-        raise ValueError("No images available in dataloader")
-
-    latents_tensor = torch.cat(latents_list, dim=0)[:num_samples]
-    labels_tensor = torch.cat(labels_list, dim=0)[:num_samples].view(-1)
-    return latents_tensor, labels_tensor
-
-
-def run_inference(cfg: DictConfig) -> None:
-    dataset_cfg = cfg.dataset
-
-    inference_cfg = cfg.inference
-    hydra_cfg = HydraConfig().get()
-    device = resolve_device()
-
-    ae_cfg = cfg.autoencoder
-    input_shape = (cfg.dataset.channels, cfg.dataset.height, cfg.dataset.width)
-
-    ae_path = build_ae_path(cfg)
-    ae_checkpoint = load_checkpoint(ae_path, map_location="cpu")
-
-    ae = VariationalAutoencoder(
-        input_shape=input_shape,
-        latent_size=dataset_cfg.latent_size,
-        base_channels=ae_cfg.base_channels,
-        num_blocks=ae_cfg.num_blocks,
-        res_blocks=ae_cfg.res_blocks,
-    )
-    ae.load_state_dict(ae_checkpoint)
-    ae.to(device)
-    ae.eval()
-
-    _, test = build_data_loaders(dataset_cfg)
-
-    originals, reconstructed, labels = _build_reconstructions(
-        ae=ae,
-        dataloader=test,
-        num_images=inference_cfg.image_count,
-        device=device,
-    )
-
-    recon_path = f"{hydra_cfg.runtime.output_dir}/reconstructions.png"
-    save_reconstructions(originals, reconstructed, labels, recon_path)
-
-    ae_latents, ae_labels = _extract_latents(
-        ae=ae,
-        dataloader=test,
-        num_samples=inference_cfg.umap_count,
-        device=device,
-    )
-
-    ae_umap_path = f"{hydra_cfg.runtime.output_dir}/ae_latents_umap.png"
-    save_latent_umap(
-        ae_latents,
-        labels=ae_labels,
-        path=ae_umap_path,
-        title="Autoencoder Latent Space",
-    )
-
-    cspn_path = build_cspn_path(cfg)
-    if cspn_path.exists():
-        cspn_checkpoint = load_checkpoint(cspn_path, map_location="cpu")
-
-        cspn = SPFlowCSPN(
-            latent_dim=dataset_cfg.latent_size,
-            num_classes=dataset_cfg.num_classes,
+        sample_images, sample_labels = _collect_labeled_batch(
+            data_loader=data_loader,
+            target_count=target_count,
+            device=device,
         )
-        cspn.load_state_dict(cspn_checkpoint)
-        cspn.to(device)
-        cspn.eval()
+        sampled_latents = model.encode(sample_images)
+
+    save_latent_umap(sampled_latents, labels=sample_labels, path="ae.png")
+
+
+def run_cspn_inference(
+    model: AbstractCSPN, data_loader: DataLoader | None, device: torch.device
+):
+    model.eval()
+    sample_labels = torch.arange(NUM_CLASSES, device=device).repeat(SAMPLES_PER_CLASS)
+    sample_context = _build_cspn_context(model, sample_labels).to(device)
+    with torch.no_grad():
+        sampled_latents = model.sample(sample_context)
+
+    save_latent_umap(sampled_latents, labels=sample_labels, path="cspn.png")

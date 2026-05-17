@@ -26,7 +26,7 @@ def build_cspn(cfg, device) -> AbstractCSPN:
     ).to(device)
 
 
-def build_einet_cspn(cfg, device) -> nn.Module:
+def build_einet_cspn(cfg, device) -> AbstractCSPN:
     return Einet(
         num_vars=cfg.dataset.latent_size,
         # context is label-conditioned; use number of classes as input dim

@@ -1,3 +1,5 @@
+import math
+from models.cspn import AbstractCSPN
 from models.cspn.nn_for_einet import EinetConditioningNetwork
 from models.cspn.einsum_layer import EinsumLayer
 from models.cspn.gaussian_leaf_layer import GaussianLeafLayer
@@ -5,75 +7,132 @@ import torch
 from torch import nn
 
 
-class Einet(nn.Module):
-    def __init__(self, num_vars, context_dim, num_leaves, num_nodes):
+class Einet(AbstractCSPN):
+    def __init__(
+        self, num_vars: int, context_dim: int, num_leaves: int, num_nodes: int
+    ):
+        """
+        :param num_vars:    Number of input variables. Must be a power of 2.
+        :param context_dim: Dimensionality of the conditioning context.
+        :param num_leaves:  Number of leaf components per scope (bottom of tree).
+        :param num_nodes:   Number of nodes at the first einsum layer (halves each layer up).
+        """
         super().__init__()
-        self.leaf_layer = GaussianLeafLayer(num_scopes=num_vars, num_leaves=num_leaves)
-        # TODO increase number of einsum layers
-        self.einsum_layers = nn.ModuleList(
-            [EinsumLayer(num_input_nodes=num_leaves, num_output_nodes=num_nodes)]
+        assert num_vars > 0 and (num_vars & (num_vars - 1)) == 0, (
+            "num_vars must be a power of 2"
         )
+
+        self.num_vars = num_vars
+        self.depth = int(math.log2(num_vars))
+
+        self.layer_nodes = [max(2, num_nodes // (2**l)) for l in range(self.depth)]
+
+        self.leaf_layer = GaussianLeafLayer(num_scopes=num_vars, num_leaves=num_leaves)
+
+        self.einsum_layers = nn.ModuleList(
+            [
+                EinsumLayer(
+                    num_input_nodes=num_leaves if l == 0 else self.layer_nodes[l - 1],
+                    num_output_nodes=self.layer_nodes[l],
+                )
+                for l in range(self.depth)
+            ]
+        )
+
+        self.root_weights = nn.Parameter(torch.zeros(self.layer_nodes[-1]))
+
         self.cond_net = EinetConditioningNetwork(
             context_dim=context_dim,
             num_scopes=num_vars,
             num_leaves=num_leaves,
-            num_nodes=num_leaves,  # input nodes to einsum = num_leaves
-            num_output_nodes=num_nodes,
+            layer_nodes=self.layer_nodes,
         )
-        # root mixing weights as logits (zeros = uniform init)
-        self.root_weights = nn.Parameter(torch.zeros(num_nodes))
 
-    def forward(self, x, context):
-        # (N, num_vars, num_leaves)
-        mu, logvar, weights = self.cond_net(context)
-        log_leaves = self.leaf_layer(x, mu, logvar)
+    def forward(self, z: torch.Tensor, context: torch.Tensor) -> torch.Tensor:
+        """
+        :param z:       (N, num_vars)
+        :param context: (N, context_dim)
+        :return:        (N,) log p(z | context)
+        """
+        mu, logvar, all_weights = self.cond_net(context)
+        # mu, logvar:  (N, num_vars, num_leaves)
+        # all_weights: list of (N, num_pairs_l, out_nodes_l, in_nodes_l, in_nodes_l)
 
-        # split scopes into left / right halves -> (N, num_leaves)
-        half = x.shape[1] // 2
-        left = log_leaves[:, :half, :].sum(dim=1)  # (N, num_leaves)
-        right = log_leaves[:, half:, :].sum(dim=1)  # (N, num_leaves)
+        # Leaf log-densities: (N, num_vars, num_leaves)
+        log_leaves = self.leaf_layer(z, mu, logvar)
 
-        h = self.einsum_layers[0](left, right, weights)  # (N, num_nodes)
+        # Bottom-up: h starts as (N, num_vars, num_leaves), regions halve each layer
+        h = log_leaves
 
-        # root: logits -> log_softmax, then logsumexp over nodes -> (N,)
+        for l, einsum_layer in enumerate(self.einsum_layers):
+            # h: (N, num_regions, num_input_nodes)
+            left = h[:, 0::2, :]  # (N, num_pairs, in_nodes)
+            right = h[:, 1::2, :]  # (N, num_pairs, in_nodes)
+
+            N, num_pairs, _ = left.shape
+            weights_l = all_weights[l]  # (N, num_pairs, out_nodes, in_nodes, in_nodes)
+
+            # Flatten pairs into batch dim, run einsum layer, restore
+            left_flat = left.reshape(N * num_pairs, -1)
+            right_flat = right.reshape(N * num_pairs, -1)
+            w_flat = weights_l.reshape(
+                N * num_pairs,
+                einsum_layer.num_output_nodes,
+                einsum_layer.num_input_nodes,
+                einsum_layer.num_input_nodes,
+            )
+            h_flat = einsum_layer(left_flat, right_flat, w_flat)  # (N*P, out_nodes)
+            h = h_flat.reshape(N, num_pairs, einsum_layer.num_output_nodes)
+
+        # h: (N, 1, root_nodes) -> (N, root_nodes)
+        h = h.squeeze(1)
         log_p = torch.logsumexp(h + self.root_weights.log_softmax(dim=-1), dim=-1)
         return log_p
 
     @torch.no_grad()
     def sample(self, context: torch.Tensor) -> torch.Tensor:
         """
-        :param context: Tensor of shape (N, context_dim)
-        :return: Tensor of shape (N, num_vars)
+        Ancestral sampling top-down through the binary tree.
+
+        :param context: (N, context_dim)
+        :return:        (N, num_vars)
         """
         N = context.shape[0]
-        mu, logvar, weights = self.cond_net(context)
+        mu, logvar, all_weights = self.cond_net(context)
 
-        root_probs = self.root_weights.softmax(dim=-1)  # (num_nodes,)
-        k = torch.multinomial(root_probs.expand(N, -1), num_samples=1).squeeze(1)
+        # Step 1: sample root node -> (N, 1)
+        root_probs = self.root_weights.softmax(dim=-1)
+        selected = torch.multinomial(root_probs.expand(N, -1), num_samples=1)  # (N, 1)
 
-        k_expanded = k.view(N, 1, 1, 1).expand(N, 1, weights.shape[2], weights.shape[3])
-        w_k = weights.gather(dim=1, index=k_expanded).squeeze(1)
-        w_k_flat = w_k.view(N, -1).softmax(dim=-1)
-        ij = torch.multinomial(w_k_flat, num_samples=1).squeeze(1)
-        # TODO implement correct halving of scopes for more than 1 einsum layer
-        i = ij // self.einsum_layers.num_input_nodes
-        j = ij % self.einsum_layer.num_input_nodes
+        # Step 2: top-down through layers, doubling regions at each step
+        for l in reversed(range(self.depth)):
+            einsum_layer = self.einsum_layers[l]
+            weights_l = all_weights[l]  # (N, num_pairs, out_nodes, in_nodes, in_nodes)
+            num_pairs = weights_l.shape[1]
+            in_nodes = einsum_layer.num_input_nodes
 
-        half = self.leaf_layer.num_scopes // 2
+            # Gather weight matrix for the selected output node per region
+            # selected: (N, num_pairs)
+            sel_exp = selected.view(N, num_pairs, 1, 1, 1).expand(
+                N, num_pairs, 1, in_nodes, in_nodes
+            )
+            w_sel = weights_l.gather(dim=2, index=sel_exp).squeeze(2)
+            # w_sel: (N, num_pairs, in_nodes, in_nodes)
 
-        i_exp = i.view(N, 1, 1).expand(N, half, 1)
-        j_exp = j.view(N, 1, 1).expand(N, half, 1)
+            # Sample (i, j) jointly
+            w_flat = w_sel.view(N * num_pairs, in_nodes * in_nodes).softmax(dim=-1)
+            ij = torch.multinomial(w_flat, num_samples=1).squeeze(1)  # (N*num_pairs,)
+            i_sel = (ij // in_nodes).view(N, num_pairs)
+            j_sel = (ij % in_nodes).view(N, num_pairs)
 
-        mu_left = mu[:, :half, :].gather(dim=2, index=i_exp).squeeze(2)
-        mu_right = mu[:, half:, :].gather(dim=2, index=j_exp).squeeze(2)
-        std_left = (
-            (0.5 * logvar[:, :half, :].gather(dim=2, index=i_exp)).exp().squeeze(2)
-        )
-        std_right = (
-            (0.5 * logvar[:, half:, :].gather(dim=2, index=j_exp)).exp().squeeze(2)
-        )
+            # Interleave left (i) and right (j) to double the region count
+            selected = torch.stack([i_sel, j_sel], dim=2).view(N, num_pairs * 2)
 
-        x_left = torch.normal(mu_left, std_left)
-        x_right = torch.normal(mu_right, std_right)
+        # selected: (N, num_vars) — leaf component index per variable
 
-        return torch.cat([x_left, x_right], dim=1)
+        # Step 3: sample from selected leaf Gaussians
+        sel_leaf = selected.unsqueeze(2)  # (N, num_vars, 1)
+        mu_sel = mu.gather(dim=2, index=sel_leaf).squeeze(2)
+        std_sel = (0.5 * logvar.gather(dim=2, index=sel_leaf)).exp().squeeze(2)
+
+        return torch.normal(mu_sel, std_sel)  # (N, num_vars)

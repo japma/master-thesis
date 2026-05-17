@@ -2,6 +2,7 @@
 
 from abc import ABC, abstractmethod
 
+import torch
 import torch.nn as nn
 
 
@@ -13,6 +14,11 @@ class AbstractCSPN(nn.Module, ABC):
     """
 
     @abstractmethod
-    def forward(self, z, labels):
-        """Return log p(z | labels)."""
+    def forward(self, z: torch.Tensor, context: torch.Tensor) -> torch.Tensor:
+        """Return log p(z | context)."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def sample(self, context: torch.Tensor) -> torch.Tensor:
+        """Return sampled latent vector."""
         raise NotImplementedError

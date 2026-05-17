@@ -8,6 +8,20 @@ from typing import Any
 import wandb
 from losses import vae_loss
 from models.autoencoder import AbstractAutoencoder
+from models.cspn import AbstractCSPN
+
+
+def _beta_for_epoch(
+    epoch: int,
+    beta_start: float,
+    beta_end: float,
+    anneal_epochs: int,
+) -> float:
+    if anneal_epochs <= 1:
+        return beta_end
+
+    progress = min(epoch / (anneal_epochs - 1), 1.0)
+    return beta_start + progress * (beta_end - beta_start)
 
 
 def _build_cspn_context(model: nn.Module, labels: torch.Tensor) -> torch.Tensor:
@@ -27,8 +41,9 @@ def train_autoencoder(
     train_loader: torch.utils.data.DataLoader,
     test_loader: torch.utils.data.DataLoader,
     optimizer: torch.optim.Optimizer,
-    # TODO set beta correctly
-    beta: float,
+    beta_start: float,
+    beta_end: float,
+    beta_anneal_epochs: int,
     rtpt: RTPT,
 ) -> None:
     model.to(device)
@@ -41,6 +56,12 @@ def train_autoencoder(
         step=0,
     )
     for epoch in range(epochs):
+        beta = _beta_for_epoch(
+            epoch=epoch,
+            beta_start=beta_start,
+            beta_end=beta_end,
+            anneal_epochs=min(beta_anneal_epochs, epochs),
+        )
         model.train()
         total_train_loss = total_train_recon = total_train_kl = 0.0
         for images, _ in tqdm.tqdm(
@@ -103,6 +124,7 @@ def train_autoencoder(
                     "val_loss": avg_val_loss,
                     "val_recon_loss": avg_val_recon,
                     "val_kl_loss": avg_val_kl,
+                    "beta": beta,
                 },
                 step=epoch,
             )
@@ -110,7 +132,7 @@ def train_autoencoder(
 
 
 def train_cspn(
-    model: nn.Module,
+    model: AbstractCSPN,
     autoencoder: AbstractAutoencoder,
     device: torch.device,
     epochs: int,
@@ -172,8 +194,7 @@ def train_cspn(
             sample_context = _build_cspn_context(model, sample_labels).to(device)
 
             with torch.no_grad():
-                sample_fn: Any = getattr(model, "sample", None)
-                sampled_latent = sample_fn(sample_context)
+                sampled_latent = model.sample(sample_context)
                 sampled_images = autoencoder.decode(sampled_latent)
 
             sampled_images_u8 = (sampled_images.clamp(0, 1) * 255).byte().cpu()
