@@ -11,7 +11,9 @@ class GaussianLeafLayer(nn.Module):
     def forward(
         self, x: torch.Tensor, mu: torch.Tensor, logvar: torch.Tensor
     ) -> torch.Tensor:
-        var = torch.exp(logvar)
+        # Clamp logvar to prevent numerical overflow/underflow
+        logvar_clamped = torch.clamp(logvar, min=-10, max=10)
+        var = torch.exp(logvar_clamped)
         log_density = -0.5 * torch.log(2 * torch.pi * var) - 0.5 * (
             (x.unsqueeze(-1) - mu) ** 2 / var
         )

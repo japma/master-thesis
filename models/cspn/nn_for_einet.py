@@ -66,6 +66,9 @@ class EinetConditioningNetwork(nn.Module):
         # Slice off leaf parameters
         mu = out[:, : S * K].view(N, S, K)
         logvar = out[:, S * K : 2 * S * K].view(N, S, K)
+        # Clamp logvar to prevent numerical overflow/underflow in exp()
+        # Matches the clamping bounds used in the autoencoder
+        logvar = torch.clamp(logvar, min=-10, max=10)
 
         # Slice off per-layer weights
         cursor = 2 * S * K
