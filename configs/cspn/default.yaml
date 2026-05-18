@@ -1,0 +1,4 @@
+num_leaves: 10
+num_nodes: 5
+nn_hidden_dim: 256
+nn_num_hidden_layers: 2

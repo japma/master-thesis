@@ -10,6 +10,8 @@ class EinetConditioningNetwork(nn.Module):
         num_scopes: int,
         num_leaves: int,
         layer_nodes: List[int],
+        nn_hidden_dim: int = 256,
+        nn_num_hidden_layers: int = 2,
     ):
         """
         :param context_dim: Dimensionality of the conditioning context.
@@ -17,6 +19,8 @@ class EinetConditioningNetwork(nn.Module):
         :param num_leaves:  Number of leaf components per scope.
         :param layer_nodes: List of output node counts per EinsumLayer, bottom to top.
                             e.g. [8, 4, 2, 2, 2] for depth=5, num_nodes=8.
+        :param nn_hidden_dim: Hidden layer dimension (default 256).
+        :param nn_num_hidden_layers: Number of hidden layers (default 2).
         """
         super().__init__()
         self.num_scopes = num_scopes
@@ -41,13 +45,15 @@ class EinetConditioningNetwork(nn.Module):
             weight_params += num_pairs * out_nodes * in_nodes * in_nodes
 
         total_params = leaf_params + weight_params
-        self.mlp = nn.Sequential(
-            nn.Linear(context_dim, 256),
-            nn.ReLU(),
-            nn.Linear(256, 256),
-            nn.ReLU(),
-            nn.Linear(256, total_params),
-        )
+
+        mlp_layers = nn.ModuleList()
+        mlp_layers.append(nn.Linear(context_dim, nn_hidden_dim))
+        for _ in range(nn_num_hidden_layers):
+            mlp_layers.append(nn.ReLU())
+            mlp_layers.append(nn.Linear(nn_hidden_dim, nn_hidden_dim))
+        mlp_layers.append(nn.ReLU())
+        mlp_layers.append(nn.Linear(nn_hidden_dim, total_params))
+        self.mlp = nn.Sequential(*mlp_layers)
 
     def forward(self, context: torch.Tensor):
         """

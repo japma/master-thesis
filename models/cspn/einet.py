@@ -9,13 +9,21 @@ from torch import nn
 
 class Einet(AbstractCSPN):
     def __init__(
-        self, num_vars: int, context_dim: int, num_leaves: int, num_nodes: int
+        self,
+        num_vars: int,
+        context_dim: int,
+        num_leaves: int,
+        num_nodes: int,
+        nn_hidden_dim: int = 256,
+        nn_num_hidden_layers: int = 2,
     ):
         """
         :param num_vars:    Number of input variables. Must be a power of 2.
         :param context_dim: Dimensionality of the conditioning context.
         :param num_leaves:  Number of leaf components per scope (bottom of tree).
         :param num_nodes:   Number of nodes at the first einsum layer (halves each layer up).
+        :param nn_hidden_dim: Hidden layer dimension for the conditioning network (default 256).
+        :param nn_num_hidden_layers: Number of hidden layers in the conditioning network (default 2).
         """
         super().__init__()
         assert num_vars > 0 and (num_vars & (num_vars - 1)) == 0, (
@@ -46,6 +54,8 @@ class Einet(AbstractCSPN):
             num_scopes=num_vars,
             num_leaves=num_leaves,
             layer_nodes=self.layer_nodes,
+            nn_hidden_dim=nn_hidden_dim,
+            nn_num_hidden_layers=nn_num_hidden_layers,
         )
 
     def forward(self, z: torch.Tensor, context: torch.Tensor) -> torch.Tensor:
