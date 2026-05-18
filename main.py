@@ -1,6 +1,6 @@
 from torchinfo import summary
 
-from inference import run_cspn_inference
+from inference import run_cspn_inference, save_combined_latent_umap
 from inference import run_ae_inference
 from pathlib import Path
 
@@ -68,7 +68,7 @@ def main_hydra(cfg: DictConfig) -> None:
             mode="online",
         )
 
-        train_loader, test_load = build_data_loaders(
+        train_loader, test_load, (train_dataset, test_dataset) = build_data_loaders(
             dataset_cfg, batch_size=cfg.training.batch_size
         )
 
@@ -107,7 +107,7 @@ def main_hydra(cfg: DictConfig) -> None:
                 raise ValueError("CSPN model not initialized")
             summary(cspn)
 
-            ae_ckpt = load_checkpoint(Path(f"checkpoints/{dataset_name}/autoencoder.pt"), device)
+            ae_ckpt = load_checkpoint(Path(f"checkpoints/MNIST/autoencoder.pt"), device)
             ae.load_state_dict(ae_ckpt)
             optimizer = torch.optim.Adam(
                 cspn.parameters(), lr=cfg.training.learning_rate
@@ -133,9 +133,11 @@ def main_hydra(cfg: DictConfig) -> None:
     elif cfg.mode == "inference_ae":
         if ae is None:
             raise ValueError("Autoencoder model not initialized")
-        ae_ckpt = load_checkpoint(Path(f"checkpoints/{dataset_name}/autoencoder.pt"), device)
+        ae_ckpt = load_checkpoint(
+            Path(f"checkpoints/{dataset_name}/autoencoder.pt"), device
+        )
         ae.load_state_dict(ae_ckpt)
-        _, test_loader = build_data_loaders(
+        _, test_loader, (_, test_dataset) = build_data_loaders(
             dataset_cfg, batch_size=cfg.training.batch_size
         )
         run_ae_inference(model=ae, data_loader=test_loader, device=device)
@@ -144,7 +146,39 @@ def main_hydra(cfg: DictConfig) -> None:
             raise ValueError("CSPN model not initialized")
         cspn_ckpt = load_checkpoint(Path(f"checkpoints/{dataset_name}/cspn.pt"), device)
         cspn.load_state_dict(cspn_ckpt)
-        run_cspn_inference(model=cspn, data_loader=None, device=device)
+
+        if ae is None:
+            ae = build_autoencoder(cfg, device)
+        ae_ckpt = load_checkpoint(
+            Path(f"checkpoints/{dataset_name}/autoencoder.pt"), device
+        )
+        ae.load_state_dict(ae_ckpt)
+
+        _, test_loader, (_, test_dataset) = build_data_loaders(
+            dataset_cfg, batch_size=cfg.training.batch_size
+        )
+
+        class_names = getattr(test_dataset, "class_names", None)
+        cspn_latents, cspn_labels = run_cspn_inference(
+            model=cspn,
+            data_loader=None,
+            device=device,
+            autoencoder=ae,
+            class_names=class_names,
+        )
+
+        ae_latents, ae_labels = run_ae_inference(
+            model=ae, data_loader=test_loader, device=device
+        )
+
+        # Create combined visualization
+        save_combined_latent_umap(
+            ae_latents=ae_latents,
+            cspn_latents=cspn_latents,
+            ae_labels=ae_labels,
+            cspn_labels=cspn_labels,
+            path="combined_ae_cspn_umap.png",
+        )
     else:
         raise ValueError(f"Unknown mode: {cfg.mode}")
 

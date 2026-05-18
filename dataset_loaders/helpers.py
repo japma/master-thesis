@@ -122,4 +122,4 @@ def build_data_loaders(cfg, batch_size=32):
         drop_last=True,
     )
 
-    return train_loader, test_loader
+    return train_loader, test_loader, (train_dataset, test_dataset)
