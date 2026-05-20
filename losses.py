@@ -5,15 +5,22 @@ import torch.nn
 from torch import nn
 
 
-def vae_loss(images, recon, mu, logvar, beta=1.0):
+def vae_loss(
+    images: torch.Tensor,
+    recon: torch.Tensor,
+    mu: torch.Tensor,
+    logvar: torch.Tensor,
+    beta: float = 1.0,
+    recon_loss_fn: nn.Module = nn.MSELoss(),
+):
     """ELBO loss: reconstruction (MSE) + β · KL divergence."""
-    recon_loss = nn.functional.mse_loss(recon, images, reduction="sum") / images.size(0)
+    recon_loss = recon_loss_fn(recon, images, reduction="sum") / images.size(0)
     kl_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp()) / images.size(0)
     return recon_loss + beta * kl_loss, recon_loss, kl_loss
 
 
-def nll_loss(model, z_target, z_cond):
-    """Evaluate CSPN log-likelihood and return (nll_loss, mean_log_prob)."""
-    log_prob = model(z_cond, z_target)
-    loss = -log_prob.mean()
-    return loss, log_prob.mean().item()
+def negative_log_likelihood_loss(
+    outputs: torch.Tensor,
+) -> torch.Tensor:
+    """Negative log-likelihood loss for SPN outputs."""
+    return -outputs.mean()

@@ -7,7 +7,7 @@ defaults:
   - _self_
 
 # TODO change training mode to train_cspn
-mode: train_ae
+mode: train_cspn
 
 seed: null
 

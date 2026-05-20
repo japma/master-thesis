@@ -6,15 +6,19 @@
 
 ```bash
 uv sync
-uv run train_autoencoder.py
+source .venv/bin/activate
+python main.py
 ```
 
-To train the CSPN, run `uv run train_cspn.py`. For inference, run `uv run inference.py`.
-
-## Docker
+## Podman
 
 Run
 
 ```bash
 ./run.sh
 ```
+
+## Configuration
+
+It is possible to pass several parameters to the main script like `argument=value`.
+

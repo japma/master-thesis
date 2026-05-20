@@ -1,3 +1,5 @@
+import lpips
+from torch import nn
 from torchinfo import summary
 
 from inference import run_cspn_inference, save_combined_latent_umap
@@ -84,6 +86,7 @@ def main_hydra(cfg: DictConfig) -> None:
                 train_loader=train_loader,
                 test_loader=test_load,
                 optimizer=optimizer,
+                loss_fn=lpips.LPIPS(net="vgg").to(device),
                 beta_start=cfg.training.beta_start,
                 beta_end=cfg.training.beta_end,
                 beta_anneal_epochs=cfg.training.beta_anneal_epochs,

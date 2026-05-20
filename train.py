@@ -6,7 +6,7 @@ from torch import nn
 from typing import Any
 
 import wandb
-from losses import vae_loss
+from losses import vae_loss, negative_log_likelihood_loss
 from models.autoencoder import AbstractAutoencoder
 from models.cspn import AbstractCSPN
 
@@ -41,6 +41,7 @@ def train_autoencoder(
     train_loader: torch.utils.data.DataLoader,
     test_loader: torch.utils.data.DataLoader,
     optimizer: torch.optim.Optimizer,
+    loss_fn: nn.Module,
     beta_start: float,
     beta_end: float,
     beta_anneal_epochs: int,
@@ -156,21 +157,20 @@ def train_cspn(
             with torch.no_grad():
                 latent = autoencoder.encode(images)
 
-            log_prob = model(latent, context)
-            loss = -log_prob.mean()
+            outputs = model(latent, context)
+            loss = negative_log_likelihood_loss(outputs)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
             total_train_loss += loss.item()
-            total_log_prob += log_prob.mean().item()
 
         n_train = len(train_loader)
         avg_train_loss = total_train_loss / n_train
         avg_train_log_prob = total_log_prob / n_train
 
         model.eval()
-        total_val_loss = total_val_log_prob = 0.0
+        total_val_loss = 0.0
         with torch.no_grad():
             for images, labels in tqdm.tqdm(
                 test_loader, desc=f"Validation Epoch {epoch + 1}/{epochs}"
@@ -179,11 +179,9 @@ def train_cspn(
                 labels = labels.to(device)
                 latent = autoencoder.encode(images)
                 context = _build_cspn_context(model, labels).to(device)
-                log_prob = model(latent, context)
-                loss = -log_prob.mean()
-
+                outputs = model(latent, context)
+                loss = negative_log_likelihood_loss(outputs)
                 total_val_loss += loss.item()
-                total_val_log_prob += log_prob.mean().item()
 
         if epoch % 10 == 9 or epoch == 0:
             num_classes = 10
@@ -209,14 +207,11 @@ def train_cspn(
 
         n_val = len(test_loader)
         avg_val_loss = total_val_loss / n_val
-        avg_val_log_prob = total_val_log_prob / n_val
 
         wandb.log(
             {
                 "train_loss": avg_train_loss,
-                "train_log_prob": avg_train_log_prob,
                 "val_loss": avg_val_loss,
-                "val_log_prob": avg_val_log_prob,
             },
             step=epoch,
         )
