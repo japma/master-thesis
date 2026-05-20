@@ -48,6 +48,11 @@ def train_autoencoder(
     rtpt: RTPT,
 ) -> None:
     model.to(device)
+
+    # Enable CUDA optimizations
+    if device.type == "cuda":
+        torch.backends.cudnn.benchmark = True
+
     sample_images = next(iter(train_loader))[0][:16].to(device)
     sample_images_u8 = (sample_images.clamp(0, 1) * 255).byte().cpu()
     wandb.log(
@@ -64,11 +69,13 @@ def train_autoencoder(
             anneal_epochs=min(beta_anneal_epochs, epochs),
         )
         model.train()
-        total_train_loss = total_train_recon = total_train_kl = 0.0
+        total_train_loss = torch.tensor(0.0, device=device)
+        total_train_recon = torch.tensor(0.0, device=device)
+        total_train_kl = torch.tensor(0.0, device=device)
         for images, _ in tqdm.tqdm(
             train_loader, desc=f"Training Epoch {epoch + 1}/{epochs}"
         ):
-            images = images.to(device)
+            images = images.to(device, non_blocking=True)
             optimizer.zero_grad()
             recon, mu, logvar = model(images)
             loss, recon_loss, kl_loss = vae_loss(
@@ -76,30 +83,34 @@ def train_autoencoder(
             )
             loss.backward()
             optimizer.step()
-            total_train_loss += loss.item()
-            total_train_recon += recon_loss.item()
-            total_train_kl += kl_loss.item()
+            # Accumulate without .item() to avoid GPU-CPU sync every batch
+            total_train_loss += loss.detach()
+            total_train_recon += recon_loss.detach()
+            total_train_kl += kl_loss.detach()
 
         n_train = len(train_loader)
-        avg_train_loss = total_train_loss / n_train
-        avg_train_recon = total_train_recon / n_train
-        avg_train_kl = total_train_kl / n_train
+        avg_train_loss = (total_train_loss / n_train).item()
+        avg_train_recon = (total_train_recon / n_train).item()
+        avg_train_kl = (total_train_kl / n_train).item()
 
         model.eval()
-        total_val_loss = total_val_recon = total_val_kl = 0
+        total_val_loss = torch.tensor(0.0, device=device)
+        total_val_recon = torch.tensor(0.0, device=device)
+        total_val_kl = torch.tensor(0.0, device=device)
         with torch.no_grad():
             for images, _ in tqdm.tqdm(
                 test_loader, desc=f"Validation Epoch {epoch + 1}/{epochs}"
             ):
-                images = images.to(device)
+                images = images.to(device, non_blocking=True)
                 recon, mu, logvar = model(images)
                 loss, recon_loss, kl_loss = vae_loss(
                     images, recon, mu, logvar, recon_loss_fn=loss_fn, beta=beta
                 )
 
-                total_val_loss += loss.item()
-                total_val_recon += recon_loss.item()
-                total_val_kl += kl_loss.item()
+                # Accumulate without .item()
+                total_val_loss += loss.detach()
+                total_val_recon += recon_loss.detach()
+                total_val_kl += kl_loss.detach()
 
             if epoch % 10 == 9 or epoch == 0:
                 recon_images, _, _ = model(sample_images)
@@ -115,9 +126,9 @@ def train_autoencoder(
                 )
 
             n_val = len(test_loader)
-            avg_val_loss = total_val_loss / n_val
-            avg_val_recon = total_val_recon / n_val
-            avg_val_kl = total_val_kl / n_val
+            avg_val_loss = (total_val_loss / n_val).item()
+            avg_val_recon = (total_val_recon / n_val).item()
+            avg_val_kl = (total_val_kl / n_val).item()
 
             wandb.log(
                 {
@@ -147,15 +158,20 @@ def train_cspn(
     model.to(device)
     autoencoder.to(device)
     autoencoder.eval()
+
+    # Enable CUDA optimizations
+    if device.type == "cuda":
+        torch.backends.cudnn.benchmark = True
+
     for epoch in range(epochs):
         model.train()
-        total_train_loss = total_log_prob = 0.0
+        total_train_loss = torch.tensor(0.0, device=device)
         for images, labels in tqdm.tqdm(
             train_loader, desc=f"Training Epoch {epoch + 1}/{epochs}"
         ):
-            images = images.to(device)
-            labels = labels.to(device)
-            context = _build_cspn_context(model, labels).to(device)
+            images = images.to(device, non_blocking=True)
+            labels = labels.to(device, non_blocking=True)
+            context = _build_cspn_context(model, labels).to(device, non_blocking=True)
             with torch.no_grad():
                 latent = autoencoder.encode(images)
 
@@ -165,25 +181,26 @@ def train_cspn(
             loss.backward()
             optimizer.step()
 
-            total_train_loss += loss.item()
+            # Accumulate without .item()
+            total_train_loss += loss.detach()
 
         n_train = len(train_loader)
-        avg_train_loss = total_train_loss / n_train
-        avg_train_log_prob = total_log_prob / n_train
+        avg_train_loss = (total_train_loss / n_train).item()
 
         model.eval()
-        total_val_loss = 0.0
+        total_val_loss = torch.tensor(0.0, device=device)
         with torch.no_grad():
             for images, labels in tqdm.tqdm(
                 test_loader, desc=f"Validation Epoch {epoch + 1}/{epochs}"
             ):
-                images = images.to(device)
-                labels = labels.to(device)
+                images = images.to(device, non_blocking=True)
+                labels = labels.to(device, non_blocking=True)
                 latent = autoencoder.encode(images)
-                context = _build_cspn_context(model, labels).to(device)
+                context = _build_cspn_context(model, labels).to(device, non_blocking=True)
                 outputs = model(latent, context)
                 loss = negative_log_likelihood_loss(outputs)
-                total_val_loss += loss.item()
+                # Accumulate without .item()
+                total_val_loss += loss.detach()
 
         if epoch % 10 == 9 or epoch == 0:
             num_classes = 10
@@ -208,7 +225,7 @@ def train_cspn(
             )
 
         n_val = len(test_loader)
-        avg_val_loss = total_val_loss / n_val
+        avg_val_loss = (total_val_loss / n_val).item()
 
         wandb.log(
             {
