@@ -11,6 +11,8 @@ mode: train_cspn
 
 seed: null
 
+wandb_mode: online
+
 # TODO update paths
 paths:
   ae_checkpoint: null

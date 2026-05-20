@@ -14,7 +14,7 @@ def vae_loss(
     recon_loss_fn: nn.Module = nn.MSELoss(),
 ):
     """ELBO loss: reconstruction (MSE) + β · KL divergence."""
-    recon_loss = recon_loss_fn(recon, images, reduction="sum") / images.size(0)
+    recon_loss = recon_loss_fn(recon, images).mean()
     kl_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp()) / images.size(0)
     return recon_loss + beta * kl_loss, recon_loss, kl_loss
 

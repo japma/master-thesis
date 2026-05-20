@@ -29,6 +29,7 @@ def main_hydra(cfg: DictConfig) -> None:
     name = f"{model_name}_{dataset_name}_seed{seed}"
     device = resolve_device()
     epochs = cfg.training.epochs
+    wandb_mode = cfg.wandb_mode
 
     if cfg.mode == "train_ae" or cfg.mode == "train_cspn" or cfg.mode == "inference_ae":
         ae = build_autoencoder(cfg, device)
@@ -67,7 +68,7 @@ def main_hydra(cfg: DictConfig) -> None:
             project="master-thesis",
             name=name,
             config=wandb_cfg,
-            mode="online",
+            mode=wandb_mode,
         )
 
         train_loader, test_load, (train_dataset, test_dataset) = build_data_loaders(
@@ -87,6 +88,7 @@ def main_hydra(cfg: DictConfig) -> None:
                 test_loader=test_load,
                 optimizer=optimizer,
                 loss_fn=lpips.LPIPS(net="vgg").to(device),
+                # loss_fn=nn.MSELoss(),
                 beta_start=cfg.training.beta_start,
                 beta_end=cfg.training.beta_end,
                 beta_anneal_epochs=cfg.training.beta_anneal_epochs,

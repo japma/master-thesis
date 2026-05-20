@@ -71,7 +71,9 @@ def train_autoencoder(
             images = images.to(device)
             optimizer.zero_grad()
             recon, mu, logvar = model(images)
-            loss, recon_loss, kl_loss = vae_loss(images, recon, mu, logvar, beta=beta)
+            loss, recon_loss, kl_loss = vae_loss(
+                images, recon, mu, logvar, recon_loss_fn=loss_fn, beta=beta
+            )
             loss.backward()
             optimizer.step()
             total_train_loss += loss.item()
@@ -92,7 +94,7 @@ def train_autoencoder(
                 images = images.to(device)
                 recon, mu, logvar = model(images)
                 loss, recon_loss, kl_loss = vae_loss(
-                    images, recon, mu, logvar, beta=beta
+                    images, recon, mu, logvar, recon_loss_fn=loss_fn, beta=beta
                 )
 
                 total_val_loss += loss.item()
