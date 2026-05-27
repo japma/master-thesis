@@ -1,9 +1,7 @@
 import torch
 import tqdm
-import torch.nn.functional as F
 from rtpt import RTPT
 from torch import nn
-from typing import Any
 
 import wandb
 from losses import vae_loss, negative_log_likelihood_loss
@@ -23,15 +21,6 @@ def _beta_for_epoch(
     progress = min(epoch / (anneal_epochs - 1), 1.0)
     return beta_start + progress * (beta_end - beta_start)
 
-
-def _build_cspn_context(model: nn.Module, labels: torch.Tensor) -> torch.Tensor:
-    cond_net: Any = getattr(model, "cond_net", None)
-    if cond_net is not None:
-        mlp: Any = getattr(cond_net, "mlp", None)
-        context_dim = mlp[0].in_features
-        return F.one_hot(labels, num_classes=context_dim).float()
-
-    return labels.view(-1, 1).float()
 
 
 def train_autoencoder(
@@ -171,17 +160,15 @@ def train_cspn(
         ):
             images = images.to(device, non_blocking=True)
             labels = labels.to(device, non_blocking=True)
-            context = _build_cspn_context(model, labels).to(device, non_blocking=True)
             with torch.no_grad():
                 latent = autoencoder.encode(images)
 
-            outputs = model(latent, context)
+            outputs = model(latent, labels)
             loss = negative_log_likelihood_loss(outputs)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
-            # Accumulate without .item()
             total_train_loss += loss.detach()
 
         n_train = len(train_loader)
@@ -196,8 +183,7 @@ def train_cspn(
                 images = images.to(device, non_blocking=True)
                 labels = labels.to(device, non_blocking=True)
                 latent = autoencoder.encode(images)
-                context = _build_cspn_context(model, labels).to(device, non_blocking=True)
-                outputs = model(latent, context)
+                outputs = model(latent, labels)
                 loss = negative_log_likelihood_loss(outputs)
                 # Accumulate without .item()
                 total_val_loss += loss.detach()
@@ -208,10 +194,9 @@ def train_cspn(
             sample_labels = torch.arange(num_classes, device=device).repeat(
                 samples_per_class
             )
-            sample_context = _build_cspn_context(model, sample_labels).to(device)
 
             with torch.no_grad():
-                sampled_latent = model.sample(sample_context)
+                sampled_latent = model.sample(sample_labels)
                 sampled_images = autoencoder.decode(sampled_latent)
 
             sampled_images_u8 = (sampled_images.clamp(0, 1) * 255).byte().cpu()

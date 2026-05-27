@@ -4,6 +4,7 @@ from models.cspn.nn_for_einet import EinetConditioningNetwork
 from models.cspn.einsum_layer import EinsumLayer
 from models.cspn.gaussian_leaf_layer import GaussianLeafLayer
 import torch
+import torch.nn.functional as F
 from torch import nn
 
 
@@ -19,7 +20,7 @@ class Einet(AbstractCSPN):
     ):
         """
         :param num_vars:    Number of input variables. Must be a power of 2.
-        :param context_dim: Dimensionality of the conditioning context.
+        :param context_dim: Number of classes for one-hot encoding (this is the context dimension).
         :param num_leaves:  Number of leaf components per scope (bottom of tree).
         :param num_nodes:   Number of nodes at the first einsum layer (halves each layer up).
         :param nn_hidden_dim: Hidden layer dimension for the conditioning network (default 256).
@@ -30,6 +31,7 @@ class Einet(AbstractCSPN):
             "num_vars must be a power of 2"
         )
 
+        self._num_classes = context_dim
         self.num_vars = num_vars
         self.depth = int(math.log2(num_vars))
 
@@ -58,12 +60,18 @@ class Einet(AbstractCSPN):
             nn_num_hidden_layers=nn_num_hidden_layers,
         )
 
-    def forward(self, z: torch.Tensor, context: torch.Tensor) -> torch.Tensor:
+    @property
+    def num_classes(self) -> int:
+        """Number of classes for one-hot encoding."""
+        return self._num_classes
+
+    def forward(self, z: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
         """
         :param z:       (N, num_vars)
-        :param context: (N, context_dim)
-        :return:        (N,) log p(z | context)
+        :param labels:  (N,) class labels
+        :return:        (N,) log p(z | labels)
         """
+        context = F.one_hot(labels.long(), num_classes=self.num_classes).float()
         mu, logvar, all_weights = self.cond_net(context)
         # mu, logvar:  (N, num_vars, num_leaves)
         # all_weights: list of (N, num_pairs_l, out_nodes_l, in_nodes_l, in_nodes_l)
@@ -100,13 +108,15 @@ class Einet(AbstractCSPN):
         return log_p
 
     @torch.no_grad()
-    def sample(self, context: torch.Tensor) -> torch.Tensor:
+    def sample(self, labels: torch.Tensor) -> torch.Tensor:
         """
         Ancestral sampling top-down through the binary tree.
 
-        :param context: (N, context_dim)
+        :param labels:  (N,) class labels
         :return:        (N, num_vars)
         """
+        # Convert labels to one-hot encoding internally
+        context = F.one_hot(labels.long(), num_classes=self.num_classes).float()
         N = context.shape[0]
         mu, logvar, all_weights = self.cond_net(context)
 

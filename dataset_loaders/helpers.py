@@ -72,6 +72,13 @@ def _load_tinyimagenet(split="train"):
         ),
     )
 
+# TODO fix
+def _load_coco(train=True):
+    return datasets.CocoCaptions(
+        annFile="./data/coco/annotations/instances_train2017.json",
+        train=train,
+    )
+
 
 _DATASETS = {
     "MNIST": _load_mnist,

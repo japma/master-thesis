@@ -2,10 +2,7 @@
 
 from models.autoencoder import AbstractAutoencoder
 import torch
-from torch import nn
 from torch.utils.data import DataLoader
-import torch.nn.functional as F
-from typing import Any
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import umap
@@ -43,18 +40,8 @@ def _collect_labeled_batch(
     return torch.cat(images_parts, dim=0), torch.cat(labels_parts, dim=0)
 
 
-def _build_cspn_context(model: nn.Module, labels: torch.Tensor) -> torch.Tensor:
-    cond_net: Any = getattr(model, "cond_net", None)
-    if cond_net is not None:
-        mlp: Any = getattr(cond_net, "mlp", None)
-        context_dim = mlp[0].in_features
-        return F.one_hot(labels, num_classes=context_dim).float()
-
-    return labels.view(-1, 1).float()
-
-
 def run_ae_inference(
-    model: AbstractAutoencoder, data_loader: DataLoader | None, device: torch.device
+    model: AbstractAutoencoder, data_loader: DataLoader, device: torch.device
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Run autoencoder inference and return latents and labels.
 
@@ -66,8 +53,6 @@ def run_ae_inference(
     Returns:
         Tuple of (latents, labels)
     """
-    if data_loader is None:
-        raise ValueError("run_ae_inference requires a data_loader with class labels.")
 
     model.eval()
     target_count = NUM_CLASSES * SAMPLES_PER_CLASS
@@ -106,9 +91,8 @@ def run_cspn_inference(
     """
     model.eval()
     sample_labels = torch.arange(NUM_CLASSES, device=device).repeat(SAMPLES_PER_CLASS)
-    sample_context = _build_cspn_context(model, sample_labels).to(device)
     with torch.no_grad():
-        sampled_latents = model.sample(sample_context)
+        sampled_latents = model.sample(sample_labels)
 
     save_latent_umap(sampled_latents, labels=sample_labels, path="cspn.png")
 
@@ -147,11 +131,10 @@ def sample_and_visualize_cspn(
 
     # Sample one image per class
     sample_labels = torch.arange(num_classes, device=device)
-    sample_context = _build_cspn_context(model, sample_labels).to(device)
 
     with torch.no_grad():
         # Sample latents from CSPN
-        sampled_latents = model.sample(sample_context)
+        sampled_latents = model.sample(sample_labels)
         # Decode to images
         decoded_images = autoencoder.decode(sampled_latents)
 
@@ -284,10 +267,28 @@ def save_combined_latent_umap(
     from matplotlib.lines import Line2D
 
     custom_lines = [
-        Line2D([0], [0], marker="o", color="w", markerfacecolor="gray", markersize=8,
-               markeredgecolor="black", markeredgewidth=0.5, label="Autoencoder (circles)"),
-        Line2D([0], [0], marker="*", color="w", markerfacecolor="gray", markersize=15,
-               markeredgecolor="darkred", markeredgewidth=0.8, label="CSPN (stars)"),
+        Line2D(
+            [0],
+            [0],
+            marker="o",
+            color="w",
+            markerfacecolor="gray",
+            markersize=8,
+            markeredgecolor="black",
+            markeredgewidth=0.5,
+            label="Autoencoder (circles)",
+        ),
+        Line2D(
+            [0],
+            [0],
+            marker="*",
+            color="w",
+            markerfacecolor="gray",
+            markersize=15,
+            markeredgecolor="darkred",
+            markeredgewidth=0.8,
+            label="CSPN (stars)",
+        ),
     ]
     ax.legend(handles=custom_lines, loc="upper right", fontsize=10)
 
@@ -295,4 +296,3 @@ def save_combined_latent_umap(
     plt.savefig(path, dpi=150, bbox_inches="tight")
     print(f"Saved combined UMAP visualization to {path}")
     plt.close(fig)
-

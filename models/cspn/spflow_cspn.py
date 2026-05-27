@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import ABC
 
 import torch
-import torch.nn as nn
+import torch.nn.functional as F
 
 from spflow.meta import Scope
 from spflow.modules.leaves import Normal
@@ -19,14 +19,12 @@ class SPFlowCSPN(AbstractCSPN, ABC):
     def __init__(self, latent_dim: int, num_classes: int):
         super().__init__()
         self.latent_dim = latent_dim
-        self.num_classes = num_classes
+        self._num_classes = num_classes
         self.num_leaves = 10
         self.num_reps = 5
 
-        self.label_embedding = nn.Embedding(num_classes, latent_dim)
-
         self.nn = NeuralNetworkForSPFlow(
-            conditional_dim=latent_dim,
+            conditional_dim=num_classes,
             latent_dim=latent_dim,
             num_leaves=self.num_leaves,
             num_layers=3,
@@ -46,12 +44,17 @@ class SPFlowCSPN(AbstractCSPN, ABC):
             num_leaves=self.num_leaves,
         )
 
-    def forward(self, z: torch.Tensor, context: torch.Tensor) -> torch.Tensor:
-        label_emb = self.label_embedding(context)
-        loc, scale = self.nn(label_emb)
+    @property
+    def num_classes(self) -> int:
+        """Number of classes for one-hot encoding."""
+        return self._num_classes
+    def forward(self, z: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
+        # Convert labels to one-hot encoding internally
+        context = F.one_hot(labels.long(), num_classes=self.num_classes).float()
+        loc, scale = self.nn(context)
 
         log_prob = self.einet.log_likelihood(z)
         return log_prob
 
-    def sample(self, context: torch.Tensor) -> torch.Tensor:
+    def sample(self, labels: torch.Tensor) -> torch.Tensor:
         raise NotImplementedError
