@@ -2,8 +2,19 @@
 
 import torch
 import torch.nn
-from lpips import lpips
 from torch import nn
+
+
+class HybridLoss(nn.Module):
+    """Combines MSE and L1 loss: 0.5*MSE + 0.5*L1. Better detail preservation than MSE alone."""
+
+    def __init__(self):
+        super().__init__()
+        self.mse = nn.MSELoss()
+        self.l1 = nn.L1Loss()
+
+    def forward(self, recon, target):
+        return 0.5 * self.mse(recon, target) + 0.5 * self.l1(recon, target)
 
 
 def vae_loss(
@@ -14,7 +25,7 @@ def vae_loss(
     beta: float = 1.0,
     recon_loss_fn: nn.Module = nn.MSELoss(),
 ):
-    """ELBO loss: reconstruction (MSE) + β · KL divergence."""
+    """ELBO loss: reconstruction + β · KL divergence."""
     recon_loss = recon_loss_fn(recon, images)
     kl_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp()) / images.size(0)
     return recon_loss + beta * kl_loss, recon_loss, kl_loss

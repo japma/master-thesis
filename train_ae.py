@@ -11,7 +11,7 @@ from torch import nn
 from config import load_config
 from models.autoencoder import VariationalAutoencoder
 from dataset_loaders import build_data_loaders
-from losses import vae_loss
+from losses import vae_loss, HybridLoss
 from utils import seed_everything, resolve_device
 
 
@@ -74,6 +74,7 @@ def train_autoencoder(
                 images, recon, mu, logvar, recon_loss_fn=loss_fn, beta=beta
             )
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
             total_train_loss += loss.detach()
             total_train_recon += recon_loss.detach()
@@ -198,8 +199,12 @@ def main():
     )
 
     optimizer = torch.optim.Adam(ae.parameters(), lr=cfg.training.learning_rate)
+
+    loss_fn = HybridLoss()
+    # loss_fn = nn.L1Loss()
+    # loss_fn = nn.SmoothL1Loss()
     # loss_fn = lpips.LPIPS(net="vgg").to(device)
-    loss_fn = torch.nn.MSELoss()
+    # loss_fn = nn.MSELoss()
 
     train_autoencoder(
         model=ae,
