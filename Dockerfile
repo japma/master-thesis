@@ -14,5 +14,4 @@ RUN uv sync --locked --no-dev --no-install-project
 
 COPY . .
 
-ENTRYPOINT ["/opt/venv/bin/python", "main.py"]
-CMD []
+ENTRYPOINT ["/opt/venv/bin/python"]
