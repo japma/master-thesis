@@ -105,7 +105,6 @@ class VariationalAutoencoder(AbstractAutoencoder):
 
         dec_layers += [
             nn.Conv2d(base_channels, channels, kernel_size=3, stride=1, padding=1),
-            nn.Sigmoid(),
         ]
         self.decoder = nn.Sequential(*dec_layers)
 

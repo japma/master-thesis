@@ -11,7 +11,7 @@ from torch import nn
 from config import load_config
 from models.autoencoder import VariationalAutoencoder
 from dataset_loaders import build_data_loaders
-from losses import vae_loss, HybridLoss
+from losses import vae_loss
 from utils import seed_everything, resolve_device
 
 
@@ -73,6 +73,7 @@ def train_autoencoder(
             loss, recon_loss, kl_loss = vae_loss(
                 images, recon, mu, logvar, recon_loss_fn=loss_fn, beta=beta
             )
+            loss = nn.MSELoss()(recon, images)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
@@ -84,6 +85,17 @@ def train_autoencoder(
         avg_train_loss = (total_train_loss / n_train).item()
         avg_train_recon = (total_train_recon / n_train).item()
         avg_train_kl = (total_train_kl / n_train).item()
+
+        # Check for posterior collapse
+        if avg_train_kl < 0.01:
+            print(
+                f"WARNING: KL loss very small ({avg_train_kl:.6f}) - possible posterior collapse!"
+            )
+            print("   The model may be ignoring the latent space. Try reducing beta.")
+        if avg_train_recon < 0.001:
+            print(
+                f"WARNING: Reconstruction loss suspiciously low ({avg_train_recon:.6f}) - check if all images are identical"
+            )
 
         model.eval()
         total_val_loss = torch.tensor(0.0, device=device)
@@ -200,11 +212,11 @@ def main():
 
     optimizer = torch.optim.Adam(ae.parameters(), lr=cfg.training.learning_rate)
 
-    loss_fn = HybridLoss()
+    loss_fn = nn.MSELoss()
+    # loss_fn = HybridLoss()
     # loss_fn = nn.L1Loss()
     # loss_fn = nn.SmoothL1Loss()
     # loss_fn = lpips.LPIPS(net="vgg").to(device)
-    # loss_fn = nn.MSELoss()
 
     train_autoencoder(
         model=ae,
