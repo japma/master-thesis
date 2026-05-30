@@ -1,12 +1,18 @@
+"""Training entrypoint for Autoencoder (VAE)."""
+
 import torch
+import lpips
 import tqdm
+from pathlib import Path
 from rtpt import RTPT
+import wandb
 from torch import nn
 
-import wandb
-from losses import vae_loss, negative_log_likelihood_loss
-from models.autoencoder import AbstractAutoencoder
-from models.cspn import AbstractCSPN
+from config import load_config
+from models.autoencoder import VariationalAutoencoder
+from dataset_loaders import build_data_loaders
+from losses import vae_loss
+from utils import seed_everything, resolve_device
 
 
 def _beta_for_epoch(
@@ -15,6 +21,7 @@ def _beta_for_epoch(
     beta_end: float,
     anneal_epochs: int,
 ) -> float:
+    """Compute beta annealing schedule for VAE training."""
     if anneal_epochs <= 1:
         return beta_end
 
@@ -22,9 +29,8 @@ def _beta_for_epoch(
     return beta_start + progress * (beta_end - beta_start)
 
 
-
 def train_autoencoder(
-    model: AbstractAutoencoder,
+    model: VariationalAutoencoder,
     device: torch.device,
     epochs: int,
     train_loader: torch.utils.data.DataLoader,
@@ -36,11 +42,8 @@ def train_autoencoder(
     beta_anneal_epochs: int,
     rtpt: RTPT,
 ) -> None:
+    """Train the Variational Autoencoder model."""
     model.to(device)
-
-    # Enable CUDA optimizations
-    if device.type == "cuda":
-        torch.backends.cudnn.benchmark = True
 
     sample_images = next(iter(train_loader))[0][:16].to(device)
     sample_images_u8 = (sample_images.clamp(0, 1) * 255).byte().cpu()
@@ -72,7 +75,6 @@ def train_autoencoder(
             )
             loss.backward()
             optimizer.step()
-            # Accumulate without .item() to avoid GPU-CPU sync every batch
             total_train_loss += loss.detach()
             total_train_recon += recon_loss.detach()
             total_train_kl += kl_loss.detach()
@@ -134,90 +136,97 @@ def train_autoencoder(
         rtpt.step(subtitle=f"{epoch + 1}/{epochs}")
 
 
-def train_cspn(
-    model: AbstractCSPN,
-    autoencoder: AbstractAutoencoder,
-    device: torch.device,
-    epochs: int,
-    train_loader: torch.utils.data.DataLoader,
-    test_loader: torch.utils.data.DataLoader,
-    optimizer: torch.optim.Optimizer,
-    rtpt: RTPT,
-):
-    model.to(device)
-    autoencoder.to(device)
-    autoencoder.eval()
+def main():
+    """Train the autoencoder model."""
+    cfg = load_config()
 
-    # Enable CUDA optimizations
-    if device.type == "cuda":
-        torch.backends.cudnn.benchmark = True
+    seed = seed_everything(cfg.seed)
+    device = resolve_device()
+    dataset_cfg = cfg.dataset
+    dataset_name = dataset_cfg.name
+    epochs = cfg.training.epochs
+    wandb_mode = cfg.wandb
 
-    for epoch in range(epochs):
-        model.train()
-        total_train_loss = torch.tensor(0.0, device=device)
-        for images, labels in tqdm.tqdm(
-            train_loader, desc=f"Training Epoch {epoch + 1}/{epochs}"
-        ):
-            images = images.to(device, non_blocking=True)
-            labels = labels.to(device, non_blocking=True)
-            with torch.no_grad():
-                latent = autoencoder.encode(images)
+    name = f"Autoencoder_{dataset_name}_seed{seed}"
 
-            outputs = model(latent, labels)
-            loss = negative_log_likelihood_loss(outputs)
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+    print(f"Training Autoencoder on {dataset_name}")
+    print(f"Device: {device}")
+    print(f"Seed: {seed}")
 
-            total_train_loss += loss.detach()
+    input_shape = (cfg.dataset.channels, cfg.dataset.height, cfg.dataset.width)
+    ae = VariationalAutoencoder(
+        input_shape=input_shape,
+        latent_size=cfg.dataset.latent_size,
+        base_channels=cfg.autoencoder.base_channels,
+        num_blocks=cfg.autoencoder.num_blocks,
+        res_blocks=cfg.autoencoder.res_blocks,
+    )
 
-        n_train = len(train_loader)
-        avg_train_loss = (total_train_loss / n_train).item()
+    rtpt = RTPT(
+        name_initials="JM",
+        experiment_name=name,
+        max_iterations=max(epochs, 1),
+    )
+    rtpt.start()
 
-        model.eval()
-        total_val_loss = torch.tensor(0.0, device=device)
-        with torch.no_grad():
-            for images, labels in tqdm.tqdm(
-                test_loader, desc=f"Validation Epoch {epoch + 1}/{epochs}"
-            ):
-                images = images.to(device, non_blocking=True)
-                labels = labels.to(device, non_blocking=True)
-                latent = autoencoder.encode(images)
-                outputs = model(latent, labels)
-                loss = negative_log_likelihood_loss(outputs)
-                # Accumulate without .item()
-                total_val_loss += loss.detach()
+    wandb_cfg = {
+        "dataset": dataset_name,
+        "model": "Autoencoder",
+        "epochs": epochs,
+        "latent_dim": cfg.dataset.latent_size,
+        "learning_rate": cfg.training.learning_rate,
+        "beta_start": cfg.training.beta_start,
+        "beta_end": cfg.training.beta_end,
+        "beta_anneal_epochs": cfg.training.beta_anneal_epochs,
+        "seed": seed,
+        "base_channels": cfg.autoencoder.base_channels,
+        "num_blocks": cfg.autoencoder.num_blocks,
+    }
 
-        if epoch % 10 == 9 or epoch == 0:
-            num_classes = 10
-            samples_per_class = 3
-            sample_labels = torch.arange(num_classes, device=device).repeat(
-                samples_per_class
-            )
+    print("W&B Config:", wandb_cfg)
 
-            with torch.no_grad():
-                sampled_latent = model.sample(sample_labels)
-                sampled_images = autoencoder.decode(sampled_latent)
+    wandb.init(
+        entity="jmartini-tu-darmstadt",
+        project="master-thesis",
+        name=name,
+        config=wandb_cfg,
+        mode=wandb_mode,
+    )
 
-            sampled_images_u8 = (sampled_images.clamp(0, 1) * 255).byte().cpu()
-            wandb.log(
-                {
-                    "samples/cspn_generated_images": [
-                        wandb.Image(sample) for sample in sampled_images_u8
-                    ],
-                },
-                step=epoch,
-            )
+    train_loader, test_loader = build_data_loaders(
+        dataset_cfg, batch_size=cfg.training.batch_size
+    )
 
-        n_val = len(test_loader)
-        avg_val_loss = (total_val_loss / n_val).item()
+    optimizer = torch.optim.Adam(ae.parameters(), lr=cfg.training.learning_rate)
+    # loss_fn = lpips.LPIPS(net="vgg").to(device)
+    loss_fn = torch.nn.MSELoss()
 
-        wandb.log(
-            {
-                "train_loss": avg_train_loss,
-                "val_loss": avg_val_loss,
-            },
-            step=epoch,
-        )
+    train_autoencoder(
+        model=ae,
+        device=device,
+        epochs=epochs,
+        train_loader=train_loader,
+        test_loader=test_loader,
+        optimizer=optimizer,
+        loss_fn=loss_fn,
+        beta_start=cfg.training.beta_start,
+        beta_end=cfg.training.beta_end,
+        beta_anneal_epochs=cfg.training.beta_anneal_epochs,
+        rtpt=rtpt,
+    )
 
-        rtpt.step(subtitle=f"{epoch + 1}/{epochs}")
+    checkpoint_path = Path(f"checkpoints/{dataset_name}/autoencoder.pt")
+    checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+    torch.save(ae.state_dict(), checkpoint_path)
+    print(f"Checkpoint saved to {checkpoint_path}")
+
+    ae_artifact = wandb.Artifact(name=name, type="autoencoder", metadata=wandb_cfg)
+    ae_artifact.add_file(str(checkpoint_path))
+    wandb.log_artifact(ae_artifact)
+
+    wandb.finish()
+    print("Training complete!")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,5 +1,6 @@
+from models.cspn.einet import Einet
+from models.autoencoder import VariationalAutoencoder
 import lpips
-from torch import nn
 from torchinfo import summary
 
 from inference import run_cspn_inference, save_combined_latent_umap
@@ -7,20 +8,16 @@ from inference import run_ae_inference
 from pathlib import Path
 
 import torch
-from hydra import main
-from omegaconf import DictConfig
 from rtpt import RTPT
 import wandb
 from dataset_loaders import build_data_loaders
 
 from utils import seed_everything, load_checkpoint
-from utils.models import build_autoencoder, build_einet_cspn
-from utils.train import resolve_device
-from train import train_autoencoder, train_cspn
+from utils import resolve_device
 
 
-@main(version_base=None, config_path="configs", config_name="config")
-def main_hydra(cfg: DictConfig) -> None:
+def main_hydra(cfg) -> None:
+    raise NotImplementedError
     seed = seed_everything(cfg.seed)
 
     dataset_cfg = cfg.dataset
@@ -32,12 +29,28 @@ def main_hydra(cfg: DictConfig) -> None:
     wandb_mode = cfg.wandb_mode
 
     if cfg.mode == "train_ae" or cfg.mode == "train_cspn" or cfg.mode == "inference_ae":
-        ae = build_autoencoder(cfg, device)
+        ae_cfg = cfg.autoencoder
+        input_shape = (cfg.dataset.channels, cfg.dataset.height, cfg.dataset.width)
+
+        ae = VariationalAutoencoder(
+            input_shape=input_shape,
+            latent_size=cfg.dataset.latent_size,
+            base_channels=ae_cfg.base_channels,
+            num_blocks=ae_cfg.num_blocks,
+            res_blocks=ae_cfg.res_blocks,
+        )
     else:
         ae = None
 
     if cfg.mode == "train_cspn" or cfg.mode == "inference_cspn":
-        cspn = build_einet_cspn(cfg, device)
+        cspn = Einet(
+            num_vars=cfg.dataset.latent_size,
+            context_dim=cfg.dataset.num_classes,
+            num_leaves=cfg.cspn.num_leaves,
+            num_nodes=cfg.cspn.num_nodes,
+            nn_hidden_dim=cfg.cspn.nn_hidden_dim,
+            nn_num_hidden_layers=cfg.cspn.nn_num_hidden_layers,
+        )
     else:
         cspn = None
 
@@ -112,7 +125,7 @@ def main_hydra(cfg: DictConfig) -> None:
                 raise ValueError("CSPN model not initialized")
             summary(cspn)
 
-            ae_ckpt = load_checkpoint(Path(f"checkpoints/MNIST/autoencoder.pt"), device)
+            ae_ckpt = load_checkpoint(Path("checkpoints/MNIST/autoencoder.pt"), device)
             ae.load_state_dict(ae_ckpt)
             optimizer = torch.optim.Adam(
                 cspn.parameters(), lr=cfg.training.learning_rate
@@ -153,6 +166,7 @@ def main_hydra(cfg: DictConfig) -> None:
         cspn.load_state_dict(cspn_ckpt)
 
         if ae is None:
+            # TODO fix this
             ae = build_autoencoder(cfg, device)
         ae_ckpt = load_checkpoint(
             Path(f"checkpoints/{dataset_name}/autoencoder.pt"), device

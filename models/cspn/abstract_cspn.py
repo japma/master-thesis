@@ -13,11 +13,11 @@ class AbstractCSPN(nn.Module, ABC):
     probabilistic circuit libraries such as SPFlow.
     """
 
-    @abstractmethod
-    @property
-    def num_classes(self) -> int:
-        """Number of classes for which the model can condition."""
-        raise NotImplementedError
+    # @abstractmethod
+    # @property
+    # def num_classes(self) -> int:
+    #    """Number of classes for which the model can condition."""
+    #    raise NotImplementedError
 
     @abstractmethod
     def forward(self, z: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:

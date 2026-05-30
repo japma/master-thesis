@@ -9,7 +9,7 @@ import umap
 import numpy as np
 
 from models.cspn import AbstractCSPN
-from utils.visualization import save_latent_umap, _to_numpy
+from visualization.visualization import save_latent_umap, _to_numpy
 
 
 NUM_CLASSES = 10

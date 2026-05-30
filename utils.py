@@ -1,16 +1,18 @@
-"""Random seeding helpers."""
-
-from __future__ import annotations
-
 import os
 import random
-from typing import Any
+from pathlib import Path
 
 import numpy as np
 import torch
 
 
-def _normalize_seed(seed: Any) -> int:
+def load_checkpoint(load_path: Path, map_location=None):
+    if not load_path.exists():
+        raise FileNotFoundError(f"Checkpoint not found: {load_path}")
+    return torch.load(load_path, map_location=map_location, weights_only=True)
+
+
+def _normalize_seed(seed) -> int:
     if seed is None or seed == "":
         return random.SystemRandom().randint(0, 2**32 - 1)
 
@@ -28,7 +30,7 @@ def _normalize_seed(seed: Any) -> int:
     return seed_value % 2**32
 
 
-def seed_everything(seed: Any | None = None) -> int:
+def seed_everything(seed=None) -> int:
     """Seed Python, NumPy, and PyTorch RNGs.
 
     Args:
@@ -51,3 +53,11 @@ def seed_everything(seed: Any | None = None) -> int:
     torch.backends.cudnn.benchmark = False
 
     return seed_value
+
+
+def resolve_device() -> torch.device:
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    if torch.backends.mps.is_available():
+        return torch.device("mps")
+    return torch.device("cpu")

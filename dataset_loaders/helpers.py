@@ -61,7 +61,11 @@ def _load_fashion_mnist(train=True):
     )
 
 
-def _load_tinyimagenet(split="train"):
+def _load_tinyimagenet(train=True):
+    if train:
+        split = "train"
+    else:
+        split = "val"
     return TinyImageNetDataset(
         root="./data/tiny-imagenet-200",
         split=split,
@@ -72,11 +76,24 @@ def _load_tinyimagenet(split="train"):
         ),
     )
 
-# TODO fix
+
 def _load_coco(train=True):
+    if train:
+        coco_root = "./data/coco-2017/train/"
+        coco_annotatations_file = (
+            "./data/coco-2017/annotations/instances_train2017.json"
+        )
+    else:
+        coco_root = "./data/coco-2017/val/"
+        coco_annotatations_file = "./data/coco-2017/annotations/instances_val2017.json"
     return datasets.CocoCaptions(
-        annFile="./data/coco/annotations/instances_train2017.json",
-        train=train,
+        root=coco_root,
+        annFile=coco_annotatations_file,
+        transform=transforms.Compose(
+            [
+                transforms.ToTensor(),
+            ]
+        ),
     )
 
 
@@ -86,23 +103,16 @@ _DATASETS = {
     "FashionMNIST": _load_fashion_mnist,
     "CIFAR10": _load_cifar10,
     "TinyImageNet": _load_tinyimagenet,
+    "COCO": _load_coco,
 }
 
 
-def _build_data_sets(cfg):
+def build_data_loaders(cfg, batch_size=32) -> tuple[DataLoader, DataLoader]:
     loader_fn = _DATASETS.get(cfg.name)
     if loader_fn is None:
         raise ValueError(f"Unsupported dataset '{cfg.name}'")
-
-    # TinyImageNet uses 'split' parameter instead of 'train'
-    if cfg.name == "TinyImageNet":
-        return loader_fn(split="train"), loader_fn(split="val")
-    else:
-        return loader_fn(train=True), loader_fn(train=False)
-
-
-def build_data_loaders(cfg, batch_size=32) -> tuple[DataLoader, DataLoader, tuple]:
-    train_dataset, test_dataset = _build_data_sets(cfg)
+    train_dataset = loader_fn(train=True)
+    test_dataset = loader_fn(train=False)
 
     max_workers = os.cpu_count()
     if max_workers is None:
@@ -129,4 +139,4 @@ def build_data_loaders(cfg, batch_size=32) -> tuple[DataLoader, DataLoader, tupl
         drop_last=True,
     )
 
-    return train_loader, test_loader, (train_dataset, test_dataset)
+    return train_loader, test_loader
