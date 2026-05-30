@@ -90,7 +90,7 @@ class VariationalAutoencoder(AbstractAutoencoder):
         dec_layers = []
         for i in range(num_blocks - 1, -1, -1):
             ch_in = base_channels * (2**i)
-            ch_out = base_channels * (2 ** (i - 1)) if i > 0 else base_channels
+            ch_out = base_channels * (2 ** (i - 1)) if i > 0 else channels
 
             for _ in range(res_blocks):
                 dec_layers.append(ResBlock(ch_in))
@@ -103,9 +103,6 @@ class VariationalAutoencoder(AbstractAutoencoder):
                 nn.ReLU(inplace=True),
             ]
 
-        dec_layers += [
-            nn.Conv2d(base_channels, channels, kernel_size=3, stride=1, padding=1),
-        ]
         self.decoder = nn.Sequential(*dec_layers)
 
     def encode_distribution(self, x):

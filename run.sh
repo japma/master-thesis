@@ -1,2 +1,2 @@
 #!/bin/bash
-podman run --rm --env-file .env --device nvidia.com/gpu=all -v ./:/app localhost/master-thesis-jm:latest "$@"
+podman run --rm --env-file .env --shm-size=8g --device nvidia.com/gpu=all -v ./:/app localhost/master-thesis-jm:latest "$@"

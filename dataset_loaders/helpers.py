@@ -2,11 +2,13 @@
 
 import os
 
+import torch
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 
 from .binarymnist import BinaryMNISTDataset
 from .tinyimagenet import TinyImageNetDataset
+from .coco import CocoDataset
 
 
 def _load_mnist(train=True):
@@ -78,19 +80,16 @@ def _load_tinyimagenet(train=True):
 
 
 def _load_coco(train=True):
-    if train:
-        coco_root = "./data/coco-2017/train/"
-        coco_annotatations_file = (
-            "./data/coco-2017/annotations/instances_train2017.json"
-        )
-    else:
-        coco_root = "./data/coco-2017/val/"
-        coco_annotatations_file = "./data/coco-2017/annotations/instances_val2017.json"
-    return datasets.CocoCaptions(
-        root=coco_root,
-        annFile=coco_annotatations_file,
+    root = f"./data/coco-2017/{'train' if train else 'val'}/"
+    ann_file = (
+        f"./data/coco-2017/annotations/instances_{'train' if train else 'val'}2017.json"
+    )
+    return CocoDataset(
+        root=root,
+        ann_file=ann_file,
         transform=transforms.Compose(
             [
+                transforms.Resize((128, 128)),
                 transforms.ToTensor(),
             ]
         ),
@@ -123,7 +122,7 @@ def build_data_loaders(cfg, batch_size=32) -> tuple[DataLoader, DataLoader]:
     train_loader = DataLoader(
         train_dataset,
         num_workers=max_workers,
-        pin_memory=True,
+        pin_memory=torch.cuda.is_available(),
         batch_size=batch_size,
         shuffle=True,
         persistent_workers=True,
@@ -132,7 +131,7 @@ def build_data_loaders(cfg, batch_size=32) -> tuple[DataLoader, DataLoader]:
     test_loader = DataLoader(
         test_dataset,
         num_workers=max_workers,
-        pin_memory=True,
+        pin_memory=torch.cuda.is_available(),
         batch_size=batch_size,
         shuffle=True,
         persistent_workers=True,
