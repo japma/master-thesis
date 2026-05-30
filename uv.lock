@@ -1294,7 +1294,6 @@ dependencies = [
     { name = "pycocotools" },
     { name = "pyyaml" },
     { name = "rtpt" },
-    { name = "ruff" },
     { name = "spflow" },
     { name = "torch" },
     { name = "torchinfo" },
@@ -1312,7 +1311,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "fiftyone", specifier = "==1.16.0" },
+    { name = "fiftyone", specifier = ">=1.16.0" },
     { name = "lpips", specifier = ">=0.1.4" },
     { name = "matplotlib", specifier = ">=3.10.9" },
     { name = "numpy", specifier = ">=2.4.6" },
@@ -1320,7 +1319,6 @@ requires-dist = [
     { name = "pycocotools", specifier = "==2.0.11" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "rtpt", specifier = ">=0.0.4" },
-    { name = "ruff", specifier = "==0.15.15" },
     { name = "spflow", specifier = ">=1.1.0" },
     { name = "torch", specifier = ">=2.12.0" },
     { name = "torchinfo", specifier = ">=1.8.0" },
@@ -1333,7 +1331,7 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "pyrefly", specifier = ">=1.0.0" },
-    { name = "ruff", specifier = ">=0.15.12" },
+    { name = "ruff", specifier = ">=0.15.15" },
 ]
 
 [[package]]
