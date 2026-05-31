@@ -1,5 +1,6 @@
 """COCO dataset with primary category label for CSPN conditioning."""
 
+import json
 from collections import Counter
 from pathlib import Path
 
@@ -63,3 +64,35 @@ class CocoDataset(Dataset):
             image = self.transform(image)
         label = self._primary_label(img_id)
         return image, label
+
+
+class CocoCachedDataset(Dataset):
+    def __init__(self, root, split="train", transform=None):
+        self.root = Path(root)
+        self.split = split
+        self.transform = transform
+
+        meta_file = self.root / f"meta_{split}.json"
+        if not meta_file.exists():
+            raise FileNotFoundError(f"Metadata file not found: {meta_file}")
+
+        with meta_file.open() as f:
+            meta = json.load(f)
+
+        self.samples = [
+            (self.root / split / v["file"], v["label"]) for v in meta.values()
+        ]
+
+    @property
+    def num_classes(self):
+        return 80
+
+    def __len__(self):
+        return len(self.samples)
+
+    def __getitem__(self, index):
+        path, label = self.samples[index]
+        tensor = torch.load(path, weights_only=True)
+        if self.transform is not None:
+            tensor = self.transform(tensor)
+        return tensor, label

@@ -8,7 +8,7 @@ from torchvision import datasets, transforms
 
 from .binarymnist import BinaryMNISTDataset
 from .tinyimagenet import TinyImageNetDataset
-from .coco import CocoDataset
+from .coco import CocoDataset, CocoCachedDataset
 
 
 def _load_mnist(train=True):
@@ -96,6 +96,15 @@ def _load_coco(train=True):
     )
 
 
+def _load_coco_cached(train=True):
+    split = "train" if train else "val"
+    return CocoCachedDataset(
+        root="./data/coco-cached",
+        split=split,
+        transform=None,
+    )
+
+
 _DATASETS = {
     "MNIST": _load_mnist,
     "BinaryMNIST": _load_binary_mnist,
@@ -103,6 +112,7 @@ _DATASETS = {
     "CIFAR10": _load_cifar10,
     "TinyImageNet": _load_tinyimagenet,
     "COCO": _load_coco,
+    "COCOCached": _load_coco_cached,
 }
 
 
