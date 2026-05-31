@@ -9,12 +9,12 @@ import json
 import os
 from collections import Counter
 from multiprocessing import Pool, cpu_count
-from pathlib import Path
 
 import torch
 import torchvision.transforms.functional as F
 from PIL import Image
 from pycocotools.coco import COCO
+from rtpt import RTPT
 from tqdm import tqdm
 
 
@@ -42,10 +42,9 @@ def _process_image(args):
 
     try:
         img = Image.open(image_path).convert("RGB")
-
-        img_resized = F.resize(img, (TARGET_SIZE, TARGET_SIZE))
-        tensor = F.to_tensor(img_resized)
-        torch.save(tensor.float(), output_path)
+        tensor = F.to_tensor(img)
+        tensor_resized = F.resize(tensor, [TARGET_SIZE, TARGET_SIZE])
+        torch.save(tensor_resized.float(), output_path)
         return image_id
     except Exception as e:
         print(f"Error processing image {image_id}: {e}")
@@ -133,6 +132,13 @@ def get_all_images():
 
 
 def main():
+    rtpt = RTPT(
+        name_initials="JM",
+        experiment_name="COCO Preprocessing",
+        max_iterations=1,
+    )
+    rtpt.start()
+
     os.makedirs(TRAIN_OUTPUT_DIR, exist_ok=True)
     os.makedirs(VAL_OUTPUT_DIR, exist_ok=True)
 
@@ -160,14 +166,22 @@ def main():
     ]
 
     print(f"Processing images with {NUM_WORKERS} workers...")
+
+    rtpt.max_iterations = len(tasks)
+
     with Pool(NUM_WORKERS) as pool:
-        results = list(
+        results = []
+        for idx, result in enumerate(
             tqdm(
                 pool.imap_unordered(_process_image, tasks),
                 total=len(tasks),
                 desc="Processing images",
             )
-        )
+        ):
+            results.append(result)
+            # Update progress every 100 images or at the end
+            if (idx + 1) % 100 == 0 or (idx + 1) == len(tasks):
+                rtpt.step(subtitle=f"Processed {idx + 1}/{len(tasks)} images")
 
     processed = sum(1 for r in results if r is not None)
     print(f"\nSuccessfully processed {processed} images")
