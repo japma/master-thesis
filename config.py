@@ -1,10 +1,12 @@
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import argparse
 from typing import Literal
 
 import yaml
+
+from models.autoencoder import AutoencoderType
 
 
 @dataclass
@@ -19,6 +21,7 @@ class DatasetConfig:
 
 @dataclass
 class AutoencoderConfig:
+    model_type: AutoencoderType = AutoencoderType.VARIATIONAL
     base_channels: int = 32
     num_blocks: int = 2
     res_blocks: bool = False
@@ -72,7 +75,11 @@ def load_config():
         dataset = DatasetConfig(**yaml.safe_load(f))
 
     with open(autoencoder_config) as f:
-        autoencoder = AutoencoderConfig(**yaml.safe_load(f))
+        ae_config_dict = yaml.safe_load(f)
+        # Convert model_type string to enum if present
+        if "model_type" in ae_config_dict:
+            ae_config_dict["model_type"] = AutoencoderType(ae_config_dict["model_type"])
+        autoencoder = AutoencoderConfig(**ae_config_dict)
 
     with open(cspn_config) as f:
         cspn = CSPNConfig(**yaml.safe_load(f))

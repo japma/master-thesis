@@ -4,10 +4,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .abstract_autoencoder import AbstractAutoencoder
+from .abstract_autoencoder import AbstractAutoencoder, AutoencoderForwardOutput
 
 
-def reparameterize(mu, logvar):
+def reparameterize(mu: torch.Tensor, logvar: torch.Tensor) -> torch.Tensor:
     """Sample latent using reparameterization trick."""
     std = torch.exp(0.5 * logvar)
     eps = torch.randn_like(std)
@@ -27,7 +27,7 @@ class ResBlock(nn.Module):
             nn.BatchNorm2d(channels),
         )
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return F.relu(x + self.block(x), inplace=True)
 
 
@@ -105,7 +105,7 @@ class VariationalAutoencoder(AbstractAutoencoder):
 
         self.decoder = nn.Sequential(*dec_layers)
 
-    def encode_distribution(self, x):
+    def encode_distribution(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Return mean and log-variance of q(z|x)."""
         features = self.encoder(x)
         flat = features.view(features.size(0), -1)
@@ -113,18 +113,18 @@ class VariationalAutoencoder(AbstractAutoencoder):
         logvar = self.logvar_head(flat).clamp(-10, 10)  # prevent KL overflow
         return mu, logvar
 
-    def encode(self, x):
+    def encode(self, x: torch.Tensor) -> torch.Tensor:
         """Encode to a deterministic latent representation (returns µ)."""
         mu, _ = self.encode_distribution(x)
         return mu
 
-    def decode(self, latent):
+    def decode(self, z: torch.Tensor) -> torch.Tensor:
         """Decode a latent vector to an image."""
-        decoded = self.decoder_input(latent)
-        decoded = decoded.view(latent.size(0), *self.encoded_shape)
+        decoded = self.decoder_input(z)
+        decoded = decoded.view(z.size(0), *self.encoded_shape)
         return self.decoder(decoded)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> AutoencoderForwardOutput:
         """Full forward pass. Returns (reconstruction, µ, log σ²)."""
         mu, logvar = self.encode_distribution(x)
         z = reparameterize(mu, logvar)

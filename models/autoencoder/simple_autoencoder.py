@@ -1,5 +1,6 @@
 """Autoencoder model for unsupervised learning."""
 
+import torch
 import torch.nn as nn
 
 from .abstract_autoencoder import AbstractAutoencoder
@@ -28,13 +29,8 @@ class SimpleAutoencoder(AbstractAutoencoder):
             nn.Sigmoid(),
         )
 
-    def forward(self, x):
-        latent = self.encoder(x)
-        reconstructed = self.decoder(latent)
-        return reconstructed
-
-    def encode(self, x):
+    def encode(self, x: torch.Tensor) -> torch.Tensor:
         return self.encoder(x)
 
-    def decode(self, latent):
-        return self.decoder(latent)
+    def decode(self, z: torch.Tensor) -> torch.Tensor:
+        return self.encoder(z)

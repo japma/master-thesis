@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from config import load_config
-from models.autoencoder import VariationalAutoencoder
+from models.autoencoder import create_autoencoder
 from models.cspn.einet import Einet
 from dataset_loaders import build_data_loaders
 from inference import (
@@ -30,7 +30,8 @@ def main():
 
     # Initialize autoencoder
     input_shape = (cfg.dataset.channels, cfg.dataset.height, cfg.dataset.width)
-    ae = VariationalAutoencoder(
+    ae = create_autoencoder(
+        model_type=cfg.autoencoder.model_type,
         input_shape=input_shape,
         latent_size=cfg.dataset.latent_size,
         base_channels=cfg.autoencoder.base_channels,
@@ -45,8 +46,8 @@ def main():
             f"Autoencoder checkpoint not found at {ae_ckpt_path}. "
             f"Please train the autoencoder first: python train_ae.py dataset={dataset_name}"
         )
-    ae_ckpt = load_checkpoint(ae_ckpt_path, device)
-    ae.load_state_dict(ae_ckpt)
+    # ae_ckpt = load_checkpoint(ae_ckpt_path, device)
+    # ae.load_state_dict(ae_ckpt)
     print(f"Loaded autoencoder from {ae_ckpt_path}")
 
     # Initialize CSPN model
@@ -71,12 +72,11 @@ def main():
     print(f"Loaded CSPN from {cspn_ckpt_path}")
 
     # Load data
-    _, test_loader = build_data_loaders(
-        dataset_cfg, batch_size=cfg.training.batch_size
-    )
+    _, test_loader = build_data_loaders(dataset_cfg, batch_size=cfg.training.batch_size)
 
     # Load test dataset separately to get class_names if available
     from dataset_loaders.helpers import _DATASETS
+
     loader_fn = _DATASETS.get(dataset_cfg.name)
     if loader_fn is None:
         raise ValueError(f"Unsupported dataset '{dataset_cfg.name}'")
@@ -115,7 +115,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-

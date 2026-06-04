@@ -1,5 +1,6 @@
 """Training entrypoint for CSPN."""
 
+from models.autoencoder import AutoencoderType, TinyAutoencoderWrapper
 import torch
 import tqdm
 from pathlib import Path
@@ -117,23 +118,7 @@ def main():
     print(f"Device: {device}")
     print(f"Seed: {seed}")
 
-    input_shape = (cfg.dataset.channels, cfg.dataset.height, cfg.dataset.width)
-    ae = create_autoencoder(
-        model_type=cfg.autoencoder.model_type,
-        input_shape=input_shape,
-        latent_size=cfg.dataset.latent_size,
-        device=device,
-        base_channels=cfg.autoencoder.base_channels,
-        num_blocks=cfg.autoencoder.num_blocks,
-        res_blocks=cfg.autoencoder.res_blocks,
-    )
-
-    ae_ckpt_path = Path(f"checkpoints/{dataset_name}/autoencoder.pt")
-    if not ae_ckpt_path.exists():
-        raise FileNotFoundError(f"Autoencoder checkpoint not found at {ae_ckpt_path}. ")
-    ae_ckpt = load_checkpoint(ae_ckpt_path, device)
-    ae.load_state_dict(ae_ckpt)
-    print(f"Loaded autoencoder from {ae_ckpt_path}")
+    ae = TinyAutoencoderWrapper()
 
     cspn = Einet(
         num_vars=cfg.dataset.latent_size,

@@ -105,6 +105,20 @@ def _load_coco_cached(train=True):
     )
 
 
+def _load_flowers102(train=True):
+    return datasets.Flowers102(
+        root="./data",
+        split="train" if train else "test",
+        download=True,
+        transform=transforms.Compose(
+            [
+                transforms.Resize((128, 128)),
+                transforms.ToTensor(),
+            ]
+        ),
+    )
+
+
 _DATASETS = {
     "MNIST": _load_mnist,
     "BinaryMNIST": _load_binary_mnist,
@@ -113,6 +127,7 @@ _DATASETS = {
     "TinyImageNet": _load_tinyimagenet,
     "COCO": _load_coco,
     "COCOCached": _load_coco_cached,
+    "Flowers102": _load_flowers102,
 }
 
 
@@ -127,11 +142,12 @@ def build_data_loaders(cfg, batch_size=32) -> tuple[DataLoader, DataLoader]:
     if max_workers is None:
         max_workers = 8
     else:
-        max_workers = max_workers // 2
+        max_workers = max_workers - 2
 
     train_loader = DataLoader(
         train_dataset,
         num_workers=max_workers,
+        prefetch_factor=4,
         pin_memory=torch.cuda.is_available(),
         batch_size=batch_size,
         shuffle=True,
@@ -141,6 +157,7 @@ def build_data_loaders(cfg, batch_size=32) -> tuple[DataLoader, DataLoader]:
     test_loader = DataLoader(
         test_dataset,
         num_workers=max_workers,
+        prefetch_factor=4,
         pin_memory=torch.cuda.is_available(),
         batch_size=batch_size,
         shuffle=True,

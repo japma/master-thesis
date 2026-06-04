@@ -1,7 +1,6 @@
 """Training entrypoint for Autoencoder (VAE)."""
 
 import torch
-import lpips
 import tqdm
 from pathlib import Path
 from rtpt import RTPT
@@ -9,7 +8,7 @@ import wandb
 from torch import nn
 
 from config import load_config
-from models.autoencoder import VariationalAutoencoder
+from models.autoencoder import create_autoencoder, AbstractAutoencoder
 from dataset_loaders import build_data_loaders
 from losses import vae_loss
 from utils import seed_everything, resolve_device
@@ -30,7 +29,7 @@ def _beta_for_epoch(
 
 
 def train_autoencoder(
-    model: VariationalAutoencoder,
+    model: AbstractAutoencoder,
     device: torch.device,
     epochs: int,
     train_loader: torch.utils.data.DataLoader,
@@ -167,9 +166,11 @@ def main():
     print(f"Seed: {seed}")
 
     input_shape = (cfg.dataset.channels, cfg.dataset.height, cfg.dataset.width)
-    ae = VariationalAutoencoder(
+    ae = create_autoencoder(
+        model_type=cfg.autoencoder.model_type,
         input_shape=input_shape,
         latent_size=cfg.dataset.latent_size,
+        device=device,
         base_channels=cfg.autoencoder.base_channels,
         num_blocks=cfg.autoencoder.num_blocks,
         res_blocks=cfg.autoencoder.res_blocks,
@@ -185,6 +186,7 @@ def main():
     wandb_cfg = {
         "dataset": dataset_name,
         "model": "Autoencoder",
+        "model_type": str(cfg.autoencoder.model_type),
         "epochs": epochs,
         "latent_dim": cfg.dataset.latent_size,
         "learning_rate": cfg.training.learning_rate,
