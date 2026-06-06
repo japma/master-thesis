@@ -25,3 +25,7 @@ class AbstractAutoencoder(nn.Module, ABC):
         latent = self.encode(x)
         reconstructed = self.decode(latent)
         return reconstructed
+
+    @abstractmethod
+    def get_config(self) -> dict:
+        pass

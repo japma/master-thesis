@@ -38,9 +38,13 @@ class VariationalAutoencoder(AbstractAutoencoder):
         super().__init__()
         self.input_shape = input_shape
         self.latent_size = latent_size
+        self.base_channels = base_channels
+        self.num_blocks = num_blocks
+        self.res_blocks = res_blocks
 
         channels, height, width = input_shape
 
+        # --- Encoder ---
         enc_layers = []
         ch_in = channels
         for i in range(num_blocks):
@@ -70,6 +74,7 @@ class VariationalAutoencoder(AbstractAutoencoder):
 
         self.decoder_input = nn.Linear(latent_size, self.encoded_flat_dim)
 
+        # --- Decoder ---
         dec_layers = []
         for i in range(num_blocks - 1, -1, -1):
             ch_in = base_channels * (2**i)
@@ -109,3 +114,13 @@ class VariationalAutoencoder(AbstractAutoencoder):
         z = reparameterize(mu, logvar)
         recon = self.decode(z)
         return recon, mu, logvar
+
+    def get_config(self) -> dict:
+        return {
+            "model_type": "variational",
+            "input_shape": self.input_shape,
+            "latent_size": self.latent_size,
+            "base_channels": self.base_channels,
+            "num_blocks": self.num_blocks,
+            "res_blocks": self.res_blocks,
+        }

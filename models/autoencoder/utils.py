@@ -17,16 +17,9 @@ class AutoencoderType(Enum):
         return self.value
 
 
-def load_autencoder(
-    model_type: AutoencoderType,
-    path: str | None = None,
-    name: str = "madebyollin/taesd",
-) -> AbstractAutoencoder:
-    if model_type == AutoencoderType.SIMPLE:
-        return SimpleAutoencoder()
-    elif model_type == AutoencoderType.VARIATIONAL:
-        return VariationalAutoencoder()
-    elif model_type == AutoencoderType.TINY:
-        return TinyAutoencoderWrapper(name=name)
-    else:
-        raise ValueError(f"Unsupported autoencoder type: {model_type}")
+def load_pretrained_model(model_path: str, device: torch.device) -> AbstractAutoencoder:
+    pass
+
+
+def create_autoencoder() -> AbstractAutoencoder:
+    pass

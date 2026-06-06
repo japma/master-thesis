@@ -34,3 +34,10 @@ class SimpleAutoencoder(AbstractAutoencoder):
 
     def decode(self, z: torch.Tensor) -> torch.Tensor:
         return self.encoder(z)
+
+    def get_config(self):
+        return {
+            "model_type": "simple",
+            "input_size": self.input_size,
+            "latent_size": self.latent_size,
+        }
