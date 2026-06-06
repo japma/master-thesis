@@ -1,15 +1,15 @@
 """Entry point for CSPN training."""
 
+from models.autoencoder import AutoencoderType
 from pathlib import Path
 
 import torch
 import wandb
 from rtpt import RTPT
 
+from models.autoencoder.utils import load_pretrained_autoencoder
 from utils.config import load_config
 from utils.reproducibility import seed_everything, resolve_device
-from utils.checkpoints import load_checkpoint
-from models.autoencoder import create_autoencoder
 from models.cspn.einet import Einet
 from dataset_loaders import build_data_loaders
 from training.train_cspn import train_cspn
@@ -27,15 +27,9 @@ def main():
     print(f"Training CSPN on {dataset_name} | device={device} | seed={seed}")
 
     input_shape = (cfg.dataset.channels, cfg.dataset.height, cfg.dataset.width)
-    ae = create_autoencoder(
-        model_type=cfg.autoencoder.model_type,
-        input_shape=input_shape,
-        latent_size=cfg.dataset.latent_size,
-        device=device,
-        base_channels=cfg.autoencoder.base_channels,
-        num_blocks=cfg.autoencoder.num_blocks,
-        res_blocks=cfg.autoencoder.res_blocks,
-    )
+
+    # TODO fix loading
+    ae = load_pretrained_autoencoder("test", AutoencoderType.VARIATIONAL)
     ae_ckpt = load_checkpoint(
         Path(f"checkpoints/{dataset_name}/autoencoder.pt"), device
     )

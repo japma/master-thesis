@@ -156,3 +156,6 @@ class Einet(AbstractCSPN):
         std_sel = (0.5 * logvar.gather(dim=2, index=sel_leaf)).exp().squeeze(2)
 
         return torch.normal(mu_sel, std_sel)  # (N, num_vars)
+
+    def get_config(self):
+        return {}
