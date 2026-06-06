@@ -1,6 +1,8 @@
 """Factory for creating autoencoder models."""
 
 from enum import Enum
+
+import diffusers
 import torch
 from .abstract_autoencoder import AbstractAutoencoder
 from .simple_autoencoder import SimpleAutoencoder
@@ -17,8 +19,15 @@ class AutoencoderType(Enum):
         return self.value
 
 
-def load_pretrained_model(model_path: str, device: torch.device) -> AbstractAutoencoder:
-    pass
+def load_pretrained_autoencoder(model: str, type: AutoencoderType) -> AbstractAutoencoder:
+    if type == AutoencoderType.SIMPLE:
+        pass
+    elif type == AutoencoderType.VARIATIONAL:
+        pass
+    elif type == AutoencoderType.TINY:
+        return TinyAutoencoderWrapper(model)
+    else:
+        raise ValueError(f"Unsupported autoencoder type: {type}")
 
 
 def create_autoencoder() -> AbstractAutoencoder:

@@ -9,6 +9,7 @@ from models.autoencoder import AbstractAutoencoder
 class TinyAutoencoderWrapper(AbstractAutoencoder, ABC):
     def __init__(self, name: str = "madebyollin/taesd"):
         super().__init__()
+        self.name = name
         self.vae = AutoencoderTiny.from_pretrained(name)
 
     def encode(self, x: torch.Tensor) -> torch.Tensor:
@@ -20,3 +21,9 @@ class TinyAutoencoderWrapper(AbstractAutoencoder, ABC):
         with torch.no_grad():
             recon = self.vae.decode(z)
             return recon.sample
+
+    def get_config(self) -> dict:
+        return {
+            "model_type": "tiny",
+            "name": self.name,
+        }
