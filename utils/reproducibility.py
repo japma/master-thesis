@@ -1,15 +1,8 @@
 import os
 import random
-from pathlib import Path
 
 import numpy as np
 import torch
-
-
-def load_checkpoint(load_path: Path, map_location=None):
-    if not load_path.exists():
-        raise FileNotFoundError(f"Checkpoint not found: {load_path}")
-    return torch.load(load_path, map_location=map_location, weights_only=True)
 
 
 def _normalize_seed(seed) -> int:
@@ -31,14 +24,6 @@ def _normalize_seed(seed) -> int:
 
 
 def seed_everything(seed=None) -> int:
-    """Seed Python, NumPy, and PyTorch RNGs.
-
-    Args:
-        seed: Seed to use. If None, a random seed is generated.
-
-    Returns:
-        The seed that was applied.
-    """
     seed_value = _normalize_seed(seed)
 
     os.environ["PYTHONHASHSEED"] = str(seed_value)

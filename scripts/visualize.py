@@ -6,7 +6,7 @@ from utils.config import load_config
 from models.autoencoder import create_autoencoder
 from models.cspn.einet import Einet
 from dataset_loaders import build_data_loaders
-from visualization.inference import (
+from scripts.visualization.inference import (
     run_ae_inference,
     run_cspn_inference,
     save_combined_latent_umap,

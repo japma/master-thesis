@@ -12,7 +12,7 @@ from models.autoencoder import create_autoencoder, AbstractAutoencoder
 from models.cspn import AbstractCSPN
 from models.cspn.einet import Einet
 from dataset_loaders import build_data_loaders
-from losses import negative_log_likelihood_loss
+from training.losses import negative_log_likelihood_loss
 from utils import seed_everything, resolve_device, load_checkpoint
 
 
