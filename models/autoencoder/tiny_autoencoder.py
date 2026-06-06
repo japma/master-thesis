@@ -7,9 +7,9 @@ from models.autoencoder import AbstractAutoencoder
 
 
 class TinyAutoencoderWrapper(AbstractAutoencoder, ABC):
-    def __init__(self):
+    def __init__(self, name: str = "madebyollin/taesd"):
         super().__init__()
-        self.vae = AutoencoderTiny.from_pretrained("madebyollin/taesd")
+        self.vae = AutoencoderTiny.from_pretrained(name)
 
     def encode(self, x: torch.Tensor) -> torch.Tensor:
         with torch.no_grad():
@@ -18,4 +18,5 @@ class TinyAutoencoderWrapper(AbstractAutoencoder, ABC):
 
     def decode(self, z: torch.Tensor) -> torch.Tensor:
         with torch.no_grad():
-            return self.vae.decode(z)
+            recon = self.vae.decode(z)
+            return recon.sample

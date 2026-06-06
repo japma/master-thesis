@@ -1,5 +1,3 @@
-"""Tiny ImageNet dataset utilities."""
-
 from pathlib import Path
 
 from PIL import Image
@@ -7,11 +5,6 @@ from torch.utils.data import Dataset
 
 
 class TinyImageNetDataset(Dataset):
-    """Local Tiny ImageNet dataset.
-
-    Expected structure is the standard tiny-imagenet-200 folder layout.
-    """
-
     def __init__(self, root, split, transform=None):
         self.root = Path(root)
         self.split = split

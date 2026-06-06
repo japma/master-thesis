@@ -1,5 +1,3 @@
-"""Dataset and dataset loader helpers."""
-
 import os
 
 import torch

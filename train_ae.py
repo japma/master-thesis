@@ -7,11 +7,11 @@ from rtpt import RTPT
 import wandb
 from torch import nn
 
-from config import load_config
+from utils.config import load_config
 from models.autoencoder import create_autoencoder, AbstractAutoencoder
 from dataset_loaders import build_data_loaders
 from losses import vae_loss
-from utils import seed_everything, resolve_device
+from utils.utils import seed_everything, resolve_device
 
 
 def _beta_for_epoch(

@@ -1,17 +1,8 @@
-"""Binary MNIST dataset utilities."""
-
 from torch.utils.data import Dataset
 from torchvision import datasets
 
 
 class BinaryMNISTDataset(Dataset):
-    """MNIST wrapper that maps digits to even/odd classes.
-
-    Class mapping:
-        0 -> even
-        1 -> odd
-    """
-
     classes = ("even", "odd")
 
     def __init__(self, root, train=True, download=True, transform=None):
@@ -36,5 +27,3 @@ class BinaryMNISTDataset(Dataset):
         image, target = self.dataset[index]
         binary_target = int(target) % 2
         return image, binary_target
-
-

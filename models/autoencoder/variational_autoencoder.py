@@ -1,5 +1,3 @@
-"""Variational autoencoder model."""
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -8,15 +6,12 @@ from .abstract_autoencoder import AbstractAutoencoder, AutoencoderForwardOutput
 
 
 def reparameterize(mu: torch.Tensor, logvar: torch.Tensor) -> torch.Tensor:
-    """Sample latent using reparameterization trick."""
     std = torch.exp(0.5 * logvar)
     eps = torch.randn_like(std)
     return mu + eps * std
 
 
 class ResBlock(nn.Module):
-    """Residual block with two 3x3 convolutions and a skip connection."""
-
     def __init__(self, channels):
         super().__init__()
         self.block = nn.Sequential(
@@ -32,18 +27,6 @@ class ResBlock(nn.Module):
 
 
 class VariationalAutoencoder(AbstractAutoencoder):
-    """
-    VAE with Gaussian latent space, convolutional encoder/decoder,
-    residual blocks, and BatchNorm throughout.
-
-    Args:
-        input_shape:   (C, H, W) of the input images.
-        latent_size:   Dimensionality of the latent space z.
-        base_channels: Channel width of the first conv layer; doubles each stride-2 block.
-        num_blocks:    Number of stride-2 downsampling blocks (encoder depth).
-        res_blocks:    Number of residual blocks inserted between each stride-2 block.
-    """
-
     def __init__(
         self,
         input_shape,
@@ -106,7 +89,6 @@ class VariationalAutoencoder(AbstractAutoencoder):
         self.decoder = nn.Sequential(*dec_layers)
 
     def encode_distribution(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        """Return mean and log-variance of q(z|x)."""
         features = self.encoder(x)
         flat = features.view(features.size(0), -1)
         mu = self.mu_head(flat)
@@ -114,18 +96,15 @@ class VariationalAutoencoder(AbstractAutoencoder):
         return mu, logvar
 
     def encode(self, x: torch.Tensor) -> torch.Tensor:
-        """Encode to a deterministic latent representation (returns µ)."""
         mu, _ = self.encode_distribution(x)
         return mu
 
     def decode(self, z: torch.Tensor) -> torch.Tensor:
-        """Decode a latent vector to an image."""
         decoded = self.decoder_input(z)
         decoded = decoded.view(z.size(0), *self.encoded_shape)
         return self.decoder(decoded)
 
     def forward(self, x: torch.Tensor) -> AutoencoderForwardOutput:
-        """Full forward pass. Returns (reconstruction, µ, log σ²)."""
         mu, logvar = self.encode_distribution(x)
         z = reparameterize(mu, logvar)
         recon = self.decode(z)

@@ -2,11 +2,11 @@
 
 from pathlib import Path
 
-from config import load_config
+from utils.config import load_config
 from models.autoencoder import create_autoencoder
 from models.cspn.einet import Einet
 from dataset_loaders import build_data_loaders
-from inference import (
+from visualization.inference import (
     run_ae_inference,
     run_cspn_inference,
     save_combined_latent_umap,

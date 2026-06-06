@@ -4,7 +4,7 @@ from .abstract_autoencoder import AbstractAutoencoder
 from .simple_autoencoder import SimpleAutoencoder
 from .variational_autoencoder import VariationalAutoencoder
 from .tiny_autoencoder import TinyAutoencoderWrapper
-from .factory import AutoencoderType, create_autoencoder
+from .utils import AutoencoderType, create_autoencoder
 
 __all__ = [
     "AbstractAutoencoder",

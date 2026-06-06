@@ -7,7 +7,7 @@ from rtpt import RTPT
 from torchinfo import summary
 import wandb
 
-from config import load_config
+from utils.config import load_config
 from models.autoencoder import create_autoencoder, AbstractAutoencoder
 from models.cspn import AbstractCSPN
 from models.cspn.einet import Einet
