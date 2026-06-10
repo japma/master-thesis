@@ -120,7 +120,7 @@ class VariationalAutoencoder(AbstractAutoencoder):
         return {
             "model_type": "variational",
             "input_shape": self.input_shape,
-            "latent_size": self.latent_dim,
+            "latent_dim": self.latent_dim,
             "base_channels": self.base_channels,
             "num_blocks": self.num_blocks,
             "res_blocks": self.res_blocks,

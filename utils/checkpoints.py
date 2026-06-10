@@ -1,6 +1,6 @@
 from pathlib import Path
 import torch
-from models.autoencoder import AbstractAutoencoder
+from models.autoencoder import AbstractAutoencoder, VariationalAutoencoder
 from models.cspn import AbstractCSPN
 
 
@@ -16,10 +16,23 @@ def save_autoencoder(model: AbstractAutoencoder, path: Path) -> None:
     print("Saved autoencoder checkpoint to", path)
 
 
-# TODO fix this
+def _create_autoencoder_from_checkpoint(cfg: dict) -> AbstractAutoencoder:
+    if cfg["model_type"] == "variational":
+        return VariationalAutoencoder(
+            input_shape=cfg["input_shape"],
+            latent_dim=cfg["latent_dim"],
+            base_channels=cfg["base_channels"],
+            num_blocks=cfg["num_blocks"],
+            res_blocks=cfg["res_blocks"],
+        )
+
+    else:
+        raise ValueError(f"Unknown autoencoder type: {cfg['type']}")
+
+
 def load_autoencoder(path: Path, device=None) -> AbstractAutoencoder:
     ckpt = torch.load(path, map_location=device, weights_only=True)
-    model = create_autoencoder(**ckpt["model_cfg"])
+    model = _create_autoencoder_from_checkpoint(ckpt["model_cfg"])
     model.load_state_dict(ckpt["model_state"])
     return model
 
