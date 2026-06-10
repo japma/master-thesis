@@ -1,5 +1,5 @@
-autoencoder:
-  model_type: variational
+cspn:
+  model_type: einet
   latent_dim: 16
   base_channels: 32
   num_blocks: 2
@@ -26,6 +26,7 @@ wandb:
   entity: jmartini-tu-darmstadt
 
 paths:
-  autoencoder: "checkpoints/autoencoder/mnist_test.pt"
+  autoencoder: "checkpoints/autoencoder/mnist.pt"
+  cspn: "checkpoints/cspn/mnist.pt"
 
 seed: null

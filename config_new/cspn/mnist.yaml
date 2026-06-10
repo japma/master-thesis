@@ -1,0 +1,29 @@
+cspn:
+  model_type: einet
+  num_vars: 16
+  num_nodes: 10
+  nn_hidden_dim: 256
+  nn_num_hidden_layers: 2
+
+dataset:
+  name: mnist
+  channels: 1
+  width: 28
+  height: 28
+  num_classes: 10
+
+training:
+  epochs: 50
+  learning_rate: 0.001
+  batch_size: 32
+
+wandb:
+  mode: online
+  project: master-thesis
+  entity: jmartini-tu-darmstadt
+
+paths:
+  autoencoder: "checkpoints/autoencoder/mnist.pt"
+  cspn: "checkpoints/cspn/mnist.pt"
+
+seed: null
