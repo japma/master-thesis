@@ -2,11 +2,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import argparse
-from typing import Literal
+from typing import Literal, Union
 
 import yaml
-
-from models.autoencoder import AutoencoderType
 
 
 @dataclass
@@ -16,16 +14,23 @@ class DatasetConfig:
     height: int = 28
     width: int = 28
     num_classes: int = 10
-    latent_size: int = 8
+    num_workers: int = 4
 
 
 @dataclass
-class AutoencoderConfig:
-    model_type: AutoencoderType = AutoencoderType.VARIATIONAL
+class VariationalAutoencoderConfig:
+    latent_dim: int = 32
     base_channels: int = 32
     num_blocks: int = 2
-    res_blocks: bool = False
-    loss: str = "mse"
+    res_blocks: int = 1
+
+
+@dataclass
+class PretrainedAutoencoderConfig:
+    model_name: str = "madebyollin/taesd"
+
+
+AutoencoderConfig = Union[VariationalAutoencoderConfig, PretrainedAutoencoderConfig]
 
 
 @dataclass
@@ -38,65 +43,81 @@ class CSPNConfig:
 
 @dataclass
 class TrainingConfig:
-    epochs: int = 10
+    epochs: int = 50
+    learning_rate: float = 0.001
     batch_size: int = 32
-    learning_rate: float = 1e-3
     beta_start: float = 0.0
     beta_end: float = 1.0
-    beta_anneal_epochs: int = 10
+    beta_anneal_epochs: int = 25
+
+
+@dataclass
+class WandbConfig:
+    mode: Literal["online", "offline", "shared", "disabled"] = "online"
+    project: str = "master-thesis"
+    entity: str = "jmartini-tu-darmstadt"
+
+
+@dataclass
+class PathConfig:
+    autoencoder_path: Path = Path("checkpoints/autoencoder/default.pt")
+    cspn_path: Path = Path("checkpoints/cspn/default.pt")
 
 
 @dataclass
 class Config:
-    seed: int | None = None
-    wandb: Literal["disabled", "offline", "online", "shared"] | None = None
     dataset: DatasetConfig = field(default_factory=DatasetConfig)
-    autoencoder: AutoencoderConfig = field(default_factory=AutoencoderConfig)
-    cspn: CSPNConfig = field(default_factory=CSPNConfig)
+    autoencoder: AutoencoderConfig | None = None
+    cspn: CSPNConfig | None = None
     training: TrainingConfig = field(default_factory=TrainingConfig)
+    wandb: WandbConfig = field(default_factory=WandbConfig)
+    paths: PathConfig = field(default_factory=PathConfig)
+    seed: int | None = None
 
 
-def load_config():
+def _parse_autoencoder_config(raw: dict) -> AutoencoderConfig:
+    model_type = raw.pop("model_type", "variational")
+    if model_type == "variational":
+        return VariationalAutoencoderConfig(**raw)
+    elif model_type == "pretrained":
+        return PretrainedAutoencoderConfig(**raw)
+    else:
+        raise ValueError(f"Unknown autoencoder model_type: {model_type!r}")
+
+
+def load_config() -> Config:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--dataset", type=str, default="mnist")
-    parser.add_argument("--autoencoder", type=str, default="default")
-    parser.add_argument("--cspn", type=str, default="default")
-    parser.add_argument("--training", type=str, default="default")
-    parser.add_argument("--wandb", type=str, default="online")
-    parser.add_argument("--seed", type=int)
+    parser.add_argument("config_file", type=Path, help="Path to config file")
     args = parser.parse_args()
 
-    dataset_config = Path(f"./configs/dataset/{args.dataset}.yaml")
-    autoencoder_config = Path(f"./configs/autoencoder/{args.autoencoder}.yaml")
-    cspn_config = Path(f"./configs/cspn/{args.cspn}.yaml")
-    training_config = Path(f"./configs/training/{args.training}.yaml")
+    with open(args.config_file, "r") as f:
+        raw = yaml.safe_load(f)
 
-    with open(dataset_config) as f:
-        dataset = DatasetConfig(**yaml.safe_load(f))
-
-    with open(autoencoder_config) as f:
-        ae_config_dict = yaml.safe_load(f)
-        # Convert model_type string to enum if present
-        if "model_type" in ae_config_dict:
-            ae_config_dict["model_type"] = AutoencoderType(ae_config_dict["model_type"])
-        autoencoder = AutoencoderConfig(**ae_config_dict)
-
-    with open(cspn_config) as f:
-        cspn = CSPNConfig(**yaml.safe_load(f))
-
-    with open(training_config) as f:
-        training = TrainingConfig(**yaml.safe_load(f))
-
-    full_config = Config(
-        seed=args.seed,
-        dataset=dataset,
-        autoencoder=autoencoder,
-        cspn=cspn,
-        training=training,
-        wandb=args.wandb,
+    cfg = Config(
+        dataset=DatasetConfig(**raw["dataset"])
+        if "dataset" in raw
+        else DatasetConfig(),
+        autoencoder=_parse_autoencoder_config(raw["autoencoder"])
+        if "autoencoder" in raw
+        else VariationalAutoencoderConfig(),
+        cspn=CSPNConfig(**raw["cspn"]) if "cspn" in raw else None,
+        training=TrainingConfig(**raw["training"])
+        if "training" in raw
+        else TrainingConfig(),
+        wandb=WandbConfig(**raw["wandb"]) if "wandb" in raw else WandbConfig(),
+        paths=_parse_paths(raw["paths"]) if "paths" in raw else PathConfig(),
+        seed=raw.get("seed"),
     )
-    return full_config
+
+    print(f"Loaded configuration from {args.config_file}")
+    print(cfg)
+    return cfg
 
 
-if __name__ == "__main__":
-    load_config()
+def _parse_paths(raw: dict) -> PathConfig:
+    return PathConfig(
+        autoencoder_path=Path(raw["autoencoder"])
+        if "autoencoder" in raw
+        else PathConfig.autoencoder_path,
+        cspn_path=Path(raw["cspn"]) if "cspn" in raw else PathConfig.cspn_path,
+    )

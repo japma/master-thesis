@@ -1,6 +1,6 @@
 from pathlib import Path
 import torch
-from models.autoencoder import AbstractAutoencoder, create_autoencoder
+from models.autoencoder import AbstractAutoencoder
 from models.cspn import AbstractCSPN
 
 
@@ -13,8 +13,10 @@ def save_autoencoder(model: AbstractAutoencoder, path: Path) -> None:
         },
         path,
     )
+    print("Saved autoencoder checkpoint to", path)
 
 
+# TODO fix this
 def load_autoencoder(path: Path, device=None) -> AbstractAutoencoder:
     ckpt = torch.load(path, map_location=device, weights_only=True)
     model = create_autoencoder(**ckpt["model_cfg"])

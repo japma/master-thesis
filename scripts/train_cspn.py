@@ -8,6 +8,7 @@ import wandb
 from rtpt import RTPT
 
 from models.autoencoder.utils import load_pretrained_autoencoder
+from utils.checkpoints import save_cspn
 from utils.config import load_config
 from utils.reproducibility import seed_everything, resolve_device
 from models.cspn.einet import Einet
@@ -30,13 +31,9 @@ def main():
 
     # TODO fix loading
     ae = load_pretrained_autoencoder("test", AutoencoderType.VARIATIONAL)
-    ae_ckpt = load_checkpoint(
-        Path(f"checkpoints/{dataset_name}/autoencoder.pt"), device
-    )
-    ae.load_state_dict(ae_ckpt)
 
     cspn = Einet(
-        num_vars=cfg.dataset.latent_size,
+        num_vars=cfg.dataset.latent_dim,
         context_dim=cfg.dataset.num_classes,
         num_leaves=cfg.cspn.num_leaves,
         num_nodes=cfg.cspn.num_nodes,
@@ -65,7 +62,7 @@ def main():
             "dataset": dataset_name,
             "model": "CSPN",
             "epochs": cfg.training.epochs,
-            "latent_dim": cfg.dataset.latent_size,
+            "latent_dim": cfg.dataset.latent_dim,
             "learning_rate": cfg.training.learning_rate,
             "seed": seed,
             "num_leaves": cfg.cspn.num_leaves,
@@ -87,7 +84,7 @@ def main():
     )
 
     ckpt_path = Path(f"checkpoints/{dataset_name}/cspn.pt")
-    # save_checkpoint(cspn.state_dict(), ckpt_path)
+    save_cspn(cspn, ckpt_path)
 
     artifact = wandb.Artifact(name=run_name, type="cspn")
     artifact.add_file(str(ckpt_path))

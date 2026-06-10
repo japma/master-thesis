@@ -127,9 +127,8 @@ def train_autoencoder(
     beta_start = cfg.training.beta_start
     beta_end = cfg.training.beta_end
     beta_anneal_epochs = min(cfg.training.beta_anneal_epochs, epochs)
-    log_sample_every = cfg.training.get("log_sample_every", 10)
+    log_sample_every = 10
 
-    # Grab a fixed batch of inputs once for consistent reconstruction logging
     sample_images = next(iter(train_loader))[0][:16].to(device)
     sample_images_u8 = (sample_images.clamp(0, 1) * 255).byte().cpu()
     wandb.log(

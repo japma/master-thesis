@@ -33,7 +33,7 @@ def main():
     ae = create_autoencoder(
         model_type=cfg.autoencoder.model_type,
         input_shape=input_shape,
-        latent_size=cfg.dataset.latent_size,
+        latent_size=cfg.dataset.latent_dim,
         base_channels=cfg.autoencoder.base_channels,
         num_blocks=cfg.autoencoder.num_blocks,
         res_blocks=cfg.autoencoder.res_blocks,
@@ -52,7 +52,7 @@ def main():
 
     # Initialize CSPN model
     cspn = Einet(
-        num_vars=cfg.dataset.latent_size,
+        num_vars=cfg.dataset.latent_dim,
         context_dim=cfg.dataset.num_classes,
         num_leaves=cfg.cspn.num_leaves,
         num_nodes=cfg.cspn.num_nodes,

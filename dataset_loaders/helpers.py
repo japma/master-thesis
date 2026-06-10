@@ -4,6 +4,7 @@ import torch
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 
+from utils.config import DatasetConfig
 from .binarymnist import BinaryMNISTDataset
 from .tinyimagenet import TinyImageNetDataset
 from .coco import CocoDataset, CocoCachedDataset
@@ -94,15 +95,6 @@ def _load_coco(train=True):
     )
 
 
-def _load_coco_cached(train=True):
-    split = "train" if train else "val"
-    return CocoCachedDataset(
-        root="./data/coco-cached",
-        split=split,
-        transform=None,
-    )
-
-
 def _load_flowers102(train=True):
     return datasets.Flowers102(
         root="./data",
@@ -117,34 +109,34 @@ def _load_flowers102(train=True):
     )
 
 
+def _load_celeba(train=True):
+    raise NotImplementedError
+
+
 _DATASETS = {
-    "MNIST": _load_mnist,
-    "BinaryMNIST": _load_binary_mnist,
-    "FashionMNIST": _load_fashion_mnist,
-    "CIFAR10": _load_cifar10,
-    "TinyImageNet": _load_tinyimagenet,
-    "COCO": _load_coco,
-    "COCOCached": _load_coco_cached,
-    "Flowers102": _load_flowers102,
+    "mnist": _load_mnist,
+    "binary_mnist": _load_binary_mnist,
+    "fashion_mnist": _load_fashion_mnist,
+    "cifar10": _load_cifar10,
+    "tinyimagenet": _load_tinyimagenet,
+    "coco": _load_coco,
+    "flowers102": _load_flowers102,
+    "celeba": _load_celeba,
 }
 
 
-def build_data_loaders(cfg, batch_size=32) -> tuple[DataLoader, DataLoader]:
+def build_data_loaders(
+    cfg: DatasetConfig, batch_size: int = 32
+) -> tuple[DataLoader, DataLoader]:
     loader_fn = _DATASETS.get(cfg.name)
     if loader_fn is None:
         raise ValueError(f"Unsupported dataset '{cfg.name}'")
     train_dataset = loader_fn(train=True)
     test_dataset = loader_fn(train=False)
 
-    max_workers = os.cpu_count()
-    if max_workers is None:
-        max_workers = 8
-    else:
-        max_workers = max_workers - 2
-
     train_loader = DataLoader(
         train_dataset,
-        num_workers=max_workers,
+        num_workers=cfg.num_workers,
         prefetch_factor=4,
         pin_memory=torch.cuda.is_available(),
         batch_size=batch_size,
@@ -154,11 +146,10 @@ def build_data_loaders(cfg, batch_size=32) -> tuple[DataLoader, DataLoader]:
     )
     test_loader = DataLoader(
         test_dataset,
-        num_workers=max_workers,
+        num_workers=cfg.num_workers,
         prefetch_factor=4,
         pin_memory=torch.cuda.is_available(),
         batch_size=batch_size,
-        shuffle=True,
         persistent_workers=True,
         drop_last=True,
     )

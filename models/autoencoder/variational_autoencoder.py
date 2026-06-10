@@ -12,8 +12,9 @@ def reparameterize(mu: torch.Tensor, logvar: torch.Tensor) -> torch.Tensor:
 
 
 class ResBlock(nn.Module):
-    def __init__(self, channels):
+    def __init__(self, channels: int):
         super().__init__()
+
         self.block = nn.Sequential(
             nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(channels),
@@ -29,15 +30,15 @@ class ResBlock(nn.Module):
 class VariationalAutoencoder(AbstractAutoencoder):
     def __init__(
         self,
-        input_shape,
-        latent_size,
-        base_channels=32,
-        num_blocks=2,
-        res_blocks=1,
+        input_shape: tuple[int, int, int],
+        latent_dim: int = 32,
+        base_channels: int = 32,
+        num_blocks: int = 2,
+        res_blocks: int = 1,
     ):
         super().__init__()
         self.input_shape = input_shape
-        self.latent_size = latent_size
+        self.latent_dim = latent_dim
         self.base_channels = base_channels
         self.num_blocks = num_blocks
         self.res_blocks = res_blocks
@@ -69,10 +70,10 @@ class VariationalAutoencoder(AbstractAutoencoder):
         self.encoded_shape = tuple(encoded_example.shape[1:])
         self.encoded_flat_dim = encoded_example.numel()
 
-        self.mu_head = nn.Linear(self.encoded_flat_dim, latent_size)
-        self.logvar_head = nn.Linear(self.encoded_flat_dim, latent_size)
+        self.mu_head = nn.Linear(self.encoded_flat_dim, latent_dim)
+        self.logvar_head = nn.Linear(self.encoded_flat_dim, latent_dim)
 
-        self.decoder_input = nn.Linear(latent_size, self.encoded_flat_dim)
+        self.decoder_input = nn.Linear(latent_dim, self.encoded_flat_dim)
 
         # --- Decoder ---
         dec_layers = []
@@ -119,7 +120,7 @@ class VariationalAutoencoder(AbstractAutoencoder):
         return {
             "model_type": "variational",
             "input_shape": self.input_shape,
-            "latent_size": self.latent_size,
+            "latent_size": self.latent_dim,
             "base_channels": self.base_channels,
             "num_blocks": self.num_blocks,
             "res_blocks": self.res_blocks,
