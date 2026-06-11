@@ -29,3 +29,7 @@ class AbstractAutoencoder(nn.Module, ABC):
     @abstractmethod
     def get_config(self) -> dict:
         pass
+
+    @abstractmethod
+    def get_latent_dim(self) -> int:
+        pass

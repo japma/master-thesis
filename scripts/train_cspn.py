@@ -1,13 +1,14 @@
 """Entry point for CSPN training."""
 
-from models.autoencoder import AutoencoderType
+from models.autoencoder.utils import load_pretrained_autoencoder
+from torchinfo import summary
+
 from pathlib import Path
 
 import torch
 import wandb
 from rtpt import RTPT
 
-from models.autoencoder.utils import load_pretrained_autoencoder
 from utils.checkpoints import save_cspn
 from utils.config import load_config
 from utils.reproducibility import seed_everything, resolve_device
@@ -18,58 +19,64 @@ from training.train_cspn import train_cspn
 
 def main():
     cfg = load_config()
+    dataset_cfg = cfg.dataset
+    cspn_cfg = cfg.cspn
+    assert cspn_cfg is not None
+    training_cfg = cfg.training
+    wandb_cfg = cfg.wandb
 
     seed = seed_everything(cfg.seed)
     device = resolve_device()
-
-    dataset_name = cfg.dataset.name
+    dataset_name = dataset_cfg.name
     run_name = f"CSPN_{dataset_name}_seed{seed}"
 
     print(f"Training CSPN on {dataset_name} | device={device} | seed={seed}")
 
-    input_shape = (cfg.dataset.channels, cfg.dataset.height, cfg.dataset.width)
-
     # TODO fix loading
-    ae = load_pretrained_autoencoder("test", AutoencoderType.VARIATIONAL)
+    ae = load_pretrained_autoencoder("madebyollin/taesd")
 
     cspn = Einet(
-        num_vars=cfg.dataset.latent_dim,
+        num_vars=32,
         context_dim=cfg.dataset.num_classes,
-        num_leaves=cfg.cspn.num_leaves,
-        num_nodes=cfg.cspn.num_nodes,
-        nn_hidden_dim=cfg.cspn.nn_hidden_dim,
-        nn_num_hidden_layers=cfg.cspn.nn_num_hidden_layers,
+        num_leaves=cspn_cfg.num_leaves,
+        num_nodes=cspn_cfg.num_nodes,
+        nn_hidden_dim=cspn_cfg.nn_hidden_dim,
+        nn_num_hidden_layers=cspn_cfg.nn_num_hidden_layers,
     )
+    print("CSPN architecture:")
+    summary(cspn)
 
     train_loader, test_loader = build_data_loaders(
-        cfg.dataset, batch_size=cfg.training.batch_size
+        dataset_cfg, batch_size=training_cfg.batch_size
     )
 
-    optimizer = torch.optim.Adam(cspn.parameters(), lr=cfg.training.learning_rate)
+    optimizer = torch.optim.Adam(cspn.parameters(), lr=training_cfg.learning_rate)
 
     rtpt = RTPT(
         name_initials="JM",
         experiment_name=run_name,
-        max_iterations=max(cfg.training.epochs, 1),
+        max_iterations=max(training_cfg.epochs, 1),
     )
     rtpt.start()
 
     wandb.init(
-        entity="jmartini-tu-darmstadt",
-        project="master-thesis",
+        entity=wandb_cfg.entity,
+        project=wandb_cfg.project,
         name=run_name,
         config={
             "dataset": dataset_name,
             "model": "CSPN",
-            "epochs": cfg.training.epochs,
-            "latent_dim": cfg.dataset.latent_dim,
-            "learning_rate": cfg.training.learning_rate,
+            "model_type": "Einet",
+            "epochs": training_cfg.epochs,
+            "latent_dim": ae.get_latent_dim(),
+            "learning_rate": training_cfg.learning_rate,
             "seed": seed,
-            "num_leaves": cfg.cspn.num_leaves,
-            "num_nodes": cfg.cspn.num_nodes,
-            "nn_hidden_dim": cfg.cspn.nn_hidden_dim,
+            "num_leaves": cspn_cfg.num_leaves,
+            "num_nodes": cspn_cfg.num_nodes,
+            "nn_hidden_dim": cspn_cfg.nn_hidden_dim,
+            "nn_num_hidden_layers": cspn_cfg.nn_num_hidden_layers,
         },
-        mode=cfg.wandb,
+        mode=wandb_cfg.mode,
     )
 
     train_cspn(
@@ -83,7 +90,7 @@ def main():
         rtpt=rtpt,
     )
 
-    ckpt_path = Path(f"checkpoints/{dataset_name}/cspn.pt")
+    ckpt_path = Path(cfg.paths.cspn_path)
     save_cspn(cspn, ckpt_path)
 
     artifact = wandb.Artifact(name=run_name, type="cspn")

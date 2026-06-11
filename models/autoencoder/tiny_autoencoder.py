@@ -27,3 +27,7 @@ class TinyAutoencoderWrapper(AbstractAutoencoder, ABC):
             "model_type": "tiny",
             "name": self.name,
         }
+
+    def get_latent_dim(self) -> int:
+        # TODO place holder until it is resolved if this is needed
+        return 42

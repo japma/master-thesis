@@ -8,6 +8,7 @@ import torch.nn.functional as F
 from torch import nn
 
 
+# TODO this does not look right
 class Einet(AbstractCSPN):
     def __init__(
         self,

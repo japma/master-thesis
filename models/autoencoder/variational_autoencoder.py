@@ -125,3 +125,6 @@ class VariationalAutoencoder(AbstractAutoencoder):
             "num_blocks": self.num_blocks,
             "res_blocks": self.res_blocks,
         }
+
+    def get_latent_dim(self) -> int:
+        return self.latent_dim
