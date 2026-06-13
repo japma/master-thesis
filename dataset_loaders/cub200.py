@@ -6,7 +6,7 @@ from PIL import Image
 from torch.utils.data import Dataset
 
 
-class Cub200(Dataset):
+class Cub200Dataset(Dataset):
     def __init__(
         self, root: str | Path, train: bool = True, transform: Optional[Callable] = None
     ):
@@ -18,33 +18,43 @@ class Cub200(Dataset):
 
         self.samples = self._load_samples()
 
-    def _load_class_names(self) -> list[tuple[int, str]]:
+    def _load_class_names(self) -> dict[int, str]:
         class_name_path = self.root / "classes.txt"
-        class_names = []
         if not class_name_path.exists():
             raise FileNotFoundError(f"{class_name_path} does not exist")
 
-        with open(class_name_path, "r") as f:
-            for line in f.readlines():
-                parts = line.strip().split()
-                class_names.append((int(parts[0]), parts[1]))
-
-        return class_names
+        with open(class_name_path) as f:
+            return {
+                int(parts[0]): parts[1] for line in f if (parts := line.strip().split())
+            }
 
     def _load_samples(self) -> list[tuple[int, Path]]:
-        train_ids = self._load_split_ids()
+        train_ids = set(self._load_split_ids())
+
         image_class_path = self.root / "image_class_labels.txt"
         if not image_class_path.exists():
             raise FileNotFoundError(f"{image_class_path} does not exist")
 
-        images_path = self.root / "images"
+        id_to_label = {}
+        with open(image_class_path) as f:
+            for line in f:
+                parts = line.strip().split()
+                id_to_label[int(parts[0])] = int(parts[1]) - 1
+
         images_desc_path = self.root / "images.txt"
         if not images_desc_path.exists():
             raise FileNotFoundError(f"{images_desc_path} does not exist")
 
-        with open(image_class_path, "r") as f:
-            for line in f.readlines():
+        samples = []
+        with open(images_desc_path) as f:
+            for line in f:
                 parts = line.strip().split()
+                img_id = int(parts[0])
+                if img_id in train_ids:
+                    img_path = self.root / "images" / parts[1]
+                    samples.append((id_to_label[img_id], img_path))
+
+        return samples
 
     def _load_split_ids(self) -> list[int]:
         tt_split_path = self.root / "train_test_split.txt"
@@ -55,7 +65,7 @@ class Cub200(Dataset):
         with open(tt_split_path, "r") as f:
             for line in f.readlines():
                 parts = line.strip().split()
-                if bool(parts[1]) == self.train:
+                if (parts[1] == "1") == self.train:
                     tt_split_ids.append(int(parts[0]))
 
         return tt_split_ids
@@ -64,7 +74,7 @@ class Cub200(Dataset):
         return len(self.samples)
 
     def __getitem__(self, index: int) -> tuple[torch.Tensor, int]:
-        image_path, label = self.samples[index]
+        label, image_path = self.samples[index]
         image = Image.open(image_path).convert("RGB")
         if self.transform is not None:
             image = self.transform(image)

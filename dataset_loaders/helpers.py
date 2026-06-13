@@ -8,6 +8,7 @@ from utils.config import DatasetConfig
 from .binarymnist import BinaryMNISTDataset
 from .tinyimagenet import TinyImageNetDataset
 from .coco import CocoDataset, CocoCachedDataset
+from .cub200 import Cub200Dataset
 
 
 def _grayscale_to_rgb(x: torch.Tensor) -> torch.Tensor:
@@ -117,8 +118,15 @@ def _load_flowers102(train=True):
 
 
 def _load_cub200(train=True):
-    return datasets.Cub200(
-        root="./data",
+    return Cub200Dataset(
+        root="./data/CUB_200_2011/CUB_200_2011",
+        train=train,
+        transform=transforms.Compose(
+            [
+                transforms.Resize((128, 128)),
+                transforms.ToTensor(),
+            ]
+        ),
     )
 
 
