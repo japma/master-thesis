@@ -2,7 +2,7 @@ from pathlib import Path
 import torch
 from models.autoencoder import AbstractAutoencoder, VariationalAutoencoder
 from models.cspn import AbstractCSPN
-from models.cspn.einet import Einet
+from models.cspn.CustomEinet.einet import Einet
 
 
 # --- Autoencoder ---

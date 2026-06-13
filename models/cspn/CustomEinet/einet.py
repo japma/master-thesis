@@ -1,8 +1,8 @@
 import math
 from models.cspn import AbstractCSPN
-from models.cspn.nn_for_einet import EinetConditioningNetwork
-from models.cspn.einsum_layer import EinsumLayer
-from models.cspn.gaussian_leaf_layer import GaussianLeafLayer
+from models.cspn.CustomEinet.nn_for_einet import EinetConditioningNetwork
+from models.cspn.CustomEinet.einsum_layer import EinsumLayer
+from models.cspn.CustomEinet.gaussian_leaf_layer import GaussianLeafLayer
 import torch
 import torch.nn.functional as F
 from torch import nn

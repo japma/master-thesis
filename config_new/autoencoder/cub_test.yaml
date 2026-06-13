@@ -1,19 +1,19 @@
 autoencoder:
   model_type: variational
-  latent_dim: 16
+  latent_dim: 64
   base_channels: 32
   num_blocks: 2
   res_blocks: 1
 
 dataset:
-  name: mnist
-  channels: 1
-  width: 28
-  height: 28
-  num_classes: 10
+  name: cub200
+  channels: 3
+  width: 128
+  height: 128
+  num_classes: 200
 
 training:
-  epochs: 50
+  epochs: 1
   learning_rate: 0.001
   batch_size: 32
   beta_start: 0.0
@@ -21,11 +21,11 @@ training:
   beta_anneal_epochs: 25
 
 wandb:
-  mode: online
+  mode: disabled
   project: master-thesis
   entity: jmartini-tu-darmstadt
 
 paths:
-  autoencoder: "checkpoints/autoencoder/mnist.pt"
+  autoencoder: "checkpoints/autoencoder/cub200.pt"
 
 seed: null

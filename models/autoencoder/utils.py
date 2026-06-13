@@ -15,7 +15,7 @@ class AutoencoderType(Enum):
 
 
 def load_pretrained_autoencoder(name: str) -> TinyAutoencoderWrapper:
-    if name == "taesd":
+    if name == "madebyollin/taesd":
         return TinyAutoencoderWrapper(name="madebyollin/taesd")
     else:
-        raise ValueError(f"Unknown pretrained autoencoder name: {name!r}")
+        raise ValueError

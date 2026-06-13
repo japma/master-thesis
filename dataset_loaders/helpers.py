@@ -10,6 +10,10 @@ from .tinyimagenet import TinyImageNetDataset
 from .coco import CocoDataset, CocoCachedDataset
 
 
+def _grayscale_to_rgb(x: torch.Tensor) -> torch.Tensor:
+    return x.repeat(3, 1, 1)
+
+
 def _load_mnist(train=True):
     return datasets.MNIST(
         root="./data",
@@ -18,6 +22,7 @@ def _load_mnist(train=True):
         transform=transforms.Compose(
             [
                 transforms.ToTensor(),
+                transforms.Lambda(_grayscale_to_rgb),
             ]
         ),
     )
@@ -31,6 +36,7 @@ def _load_binary_mnist(train=True):
         transform=transforms.Compose(
             [
                 transforms.ToTensor(),
+                transforms.Lambda(_grayscale_to_rgb),
             ]
         ),
     )
@@ -57,6 +63,7 @@ def _load_fashion_mnist(train=True):
         transform=transforms.Compose(
             [
                 transforms.ToTensor(),
+                transforms.Lambda(_grayscale_to_rgb),
             ]
         ),
     )
@@ -109,6 +116,12 @@ def _load_flowers102(train=True):
     )
 
 
+def _load_cub200(train=True):
+    return datasets.Cub200(
+        root="./data",
+    )
+
+
 def _load_celeba(train=True):
     raise NotImplementedError
 
@@ -121,6 +134,7 @@ _DATASETS = {
     "tinyimagenet": _load_tinyimagenet,
     "coco": _load_coco,
     "flowers102": _load_flowers102,
+    "cub200": _load_cub200,
     "celeba": _load_celeba,
 }
 

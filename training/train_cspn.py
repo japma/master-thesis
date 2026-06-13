@@ -97,7 +97,7 @@ def train_cspn(
     autoencoder.eval()
 
     epochs = cfg.training.epochs
-    log_sample_every = cfg.training.get("log_sample_every", 10)
+    log_sample_every = 10
 
     for epoch in range(epochs):
         train_loss = _train_epoch(

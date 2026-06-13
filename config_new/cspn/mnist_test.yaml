@@ -1,13 +1,14 @@
 cspn:
-  model_type: einet
-  latent_dim: 16
-  base_channels: 32
-  num_blocks: 2
-  res_blocks: 1
+  num_leaves: 10
+  num_nodes: 8
+  nn_hidden_dim: 64
+  nn_num_hidden_layers: 2
+
+# TODO add pretrained section for autoencoder
 
 dataset:
   name: mnist
-  channels: 1
+  channels: 3
   width: 28
   height: 28
   num_classes: 10

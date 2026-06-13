@@ -12,7 +12,7 @@ from rtpt import RTPT
 from utils.checkpoints import save_cspn
 from utils.config import load_config
 from utils.reproducibility import seed_everything, resolve_device
-from models.cspn.einet import Einet
+from models.cspn.CustomEinet.einet import Einet
 from dataset_loaders import build_data_loaders
 from training.train_cspn import train_cspn
 
