@@ -17,7 +17,7 @@ class HybridLoss(nn.Module):
         return 0.5 * self.mse(recon, target) + 0.5 * self.l1(recon, target)
 
 
-def vae_loss(
+def beta_vae_loss(
     images: torch.Tensor,
     recon: torch.Tensor,
     mu: torch.Tensor,
@@ -25,18 +25,11 @@ def vae_loss(
     beta: float = 1.0,
     recon_loss_fn: nn.Module = nn.MSELoss(),
 ):
-    """ELBO loss: reconstruction + β · KL divergence.
-
-    KL divergence: -0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
-    where logvar = log(sigma^2)
-    """
     recon_loss = recon_loss_fn(recon, images)
 
-    kl_loss = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
+    kl_loss = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp()).sum(dim=1).mean()
 
-    total_loss = recon_loss + beta * kl_loss
-
-    return total_loss, recon_loss, kl_loss
+    return recon_loss + beta * kl_loss, recon_loss, kl_loss
 
 
 def negative_log_likelihood_loss(

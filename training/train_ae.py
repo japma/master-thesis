@@ -6,7 +6,7 @@ import wandb
 from torch import nn
 
 from models.autoencoder import AbstractAutoencoder
-from training.losses import vae_loss
+from training.losses import beta_vae_loss
 
 
 def _beta_for_epoch(
@@ -51,7 +51,7 @@ def _train_epoch(
         optimizer.zero_grad()
 
         recon, mu, logvar = model(images)
-        loss, recon_loss, kl_loss = vae_loss(
+        loss, recon_loss, kl_loss = beta_vae_loss(
             images, recon, mu, logvar, recon_loss_fn=loss_fn, beta=beta
         )
 
@@ -85,7 +85,7 @@ def _val_epoch(
         for images, _ in tqdm.tqdm(loader, desc=f"Val   {epoch + 1}/{epochs}"):
             images = images.to(device, non_blocking=True)
             recon, mu, logvar = model(images)
-            loss, recon_loss, kl_loss = vae_loss(
+            loss, recon_loss, kl_loss = beta_vae_loss(
                 images, recon, mu, logvar, recon_loss_fn=loss_fn, beta=beta
             )
             total_loss += loss.detach()
