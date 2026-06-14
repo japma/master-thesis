@@ -80,19 +80,21 @@ class VariationalAutoencoder(AbstractAutoencoder):
         for i in range(num_blocks - 1, -1, -1):
             ch_in = base_channels * (2**i)
             ch_out = base_channels * (2 ** (i - 1)) if i > 0 else channels
+            is_last = i == 0
 
             for _ in range(res_blocks):
                 dec_layers.append(ResBlock(ch_in))
 
-            dec_layers += [
+            dec_layers.append(
                 nn.ConvTranspose2d(
                     ch_in, ch_out, kernel_size=4, stride=2, padding=1, bias=False
-                ),
-                nn.BatchNorm2d(ch_out),
-                nn.ReLU(inplace=True),
-            ]
+                )
+            )
+            if not is_last:
+                dec_layers += [nn.BatchNorm2d(ch_out), nn.ReLU(inplace=True)]
 
         self.decoder = nn.Sequential(*dec_layers)
+        self.output_activation = nn.Sigmoid()
 
     def encode_distribution(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         features = self.encoder(x)
@@ -108,7 +110,7 @@ class VariationalAutoencoder(AbstractAutoencoder):
     def decode(self, z: torch.Tensor) -> torch.Tensor:
         decoded = self.decoder_input(z)
         decoded = decoded.view(z.size(0), *self.encoded_shape)
-        return self.decoder(decoded)
+        return self.output_activation(self.decoder(decoded))
 
     def forward(self, x: torch.Tensor) -> AutoencoderForwardOutput:
         mu, logvar = self.encode_distribution(x)

@@ -21,16 +21,6 @@ def _beta_for_epoch(
     return beta_start + progress * (beta_end - beta_start)
 
 
-def _check_posterior_collapse(kl: float, recon: float) -> None:
-    if kl < 0.01:
-        print(f"WARNING: KL loss very small ({kl:.6f}) - possible posterior collapse!")
-        print("   Try reducing beta.")
-    if recon < 0.001:
-        print(
-            f"WARNING: Reconstruction loss suspiciously low ({recon:.6f}) - check data."
-        )
-
-
 def _train_epoch(
     model: AbstractAutoencoder,
     loader: torch.utils.data.DataLoader,
@@ -118,6 +108,7 @@ def train_autoencoder(
     train_loader: torch.utils.data.DataLoader,
     test_loader: torch.utils.data.DataLoader,
     optimizer: torch.optim.Optimizer,
+    scheduler: torch.optim.lr_scheduler.LRScheduler,
     loss_fn: nn.Module,
     rtpt,
 ) -> None:
@@ -142,11 +133,12 @@ def train_autoencoder(
         train_loss, train_recon, train_kl = _train_epoch(
             model, train_loader, optimizer, loss_fn, beta, device, epoch, epochs
         )
-        _check_posterior_collapse(train_kl, train_recon)
 
         val_loss, val_recon, val_kl = _val_epoch(
             model, test_loader, loss_fn, beta, device, epoch, epochs
         )
+
+        scheduler.step()
 
         wandb.log(
             {

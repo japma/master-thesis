@@ -49,7 +49,11 @@ def main():
     )
 
     optimizer = torch.optim.Adam(ae.parameters(), lr=training_cfg.learning_rate)
-    loss_fn = nn.MSELoss()
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=training_cfg.epochs
+    )
+    loss_fn = nn.BCELoss()
+    # loss_fn = nn.MSELoss()
     # loss_fn = nn.L1Loss()
     # loss_fn = nn.SmoothL1Loss()
     # loss_fn = HybridLoss()
@@ -90,6 +94,7 @@ def main():
         train_loader=train_loader,
         test_loader=test_loader,
         optimizer=optimizer,
+        scheduler=scheduler,
         loss_fn=loss_fn,
         rtpt=rtpt,
     )

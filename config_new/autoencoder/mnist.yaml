@@ -7,7 +7,7 @@ autoencoder:
 
 dataset:
   name: mnist
-  channels: 1
+  channels: 3
   width: 28
   height: 28
   num_classes: 10
