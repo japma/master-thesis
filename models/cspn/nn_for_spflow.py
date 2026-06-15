@@ -1,42 +1,45 @@
-from __future__ import annotations
-
 import torch
-import torch.nn as nn
-from typing import Tuple
+from torch import nn
 
 
 class NeuralNetworkForSPFlow(nn.Module):
-    """Neural parameter function for SPFlow conditional Normal leaves."""
-
     def __init__(
         self,
-        conditional_dim: int,
-        latent_dim: int,
+        num_classes: int,
         num_leaves: int,
-        num_layers: int,
+        num_repetitions: int,
+        num_layers: int = 2,
         hidden_dim: int = 256,
     ):
         super().__init__()
-        self.conditional_dim = conditional_dim
-        self.latent_dim = latent_dim
+        self.num_classes = num_classes
         self.num_leaves = num_leaves
+        self.num_repetitions = num_repetitions
+        self.num_layers = num_layers
+        self.hidden_dim = hidden_dim
+
+        self.input_proj = nn.Linear(num_classes, hidden_dim)
 
         layers = []
-        in_dim = conditional_dim
-        for _ in range(num_layers):
-            layers += [nn.Linear(in_dim, hidden_dim), nn.ReLU()]
-            in_dim = hidden_dim
+        for _ in range(self.num_layers):
+            layers += [nn.Linear(self.hidden_dim, self.hidden_dim), nn.ReLU()]
         self.backbone = nn.Sequential(*layers)
 
-        out_dim = latent_dim * num_leaves
-        self.loc_head = nn.Linear(hidden_dim, out_dim)
-        self.scale_head = nn.Linear(hidden_dim, out_dim)
+        out_dim = self.num_leaves * self.num_repetitions
+        self.loc_head = nn.Linear(self.hidden_dim, out_dim)
+        self.scale_head = nn.Linear(self.hidden_dim, out_dim)
 
-    def forward(self, z: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        B = z.size(0)
-        h = self.backbone(z)
-        shape = (B, self.latent_dim, self.num_leaves)
+    def forward(self, evidence: torch.Tensor) -> dict[str, torch.Tensor]:
+        labels = evidence.long().squeeze(-1)
+        one_hot = nn.functional.one_hot(labels, num_classes=self.num_classes).float()
+        h = self.backbone(self.input_proj(one_hot))
 
-        loc = self.loc_head(h).view(shape)
-        scale = self.scale_head(h).view(shape).exp().clamp(min=1e-4)
-        return loc, scale
+        loc = self.loc_head(h).view(-1, 1, self.num_leaves, self.num_repetitions)
+        scale = (
+            self.scale_head(h)
+            .view(-1, 1, self.num_leaves, self.num_repetitions)
+            .exp()
+            .clamp(min=1e-4)
+        )
+
+        return {"loc": loc, "scale": scale}

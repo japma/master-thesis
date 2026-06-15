@@ -1,8 +1,11 @@
 cspn:
+  model_type: "custom"
   num_leaves: 10
-  num_nodes: 8
+  num_sums: 32
+  depth: 3
+  num_repetitions: 1
   nn_hidden_dim: 64
-  nn_num_hidden_layers: 2
+  nn_num_hidden_layers: 1
 
 # TODO add pretrained section for autoencoder
 
@@ -14,20 +17,18 @@ dataset:
   num_classes: 10
 
 training:
-  epochs: 1
+  epochs: 150
   learning_rate: 0.001
-  batch_size: 32
-  beta_start: 0.0
-  beta_end: 1.0
-  beta_anneal_epochs: 25
+  batch_size: 512
+
 
 wandb:
-  mode: disabled
+  mode: online
   project: master-thesis
   entity: jmartini-tu-darmstadt
 
 paths:
   autoencoder: "checkpoints/autoencoder/mnist.pt"
-  cspn: "checkpoints/cspn/mnist.pt"
+  cspn: "checkpoints/cspn/mnist_custom.pt"
 
 seed: null

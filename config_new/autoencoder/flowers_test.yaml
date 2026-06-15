@@ -26,6 +26,6 @@ wandb:
   entity: jmartini-tu-darmstadt
 
 paths:
-  autoencoder: "checkpoints/autoencoder/flowers.pt"
+  autoencoder: "checkpoints/autoencoder/flowers_test.pt"
 
 seed: null

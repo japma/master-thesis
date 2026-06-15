@@ -1938,6 +1938,7 @@ source = { editable = "." }
 dependencies = [
     { name = "accelerate" },
     { name = "diffusers" },
+    { name = "einops" },
     { name = "fiftyone" },
     { name = "ipykernel" },
     { name = "ipywidgets" },
@@ -1969,6 +1970,7 @@ dev = [
 requires-dist = [
     { name = "accelerate", specifier = ">=1.13.0" },
     { name = "diffusers", specifier = ">=0.37.1" },
+    { name = "einops", specifier = ">=0.8.2" },
     { name = "fiftyone", specifier = ">=1.16.0" },
     { name = "ipykernel", specifier = ">=7.3.0" },
     { name = "ipywidgets", specifier = ">=8.1.8" },

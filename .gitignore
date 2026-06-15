@@ -7,6 +7,7 @@ wheels/
 *.egg-info
 results/
 /data/
+notebooks/data
 outputs/
 checkpoints/
 wandb/

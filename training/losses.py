@@ -17,6 +17,18 @@ class HybridLoss(nn.Module):
         return 0.5 * self.mse(recon, target) + 0.5 * self.l1(recon, target)
 
 
+def vae_loss(
+    images: torch.Tensor,
+    recon: torch.Tensor,
+    mu: torch.Tensor,
+    logvar: torch.Tensor,
+    beta: float = 1.0,
+    recon_loss_fn: nn.Module = nn.MSELoss(),
+):
+    recon_loss = recon_loss_fn(recon, images)
+    return recon_loss, recon_loss, torch.tensor(0.0)
+
+
 def beta_vae_loss(
     images: torch.Tensor,
     recon: torch.Tensor,

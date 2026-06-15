@@ -35,8 +35,11 @@ AutoencoderConfig = Union[VariationalAutoencoderConfig, PretrainedAutoencoderCon
 
 @dataclass
 class CSPNConfig:
+    model_type: str = "custom"
     num_leaves: int = 10
-    num_nodes: int = 8
+    num_sums: int = 10
+    depth: int = 3
+    num_repetitions: int = 1
     nn_hidden_dim: int = 64
     nn_num_hidden_layers: int = 2
 

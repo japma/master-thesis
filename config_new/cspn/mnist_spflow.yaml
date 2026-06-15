@@ -1,8 +1,13 @@
-autoencoder:
-  latent_dim: 32
-  base_channels: 32
-  num_blocks: 2
-  res_blocks: 1
+cspn:
+  model_type: "spflow"
+  num_leaves: 10
+  num_sums: 10
+  depth: 3
+  num_repetitions: 1
+  nn_hidden_dim: 64
+  nn_num_hidden_layers: 1
+
+# TODO add pretrained section for autoencoder
 
 dataset:
   name: mnist
@@ -14,10 +19,7 @@ dataset:
 training:
   epochs: 50
   learning_rate: 0.001
-  batch_size: 128
-  beta_start: 0.0
-  beta_end: 0.5
-  beta_anneal_epochs: 40
+  batch_size: 512
 
 wandb:
   mode: online
@@ -26,5 +28,6 @@ wandb:
 
 paths:
   autoencoder: "checkpoints/autoencoder/mnist.pt"
+  cspn: "checkpoints/cspn/mnist.pt"
 
 seed: null

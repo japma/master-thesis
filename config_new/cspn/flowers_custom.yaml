@@ -1,9 +1,13 @@
-autoencoder:
-  model_type: variational
-  latent_dim: 64
-  base_channels: 32
-  num_blocks: 2
-  res_blocks: 1
+cspn:
+  model_type: "custom"
+  num_leaves: 16
+  num_sums: 32
+  depth: 3
+  num_repetitions: 1
+  nn_hidden_dim: 128
+  nn_num_hidden_layers: 1
+
+# TODO add pretrained section for autoencoder
 
 dataset:
   name: flowers102
@@ -15,10 +19,8 @@ dataset:
 training:
   epochs: 150
   learning_rate: 0.001
-  batch_size: 64
-  beta_start: 0.0
-  beta_end: 1.0
-  beta_anneal_epochs: 25
+  batch_size: 512
+
 
 wandb:
   mode: online
@@ -27,5 +29,6 @@ wandb:
 
 paths:
   autoencoder: "checkpoints/autoencoder/flowers.pt"
+  cspn: "checkpoints/cspn/flowers_custom.pt"
 
 seed: null

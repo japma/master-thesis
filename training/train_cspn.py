@@ -90,6 +90,7 @@ def train_cspn(
     train_loader: torch.utils.data.DataLoader,
     test_loader: torch.utils.data.DataLoader,
     optimizer: torch.optim.Optimizer,
+    scheduler: torch.optim.lr_scheduler.LRScheduler,
     rtpt: RTPT,
 ) -> None:
     model.to(device)
@@ -104,6 +105,8 @@ def train_cspn(
             model, autoencoder, train_loader, optimizer, device, epoch, epochs
         )
         val_loss = _val_epoch(model, autoencoder, test_loader, device, epoch, epochs)
+
+        scheduler.step()
 
         wandb.log({"train_loss": train_loss, "val_loss": val_loss}, step=epoch)
 

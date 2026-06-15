@@ -1,9 +1,9 @@
 autoencoder:
   model_type: variational
-  latent_dim: 64
-  base_channels: 32
-  num_blocks: 2
-  res_blocks: 1
+  latent_dim: 128
+  base_channels: 64
+  num_blocks: 3
+  res_blocks: 2
 
 dataset:
   name: cub200
@@ -13,12 +13,12 @@ dataset:
   num_classes: 200
 
 training:
-  epochs: 150
-  learning_rate: 0.001
-  batch_size: 32
+  epochs: 200
+  learning_rate: 0.0003
+  batch_size: 64
   beta_start: 0.0
-  beta_end: 1.0
-  beta_anneal_epochs: 25
+  beta_end: 0.5
+  beta_anneal_epochs: 150
 
 wandb:
   mode: online

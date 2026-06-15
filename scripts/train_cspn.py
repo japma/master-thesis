@@ -1,5 +1,7 @@
 """Entry point for CSPN training."""
 
+from models import SPFlowCSPN
+from utils.checkpoints import load_ae_from_path
 from models.autoencoder.utils import load_pretrained_autoencoder
 from torchinfo import summary
 
@@ -33,16 +35,33 @@ def main():
     print(f"Training CSPN on {dataset_name} | device={device} | seed={seed}")
 
     # TODO fix loading
-    ae = load_pretrained_autoencoder("madebyollin/taesd")
+    # ae = load_pretrained_autoencoder("madebyollin/taesd")
+    ae_path = Path(cfg.paths.autoencoder_path)
+    ae = load_ae_from_path(ae_path)
 
-    cspn = Einet(
-        num_vars=32,
-        context_dim=cfg.dataset.num_classes,
-        num_leaves=cspn_cfg.num_leaves,
-        num_nodes=cspn_cfg.num_nodes,
-        nn_hidden_dim=cspn_cfg.nn_hidden_dim,
-        nn_num_hidden_layers=cspn_cfg.nn_num_hidden_layers,
-    )
+    if cspn_cfg.model_type == "spflow":
+        cspn = SPFlowCSPN(
+            latent_dim=ae.get_latent_dim(),
+            num_classes=dataset_cfg.num_classes,
+            num_sums=cspn_cfg.num_sums,
+            num_leaves=cspn_cfg.num_leaves,
+            depth=cspn_cfg.depth,
+            num_repetitions=5,
+            nn_layers=cspn_cfg.nn_num_hidden_layers,
+            nn_hidden_dim=cspn_cfg.nn_hidden_dim,
+        )
+    elif cspn_cfg.model_type == "custom":
+        cspn = Einet(
+            num_vars=ae.get_latent_dim(),
+            context_dim=dataset_cfg.num_classes,
+            num_leaves=cspn_cfg.num_leaves,
+            num_nodes=cspn_cfg.num_sums,
+            nn_hidden_dim=cspn_cfg.nn_hidden_dim,
+            nn_num_hidden_layers=cspn_cfg.nn_num_hidden_layers,
+        )
+    else:
+        raise ValueError(f"Unknown model type {cspn_cfg.model_type}")
+
     print("CSPN architecture:")
     summary(cspn)
 
@@ -51,6 +70,9 @@ def main():
     )
 
     optimizer = torch.optim.Adam(cspn.parameters(), lr=training_cfg.learning_rate)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=training_cfg.epochs
+    )
 
     rtpt = RTPT(
         name_initials="JM",
@@ -72,9 +94,9 @@ def main():
             "learning_rate": training_cfg.learning_rate,
             "seed": seed,
             "num_leaves": cspn_cfg.num_leaves,
-            "num_nodes": cspn_cfg.num_nodes,
-            "nn_hidden_dim": cspn_cfg.nn_hidden_dim,
-            "nn_num_hidden_layers": cspn_cfg.nn_num_hidden_layers,
+            "num_sums": cspn_cfg.num_sums,
+            "depth": cspn_cfg.depth,
+            "num_repetitions": cspn_cfg.num_repetitions,
         },
         mode=wandb_cfg.mode,
     )
@@ -87,6 +109,7 @@ def main():
         train_loader=train_loader,
         test_loader=test_loader,
         optimizer=optimizer,
+        scheduler=scheduler,
         rtpt=rtpt,
     )
 
