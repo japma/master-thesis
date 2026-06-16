@@ -1,14 +1,19 @@
 import os
+from pathlib import Path
 
 import torch
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 
 from utils.config import DatasetConfig
-from .binarymnist import BinaryMNISTDataset
-from .tinyimagenet import TinyImageNetDataset
-from .coco import CocoDataset, CocoCachedDataset
-from .cub200 import Cub200Dataset
+from dataset_loaders.binarymnist import BinaryMNISTDataset
+from dataset_loaders.tinyimagenet import TinyImageNetDataset
+from dataset_loaders.coco import CocoDataset, CocoCachedDataset
+from dataset_loaders.cub200 import Cub200Dataset
+
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DATA_DIR = PROJECT_ROOT / "data"
 
 
 def _grayscale_to_rgb(x: torch.Tensor) -> torch.Tensor:
@@ -17,7 +22,7 @@ def _grayscale_to_rgb(x: torch.Tensor) -> torch.Tensor:
 
 def _load_mnist(train=True):
     return datasets.MNIST(
-        root="./data",
+        root=DATA_DIR,
         train=train,
         download=True,
         transform=transforms.Compose(
@@ -31,7 +36,7 @@ def _load_mnist(train=True):
 
 def _load_binary_mnist(train=True):
     return BinaryMNISTDataset(
-        root="./data",
+        root=DATA_DIR,
         train=train,
         download=True,
         transform=transforms.Compose(
@@ -45,7 +50,7 @@ def _load_binary_mnist(train=True):
 
 def _load_cifar10(train=True):
     return datasets.CIFAR10(
-        root="./data",
+        root=DATA_DIR,
         train=train,
         download=True,
         transform=transforms.Compose(
@@ -58,7 +63,7 @@ def _load_cifar10(train=True):
 
 def _load_fashion_mnist(train=True):
     return datasets.FashionMNIST(
-        root="./data",
+        root=DATA_DIR,
         train=train,
         download=True,
         transform=transforms.Compose(
@@ -105,7 +110,7 @@ def _load_coco(train=True):
 
 def _load_flowers102(train=True):
     return datasets.Flowers102(
-        root="./data",
+        root=DATA_DIR,
         split="train" if train else "test",
         download=True,
         transform=transforms.Compose(

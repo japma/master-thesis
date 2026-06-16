@@ -1,6 +1,0 @@
-name: BinaryMNIST
-channels: 1
-width: 28
-height: 28
-num_classes: 2
-latent_size: 16

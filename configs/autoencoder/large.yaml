@@ -1,4 +1,0 @@
-model_type: variational
-base_channels: 64
-num_blocks: 3
-res_blocks: 2

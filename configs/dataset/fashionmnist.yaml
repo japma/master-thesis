@@ -1,6 +1,0 @@
-name: FashionMNIST
-channels: 1
-width: 28
-height: 28
-num_classes: 10
-latent_size: 16

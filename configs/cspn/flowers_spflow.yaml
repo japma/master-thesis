@@ -29,6 +29,6 @@ wandb:
 
 paths:
   autoencoder: "checkpoints/autoencoder/flowers.pt"
-  cspn: "checkpoints/cspn/flowers_custom.pt"
+  cspn: "checkpoints/cspn/flowers_spflow.pt"
 
 seed: null
