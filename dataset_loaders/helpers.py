@@ -111,7 +111,7 @@ def _load_coco(train=True):
 def _load_flowers102(train=True):
     return datasets.Flowers102(
         root=DATA_DIR,
-        split="train" if train else "test",
+        split="test" if train else "train",
         download=True,
         transform=transforms.Compose(
             [

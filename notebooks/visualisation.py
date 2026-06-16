@@ -6,8 +6,8 @@ import umap
 
 
 def show(tensor, title=None):
-    grid = vutils.make_grid(tensor.cpu(), nrow=8, normalize=True)
-    plt.figure(figsize=(16, 4))
+    grid = vutils.make_grid(tensor.cpu(), nrow=16, normalize=True)
+    plt.figure(figsize=(16, 4), dpi=300)
     plt.imshow(grid.permute(1, 2, 0))
     plt.axis("off")
     if title:
