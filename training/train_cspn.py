@@ -69,7 +69,10 @@ def _log_samples(
     epoch: int,
 ) -> None:
     model.eval()
-    sample_labels = torch.arange(num_classes, device=device).repeat(samples_per_class)
+    class_sample_count = min(num_classes, 16)
+    sample_labels = torch.arange(class_sample_count, device=device).repeat(
+        samples_per_class
+    )
 
     with torch.no_grad():
         sampled_latent = model.sample(sample_labels)

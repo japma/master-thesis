@@ -58,9 +58,6 @@ class SPFlowCSPN(AbstractCSPN):
             layer_type="einsum",
         )
 
-        for leaf in self.einet.leaf_modules:
-            print(leaf.is_conditional, "All leaf modules must be conditional for CSPN")
-
     def forward(self, z: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
         labels_col = labels.unsqueeze(1)
         data = torch.cat([z, labels_col], dim=1)

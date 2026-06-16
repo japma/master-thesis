@@ -3,6 +3,7 @@ import torch
 from models.autoencoder import AbstractAutoencoder, VariationalAutoencoder
 from models.cspn import AbstractCSPN
 from models.cspn.CustomEinet.einet import Einet
+from models.cspn.spflow_cspn import SPFlowCSPN
 
 
 # --- Autoencoder ---
@@ -53,14 +54,28 @@ def save_cspn(model: AbstractCSPN, path: Path) -> None:
 
 
 def _create_cspn_from_checkpoint(cfg: dict) -> AbstractCSPN:
-    return Einet(
-        num_vars=cfg["num_vars"],
-        context_dim=cfg["context_dim"],
-        num_leaves=cfg["num_leaves"],
-        num_nodes=cfg["num_nodes"],
-        nn_hidden_dim=cfg["nn_hidden_dim"],
-        nn_num_hidden_layers=cfg["nn_num_hidden_layers"],
-    )
+    if cfg["model_type"] == "custom_cspn":
+        return Einet(
+            num_vars=cfg["num_vars"],
+            context_dim=cfg["context_dim"],
+            num_leaves=cfg["num_leaves"],
+            num_nodes=cfg["num_nodes"],
+            nn_hidden_dim=cfg["nn_hidden_dim"],
+            nn_num_hidden_layers=cfg["nn_num_hidden_layers"],
+        )
+    elif cfg["model_type"] == "spflow_cspn":
+        return SPFlowCSPN(
+            latent_dim=cfg["latent_dim"],
+            num_classes=cfg["num_classes"],
+            num_sums=cfg["num_sums"],
+            num_leaves=cfg["num_leaves"],
+            depth=cfg["depth"],
+            num_repetitions=cfg["num_repetitions"],
+            nn_layers=cfg["nn_layers"],
+            nn_hidden_dim=cfg["nn_hidden_dim"],
+        )
+    else:
+        raise ValueError(f"Unknown CSPN type: {cfg['model_type']}")
 
 
 def load_cspn_from_path(path: Path, device=None) -> AbstractCSPN:

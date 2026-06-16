@@ -1,4 +1,6 @@
 import math
+from typing import Dict, Any
+
 from models.cspn import AbstractCSPN
 from models.cspn.CustomEinet.nn_for_einet import EinetConditioningNetwork
 from models.cspn.CustomEinet.einsum_layer import EinsumLayer
@@ -158,5 +160,13 @@ class Einet(AbstractCSPN):
 
         return torch.normal(mu_sel, std_sel)  # (N, num_vars)
 
-    def get_config(self):
-        return {}
+    def get_config(self) -> dict:
+        return {
+            "model_type": "custom_cspn",
+            "context_dim": self.context_dim,
+            "num_vars": self.num_vars,
+            "num_leaves": self.num_leaves,
+            "layer_nodes": self.layer_nodes,
+            "nn_hidden_dim": self.nn_hidden_dim,
+            "nn_num_hidden_layers": self.nn_num_hidden_layers,
+        }
