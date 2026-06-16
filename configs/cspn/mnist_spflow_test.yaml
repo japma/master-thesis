@@ -29,6 +29,6 @@ wandb:
 
 paths:
   autoencoder: "checkpoints/autoencoder/mnist.pt"
-  cspn: "checkpoints/cspn/mnist_test.pt"
+  cspn: "checkpoints/cspn/mnist_spflow_test.pt"
 
 seed: null

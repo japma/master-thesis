@@ -30,6 +30,13 @@ class Einet(AbstractCSPN):
         :param nn_num_hidden_layers: Number of hidden layers in the conditioning network (default 2).
         """
         super().__init__()
+        self.num_vars = num_vars
+        self.context_dim = context_dim
+        self.num_leaves = num_leaves
+        self.num_nodes = num_nodes
+        self.nn_hidden_dim = nn_hidden_dim
+        self.nn_num_hidden_layers = nn_num_hidden_layers
+
         assert num_vars > 0 and (num_vars & (num_vars - 1)) == 0, (
             "num_vars must be a power of 2"
         )
@@ -166,7 +173,7 @@ class Einet(AbstractCSPN):
             "context_dim": self.context_dim,
             "num_vars": self.num_vars,
             "num_leaves": self.num_leaves,
-            "layer_nodes": self.layer_nodes,
+            "num_nodes": self.num_nodes,
             "nn_hidden_dim": self.nn_hidden_dim,
             "nn_num_hidden_layers": self.nn_num_hidden_layers,
         }

@@ -1,6 +1,7 @@
 """Entry point for CSPN training."""
 
 from models import SPFlowCSPN
+from models.cspn.psinet_cspn import PsiNetCSPN
 from utils.checkpoints import load_ae_from_path
 from models.autoencoder.utils import load_pretrained_autoencoder
 from torchinfo import summary
@@ -58,6 +59,11 @@ def main():
             num_nodes=cspn_cfg.num_sums,
             nn_hidden_dim=cspn_cfg.nn_hidden_dim,
             nn_num_hidden_layers=cspn_cfg.nn_num_hidden_layers,
+        )
+    elif cspn_cfg.model_type == "psinet":
+        cspn = PsiNetCSPN(
+            latent_dim=ae.get_latent_dim(),
+            num_classes=dataset_cfg.num_classes,
         )
     else:
         raise ValueError(f"Unknown model type {cspn_cfg.model_type}")

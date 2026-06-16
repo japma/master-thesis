@@ -5,7 +5,7 @@ from spflow.meta.data.scope import Scope
 from models.cspn.abstract_cspn import AbstractCSPN
 import torch
 
-from models.cspn.nn_for_spflow import NeuralNetworkForSPFlow
+from models.cspn.spflow.nn_for_spflow import NeuralNetworkForSPFlow
 
 
 class SPFlowCSPN(AbstractCSPN):
@@ -26,6 +26,7 @@ class SPFlowCSPN(AbstractCSPN):
         self.num_classes = num_classes
         self.num_sums = num_sums
         self.num_leaves = num_leaves
+        self.depth = depth
         self.num_repetitions = num_repetitions
         self.nn_layers = nn_layers
         self.nn_hidden_dim = nn_hidden_dim
@@ -81,6 +82,7 @@ class SPFlowCSPN(AbstractCSPN):
             "num_classes": self.num_classes,
             "num_sums": self.num_sums,
             "num_leaves": self.num_leaves,
+            "depth": self.depth,
             "num_repetitions": self.num_repetitions,
             "nn_layers": self.nn_layers,
             "nn_hidden_dim": self.nn_hidden_dim,
