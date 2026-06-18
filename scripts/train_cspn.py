@@ -38,7 +38,7 @@ def main():
     # TODO fix loading
     # ae = load_pretrained_autoencoder("madebyollin/taesd")
     ae_path = Path(cfg.paths.autoencoder_path)
-    ae = load_ae_from_path(ae_path)
+    ae = load_ae_from_path(ae_path, device=device)
 
     if cspn_cfg.model_type == "spflow":
         cspn = SPFlowCSPN(
