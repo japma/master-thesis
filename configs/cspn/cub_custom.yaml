@@ -1,20 +1,20 @@
 cspn:
   model_type: "custom"
-  num_leaves: 10
-  num_sums: 32
+  num_leaves: 16
+  num_sums: 128
   depth: 3
   num_repetitions: 1
-  nn_hidden_dim: 64
-  nn_num_hidden_layers: 1
+  nn_hidden_dim: 256
+  nn_num_hidden_layers: 3
 
 # TODO add pretrained section for autoencoder
 
 dataset:
-  name: mnist
+  name: cub200
   channels: 3
-  width: 28
-  height: 28
-  num_classes: 10
+  width: 128
+  height: 128
+  num_classes: 200
 
 training:
   epochs: 150
@@ -27,7 +27,7 @@ wandb:
   entity: jmartini-tu-darmstadt
 
 paths:
-  autoencoder: "checkpoints/autoencoder/mnist.pt"
-  cspn: "checkpoints/cspn/mnist_custom.pt"
+  autoencoder: "checkpoints/autoencoder/cub200.pt"
+  cspn: "checkpoints/cspn/cub_custom.pt"
 
 seed: null

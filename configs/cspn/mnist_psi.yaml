@@ -1,11 +1,11 @@
 cspn:
-  model_type: "custom"
+  model_type: "psinet"
   num_leaves: 10
-  num_sums: 32
+  num_sums: 10
   depth: 3
   num_repetitions: 1
   nn_hidden_dim: 64
-  nn_num_hidden_layers: 1
+  nn_num_hidden_layers: 2
 
 # TODO add pretrained section for autoencoder
 
@@ -21,6 +21,7 @@ training:
   learning_rate: 0.001
   batch_size: 32
 
+
 wandb:
   mode: online
   project: master-thesis
@@ -28,6 +29,6 @@ wandb:
 
 paths:
   autoencoder: "checkpoints/autoencoder/mnist.pt"
-  cspn: "checkpoints/cspn/mnist_custom.pt"
+  cspn: "checkpoints/cspn/mnist_psi.pt"
 
 seed: null

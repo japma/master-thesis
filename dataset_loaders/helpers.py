@@ -20,7 +20,7 @@ def _grayscale_to_rgb(x: torch.Tensor) -> torch.Tensor:
     return x.repeat(3, 1, 1)
 
 
-def _load_mnist(train=True):
+def _load_mnist(train=True, size: tuple[int, int] = (128, 128)):
     return datasets.MNIST(
         root=DATA_DIR,
         train=train,
@@ -34,7 +34,7 @@ def _load_mnist(train=True):
     )
 
 
-def _load_binary_mnist(train=True):
+def _load_binary_mnist(train=True, size: tuple[int, int] = (128, 128)):
     return BinaryMNISTDataset(
         root=DATA_DIR,
         train=train,
@@ -48,7 +48,7 @@ def _load_binary_mnist(train=True):
     )
 
 
-def _load_cifar10(train=True):
+def _load_cifar10(train=True, size: tuple[int, int] = (128, 128)):
     return datasets.CIFAR10(
         root=DATA_DIR,
         train=train,
@@ -61,7 +61,7 @@ def _load_cifar10(train=True):
     )
 
 
-def _load_fashion_mnist(train=True):
+def _load_fashion_mnist(train=True, size: tuple[int, int] = (128, 128)):
     return datasets.FashionMNIST(
         root=DATA_DIR,
         train=train,
@@ -75,7 +75,7 @@ def _load_fashion_mnist(train=True):
     )
 
 
-def _load_tinyimagenet(train=True):
+def _load_tinyimagenet(train=True, size: tuple[int, int] = (128, 128)):
     if train:
         split = "train"
     else:
@@ -91,7 +91,7 @@ def _load_tinyimagenet(train=True):
     )
 
 
-def _load_coco(train=True):
+def _load_coco(train=True, size: tuple[int, int] = (128, 128)):
     root = f"./data/coco-2017/{'train' if train else 'val'}/"
     ann_file = (
         f"./data/coco-2017/annotations/instances_{'train' if train else 'val'}2017.json"
@@ -101,42 +101,52 @@ def _load_coco(train=True):
         ann_file=ann_file,
         transform=transforms.Compose(
             [
-                transforms.Resize((128, 128)),
+                transforms.Resize(size),
                 transforms.ToTensor(),
             ]
         ),
     )
 
 
-def _load_flowers102(train=True):
+def _load_flowers102(train=True, size: tuple[int, int] = (128, 128)):
     return datasets.Flowers102(
         root=DATA_DIR,
         split="test" if train else "train",
         download=True,
         transform=transforms.Compose(
             [
-                transforms.Resize((128, 128)),
+                transforms.Resize(size),
                 transforms.ToTensor(),
             ]
         ),
     )
 
 
-def _load_cub200(train=True):
+def _load_cub200(train=True, size: tuple[int, int] = (128, 128)):
     return Cub200Dataset(
-        root="./data/CUB_200_2011/CUB_200_2011",
+        root=os.path.join(DATA_DIR, "CUB_200_2011"),
         train=train,
         transform=transforms.Compose(
             [
-                transforms.Resize((128, 128)),
+                transforms.Resize(size),
                 transforms.ToTensor(),
             ]
         ),
     )
 
 
-def _load_celeba(train=True):
-    raise NotImplementedError
+def _load_celeba(train=True, size: tuple[int, int] = (64, 64)):
+    return datasets.CelebA(
+        root=DATA_DIR,
+        split="train" if train else "test",
+        download=True,
+        transform=transforms.Compose(
+            [
+                transforms.Resize(size),
+                transforms.ToTensor(),
+            ]
+        ),
+    )
 
 
 _DATASETS = {
@@ -158,8 +168,11 @@ def build_data_loaders(
     loader_fn = _DATASETS.get(cfg.name)
     if loader_fn is None:
         raise ValueError(f"Unsupported dataset '{cfg.name}'")
-    train_dataset = loader_fn(train=True)
-    test_dataset = loader_fn(train=False)
+
+    size = (cfg.height, cfg.width)
+
+    train_dataset = loader_fn(train=True, size=size)
+    test_dataset = loader_fn(train=False, size=size)
 
     train_loader = DataLoader(
         train_dataset,

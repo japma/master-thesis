@@ -5,8 +5,8 @@ import numpy as np
 import umap
 
 
-def show(tensor, title=None):
-    grid = vutils.make_grid(tensor.cpu(), nrow=16, normalize=True)
+def show(tensor, title=None, width=8):
+    grid = vutils.make_grid(tensor.cpu(), nrow=width, normalize=True)
     plt.figure(figsize=(16, 4), dpi=300)
     plt.imshow(grid.permute(1, 2, 0))
     plt.axis("off")

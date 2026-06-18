@@ -1,0 +1,29 @@
+autoencoder:
+  latent_dim: 128
+  base_channels: 64
+  num_blocks: 4
+  res_blocks: 2
+
+dataset:
+  name: celeba
+  channels: 3
+  width: 64
+  height: 64
+
+training:
+  epochs: 100
+  learning_rate: 0.0003
+  batch_size: 128
+  beta_start: 0.0
+  beta_end: 0.5
+  beta_anneal_epochs: 80
+
+wandb:
+  mode: online
+  project: master-thesis
+  entity: jmartini-tu-darmstadt
+
+paths:
+  autoencoder: "checkpoints/autoencoder/celeba.pt"
+
+seed: null
