@@ -124,7 +124,7 @@ def _load_flowers102(train=True, size: tuple[int, int] = (128, 128)):
 
 def _load_cub200(train=True, size: tuple[int, int] = (128, 128)):
     return Cub200Dataset(
-        root=os.path.join(DATA_DIR, "CUB_200_2011"),
+        root=os.path.join(DATA_DIR, "CUB_200_2011/CUB_200_2011/"),
         train=train,
         transform=transforms.Compose(
             [
