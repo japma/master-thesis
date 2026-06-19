@@ -3,6 +3,7 @@ import torch
 from models.autoencoder import AbstractAutoencoder, VariationalAutoencoder
 from models.cspn import AbstractCSPN
 from models.cspn.CustomEinet.einet import Einet
+from models.cspn.psinet_cspn import PsiNetCSPN
 from models.cspn.spflow_cspn import SPFlowCSPN
 
 
@@ -73,6 +74,12 @@ def _create_cspn_from_checkpoint(cfg: dict) -> AbstractCSPN:
             num_repetitions=cfg["num_repetitions"],
             nn_layers=cfg["nn_layers"],
             nn_hidden_dim=cfg["nn_hidden_dim"],
+        )
+    # TODO fix naming
+    elif cfg["model_type"] == "PsiNetCSPN":
+        return PsiNetCSPN(
+            latent_dim=cfg["latent_dim"],
+            num_classes=cfg["num_classes"],
         )
     else:
         raise ValueError(f"Unknown CSPN type: {cfg['model_type']}")

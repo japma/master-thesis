@@ -26,7 +26,7 @@ def main():
     seed = seed_everything(cfg.seed)
     device = resolve_device()
     dataset_name = dataset_cfg.name
-    run_name = f"Autoencoder_{dataset_name}"
+    run_name = f"autoencoder_{dataset_name}"
 
     print(f"Training Autoencoder on {dataset_name} | device={device} | seed={seed}")
 

@@ -31,7 +31,7 @@ def main():
     seed = seed_everything(cfg.seed)
     device = resolve_device()
     dataset_name = dataset_cfg.name
-    run_name = f"CSPN_{dataset_name}"
+    run_name = f"cspn_{dataset_name}_{cspn_cfg.model_type}"
 
     print(f"Training CSPN on {dataset_name} | device={device} | seed={seed}")
 

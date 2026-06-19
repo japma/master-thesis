@@ -46,6 +46,8 @@ def beta_vae_loss(
 
 def negative_log_likelihood_loss(
     outputs: torch.Tensor,
+    labels: torch.Tensor,
 ) -> torch.Tensor:
     """Negative log-likelihood loss for SPN outputs."""
-    return -outputs.mean()
+    correct_class_ll = outputs.gather(-1, labels.unsqueeze(-1)).squeeze(-1)
+    return -correct_class_ll.mean()
