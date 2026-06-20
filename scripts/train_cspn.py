@@ -1,6 +1,8 @@
 """Entry point for CSPN training."""
-
+from dataset_loaders.latent_normalizer import LatentNormalizer
 from models import SPFlowCSPN
+from models.autoencoder import AutoencoderType
+from models.cspn.abstract_cspn import CSPNType
 from models.cspn.psinet_cspn import PsiNetCSPN
 from utils.checkpoints import load_ae_from_path
 from models.autoencoder.utils import load_pretrained_autoencoder
@@ -68,7 +70,7 @@ def main():
 
     print(f"Training CSPN on {dataset_name} | device={device} | seed={seed}")
 
-    if cspn_cfg.model_type == "spflow":
+    if cspn_cfg.model_type == CSPNType.SPFLOW:
         cspn = SPFlowCSPN(
             latent_dim=ae.get_latent_dim(),
             num_classes=dataset_cfg.num_classes,
@@ -79,7 +81,7 @@ def main():
             nn_layers=cspn_cfg.nn_num_hidden_layers,
             nn_hidden_dim=cspn_cfg.nn_hidden_dim,
         )
-    elif cspn_cfg.model_type == "custom":
+    elif cspn_cfg.model_type == CSPNType.CUSTOM:
         cspn = Einet(
             num_vars=ae.get_latent_dim(),
             context_dim=dataset_cfg.num_classes,
@@ -88,7 +90,7 @@ def main():
             nn_hidden_dim=cspn_cfg.nn_hidden_dim,
             nn_num_hidden_layers=cspn_cfg.nn_num_hidden_layers,
         )
-    elif cspn_cfg.model_type == "psinet":
+    elif cspn_cfg.model_type == CSPNType.PSINET:
         cspn = PsiNetCSPN(
             latent_dim=ae.get_latent_dim(),
             num_classes=dataset_cfg.num_classes,
@@ -108,6 +110,8 @@ def main():
         optimizer, T_max=training_cfg.epochs
     )
 
+    normalizer = LatentNormalizer()
+
     train_cspn(
         model=cspn,
         autoencoder=ae,
@@ -117,6 +121,7 @@ def main():
         test_loader=test_loader,
         optimizer=optimizer,
         scheduler=scheduler,
+        normalizer=normalizer,
         rtpt=rtpt,
     )
 
