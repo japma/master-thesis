@@ -447,6 +447,8 @@ class EinsumLayer(SumLayer):
                 "idx_layer_{}_child_{}".format(layer_counter, child_num)
             )
 
+        self._last_params = params
+
         # iterate over all layers which contain "left" nodes, get their indices; then, concatenate them to one tensor
         self.left_child_log_prob = torch.cat(
             [l.prob[:, :, cidx(c, 0)] for c, l in enumerate(self.left_layers)], 2
@@ -648,6 +650,8 @@ class EinsumMixingLayer(SumLayer):
         self.register_buffer("padded_idx", torch.tensor(padded_idx))
 
     def _forward(self, params):
+        self._last_params = params
+
         self.child_log_prob = self.layers[0].prob[:, :, self.padded_idx]
         self.child_log_prob = self.child_log_prob.reshape(
             (

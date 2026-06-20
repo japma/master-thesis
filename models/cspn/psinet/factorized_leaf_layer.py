@@ -98,6 +98,7 @@ class FactorizedLeafLayer(Layer):
                  Will be of shape (batch_size, num_dist, len(self.nodes))
                  Note: num_dist is K in the paper, len(self.nodes) is the number of PC leaves
         """
+        self._last_params = params
         self.prob = torch.einsum(
             "bxir,xro->bio", self.ef_array(x, params), self.scope_tensor
         )
@@ -141,14 +142,27 @@ class FactorizedLeafLayer(Layer):
         if len(dist_idx) != len(node_idx):
             raise AssertionError("Invalid input.")
 
+        stored_params = self._last_params
+        if stored_params is None:
+            raise RuntimeError(
+                "FactorizedLeafLayer has no stored params from a forward pass. "
+                "Ensure einet.forward() or einet.backtrack() with x is called "
+                "before sampling, or that param_nn has been run."
+            )
+
         with torch.no_grad():
+            phi = self.ef_array.reparam(stored_params)
+
+            phi_mean = phi.mean(dim=0)
+
             N = len(dist_idx)
+
             if mode == "sample":
-                ef_values = self.ef_array.sample(N, **kwargs)
+                ef_values = self.ef_array._sample(N, phi_mean, **kwargs)
             elif mode == "argmax":
-                ef_values = self.ef_array.argmax(params, **kwargs)
+                ef_values = self.ef_array._argmax(phi_mean, **kwargs)
             else:
-                raise AssertionError("Unknown backtracking mode {}".format(mode))
+                raise AssertionError(f"Unknown backtracking mode {mode}")
 
             values = torch.zeros(
                 (N, self.num_var, self.num_dims),

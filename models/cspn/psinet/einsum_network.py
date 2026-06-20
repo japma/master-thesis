@@ -212,25 +212,37 @@ class EinsumNetwork(torch.nn.Module):
         assert self.param_nn is not None, "param_nn must be set and be valid nn.Module"
         params = self.param_nn(y, None)
 
+        if len(params) != len(self.einet_layers):
+            raise AssertionError(
+                f"param_nn produced {len(params)} param tensors but there are "
+                f"{len(self.einet_layers)} einet_layers. These must match 1:1."
+            )
+        layer_to_params = dict(zip(self.einet_layers, params))
+        if x is not None:
+            self.forward(x, y)
+            num_samples = x.shape[0]
+        else:
+            dummy_x = torch.zeros(
+                y.shape[0], self.args.num_var, device=y.device, dtype=torch.float32
+            )
+            self.forward(dummy_x, y)
+
+        num_samples = y.shape[0]
+
         sample_idx = {l: [] for l in self.einet_layers}
         dist_idx = {l: [] for l in self.einet_layers}
         reg_idx = {l: [] for l in self.einet_layers}
 
         root = self.einet_layers[-1]
-
-        if x is not None:
-            self.forward(x)
-            num_samples = x.shape[0]
-            assert y.shape[0] == x.shape[0]
-        num_samples = y.shape[0]
-
         sample_idx[root] = list(range(num_samples))
         dist_idx[root] = [class_idx] * num_samples
         reg_idx[root] = [0] * num_samples
 
-        for layer, layer_params in zip(reversed(self.einet_layers), reversed(params)):
+        for layer in reversed(self.einet_layers):
             if not sample_idx[layer]:
                 continue
+
+            layer_params = layer_to_params[layer]
 
             if type(layer) is EinsumLayer:
                 ret = layer.backtrack(
