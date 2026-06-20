@@ -47,15 +47,19 @@ class PsiNetCSPN(AbstractCSPN):
         self.einet.param_nn = conditioning_network
 
     def forward(self, z: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
-        return self.einet.forward(x=z, y=labels)
+        results = torch.zeros(z.shape[0], 1, device=z.device)
+        for cls in labels.unique():
+            mask = labels == cls
+            results[mask] = self.einet.forward(x=z[mask], y=labels[mask])
+        return results
 
     def sample(self, labels: torch.Tensor) -> torch.Tensor:
-        sample = self.einet.sample(y=labels)
-
-        if sample is None:
-            raise ValueError
-
-        return sample
+        results = torch.zeros(labels.shape[0], self.latent_dim, device=labels.device)
+        for cls in labels.unique():
+            mask = labels == cls
+            cls_labels = labels[mask]
+            results[mask] = self.einet.sample(y=cls_labels)
+        return results
 
     def get_config(self) -> dict:
         return {
