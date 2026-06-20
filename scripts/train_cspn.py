@@ -31,14 +31,42 @@ def main():
     seed = seed_everything(cfg.seed)
     device = resolve_device()
     dataset_name = dataset_cfg.name
-    run_name = f"cspn_{dataset_name}_{cspn_cfg.model_type}"
 
-    print(f"Training CSPN on {dataset_name} | device={device} | seed={seed}")
+    run_name = f"cspn_{dataset_name}_{cspn_cfg.model_type}"
 
     # TODO fix loading
     # ae = load_pretrained_autoencoder("madebyollin/taesd")
     ae_path = Path(cfg.paths.autoencoder_path)
     ae = load_ae_from_path(ae_path, device=device)
+
+    rtpt = RTPT(
+        name_initials="JM",
+        experiment_name=run_name,
+        max_iterations=max(training_cfg.epochs, 1),
+    )
+    rtpt.start()
+
+    wandb.init(
+        entity=wandb_cfg.entity,
+        project=wandb_cfg.project,
+        name=run_name,
+        config={
+            "dataset": dataset_name,
+            "model": "CSPN",
+            "model_type": "Einet",
+            "epochs": training_cfg.epochs,
+            "latent_dim": ae.get_latent_dim(),
+            "learning_rate": training_cfg.learning_rate,
+            "seed": seed,
+            "num_leaves": cspn_cfg.num_leaves,
+            "num_sums": cspn_cfg.num_sums,
+            "depth": cspn_cfg.depth,
+            "num_repetitions": cspn_cfg.num_repetitions,
+        },
+        mode=wandb_cfg.mode,
+    )
+
+    print(f"Training CSPN on {dataset_name} | device={device} | seed={seed}")
 
     if cspn_cfg.model_type == "spflow":
         cspn = SPFlowCSPN(
@@ -78,33 +106,6 @@ def main():
     optimizer = torch.optim.Adam(cspn.parameters(), lr=training_cfg.learning_rate)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer, T_max=training_cfg.epochs
-    )
-
-    rtpt = RTPT(
-        name_initials="JM",
-        experiment_name=run_name,
-        max_iterations=max(training_cfg.epochs, 1),
-    )
-    rtpt.start()
-
-    wandb.init(
-        entity=wandb_cfg.entity,
-        project=wandb_cfg.project,
-        name=run_name,
-        config={
-            "dataset": dataset_name,
-            "model": "CSPN",
-            "model_type": "Einet",
-            "epochs": training_cfg.epochs,
-            "latent_dim": ae.get_latent_dim(),
-            "learning_rate": training_cfg.learning_rate,
-            "seed": seed,
-            "num_leaves": cspn_cfg.num_leaves,
-            "num_sums": cspn_cfg.num_sums,
-            "depth": cspn_cfg.depth,
-            "num_repetitions": cspn_cfg.num_repetitions,
-        },
-        mode=wandb_cfg.mode,
     )
 
     train_cspn(
