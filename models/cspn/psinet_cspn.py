@@ -29,7 +29,7 @@ class PsiNetCSPN(AbstractCSPN):
             num_classes=1,
             exponential_family=NormalArray,
             exponential_family_args={"min_var": 1e-3, "max_var": 1.0},
-            use_em=False,
+            use_em=True,
         )
 
         self.einet = EinsumNetwork(
