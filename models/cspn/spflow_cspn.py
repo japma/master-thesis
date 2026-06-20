@@ -1,3 +1,4 @@
+from models.cspn.abstract_cspn import CSPNType
 from spflow.modules.leaves.leaf import LeafModule
 from spflow.modules.leaves.normal import Normal
 from spflow.zoo.einet import Einet
@@ -77,7 +78,7 @@ class SPFlowCSPN(AbstractCSPN):
 
     def get_config(self) -> dict:
         return {
-            "model_type": "spflow_cspn",
+            "model_type": CSPNType.SPFLOW,
             "latent_dim": self.latent_dim,
             "num_classes": self.num_classes,
             "num_sums": self.num_sums,

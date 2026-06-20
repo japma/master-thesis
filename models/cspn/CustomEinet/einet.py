@@ -9,6 +9,8 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from models.cspn.abstract_cspn import CSPNType
+
 
 # TODO this does not look right
 class Einet(AbstractCSPN):
@@ -169,7 +171,7 @@ class Einet(AbstractCSPN):
 
     def get_config(self) -> dict:
         return {
-            "model_type": "custom_cspn",
+            "model_type": CSPNType.CUSTOM,
             "context_dim": self.context_dim,
             "num_vars": self.num_vars,
             "num_leaves": self.num_leaves,

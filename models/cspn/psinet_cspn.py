@@ -1,6 +1,7 @@
 import torch
 
 from models.cspn import AbstractCSPN
+from models.cspn.abstract_cspn import CSPNType
 from models.cspn.psinet.einsum_network import EinsumNetwork, Args
 from models.cspn.psinet.exponential_family_array import NormalArray
 from models.cspn.psinet.graph import random_binary_trees
@@ -58,7 +59,7 @@ class PsiNetCSPN(AbstractCSPN):
 
     def get_config(self) -> dict:
         return {
-            "model_type": "PsiNetCSPN",
+            "model_type": CSPNType.PSINET,
             "latent_dim": self.latent_dim,
             "num_classes": self.num_classes,
         }
