@@ -20,6 +20,9 @@ def main():
     cfg = load_config()
     dataset_cfg = cfg.dataset
     autoencoder_cfg = cfg.autoencoder
+    assert isinstance(autoencoder_cfg, VariationalAutoencoderConfig), (
+        "Only VariationalAutoencoderConfig is supported in this script"
+    )
     training_cfg = cfg.training
     wandb_cfg = cfg.wandb
 
@@ -28,12 +31,31 @@ def main():
     dataset_name = dataset_cfg.name
     run_name = f"autoencoder_{dataset_name}"
 
+    wandb.init(
+        entity=wandb_cfg.entity,
+        project=wandb_cfg.project,
+        name=run_name,
+        config={
+            "dataset": dataset_name,
+            "model": "Autoencoder",
+            "model_type": "VariationalAutoencoder",
+            "epochs": training_cfg.epochs,
+            "latent_dim": autoencoder_cfg.latent_dim,
+            "learning_rate": training_cfg.learning_rate,
+            "beta_start": training_cfg.beta_start,
+            "beta_end": training_cfg.beta_end,
+            "beta_anneal_epochs": training_cfg.beta_anneal_epochs,
+            "seed": seed,
+            "base_channels": autoencoder_cfg.base_channels,
+            "num_blocks": autoencoder_cfg.num_blocks,
+        },
+        mode=wandb_cfg.mode,
+    )
+
     print(f"Training Autoencoder on {dataset_name} | device={device} | seed={seed}")
 
     input_shape = (dataset_cfg.channels, dataset_cfg.height, dataset_cfg.width)
-    assert isinstance(autoencoder_cfg, VariationalAutoencoderConfig), (
-        "Only VariationalAutoencoderConfig is supported in this script"
-    )
+
     ae = VariationalAutoencoder(
         input_shape=input_shape,
         latent_dim=autoencoder_cfg.latent_dim,
@@ -65,27 +87,6 @@ def main():
         max_iterations=max(training_cfg.epochs, 1),
     )
     rtpt.start()
-
-    wandb.init(
-        entity=wandb_cfg.entity,
-        project=wandb_cfg.project,
-        name=run_name,
-        config={
-            "dataset": dataset_name,
-            "model": "Autoencoder",
-            "model_type": "VariationalAutoencoder",
-            "epochs": training_cfg.epochs,
-            "latent_dim": autoencoder_cfg.latent_dim,
-            "learning_rate": training_cfg.learning_rate,
-            "beta_start": training_cfg.beta_start,
-            "beta_end": training_cfg.beta_end,
-            "beta_anneal_epochs": training_cfg.beta_anneal_epochs,
-            "seed": seed,
-            "base_channels": autoencoder_cfg.base_channels,
-            "num_blocks": autoencoder_cfg.num_blocks,
-        },
-        mode=wandb_cfg.mode,
-    )
 
     train_autoencoder(
         model=ae,

@@ -1,15 +1,15 @@
 #!/bin/bash
-# run_experiments.sh
-# Usage: bash run_experiments.sh
+# train_autoencoders.sh
+# Usage: bash train_autoencoders.sh
 
 set -e
 
 source .venv/bin/activate
 
 configs=(
-    "configs/cspn/mnist_psi.yaml"
-    "configs/cspn/flowers_psi.yaml"
-    "configs/cspn/cub_psi.yaml"
+    "configs/autoencoder/mnist.yaml"
+    "configs/autoencoder/flowers.yaml"
+    "configs/autoencoder/cub.yaml"
 )
 
 for config in "${configs[@]}"; do
@@ -18,7 +18,7 @@ for config in "${configs[@]}"; do
     echo "Started at: $(date)"
     echo "========================================"
 
-    python scripts/train_cspn.py "$config"
+    python scripts/train_ae.py "$config"
 
     echo "Finished $config at $(date)"
     echo ""

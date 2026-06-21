@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from . import AutoencoderType
 from .abstract_autoencoder import AbstractAutoencoder, AutoencoderForwardOutput
 
 
@@ -120,7 +121,7 @@ class VariationalAutoencoder(AbstractAutoencoder):
 
     def get_config(self) -> dict:
         return {
-            "model_type": "variational",
+            "model_type": AutoencoderType.VARIATIONAL,
             "input_shape": self.input_shape,
             "latent_dim": self.latent_dim,
             "base_channels": self.base_channels,

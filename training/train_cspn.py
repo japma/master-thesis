@@ -3,7 +3,6 @@
 import torch
 import tqdm
 import wandb
-from parso import normalizer
 from rtpt import RTPT
 
 from dataset_loaders.latent_normalizer import LatentNormalizer

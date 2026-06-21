@@ -1,4 +1,5 @@
 """Entry point for CSPN training."""
+
 from dataset_loaders.latent_normalizer import LatentNormalizer
 from models import SPFlowCSPN
 from models.autoencoder import AutoencoderType
@@ -40,13 +41,6 @@ def main():
     # ae = load_pretrained_autoencoder("madebyollin/taesd")
     ae_path = Path(cfg.paths.autoencoder_path)
     ae = load_ae_from_path(ae_path, device=device)
-
-    rtpt = RTPT(
-        name_initials="JM",
-        experiment_name=run_name,
-        max_iterations=max(training_cfg.epochs, 1),
-    )
-    rtpt.start()
 
     wandb.init(
         entity=wandb_cfg.entity,
@@ -111,6 +105,13 @@ def main():
     )
 
     normalizer = LatentNormalizer()
+
+    rtpt = RTPT(
+        name_initials="JM",
+        experiment_name=run_name,
+        max_iterations=max(training_cfg.epochs, 1),
+    )
+    rtpt.start()
 
     train_cspn(
         model=cspn,

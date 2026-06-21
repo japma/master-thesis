@@ -21,7 +21,7 @@ def _grayscale_to_rgb(x: torch.Tensor) -> torch.Tensor:
     return x.repeat(3, 1, 1)
 
 
-def _load_mnist(train=True, size: tuple[int, int] = (128, 128)):
+def _load_mnist(train=True, size: tuple[int, int] = (28, 28)):
     return datasets.MNIST(
         root=DATA_DIR,
         train=train,
@@ -35,7 +35,7 @@ def _load_mnist(train=True, size: tuple[int, int] = (128, 128)):
     )
 
 
-def _load_binary_mnist(train=True, size: tuple[int, int] = (128, 128)):
+def _load_binary_mnist(train=True, size: tuple[int, int] = (28, 28)):
     return BinaryMNISTDataset(
         root=DATA_DIR,
         train=train,

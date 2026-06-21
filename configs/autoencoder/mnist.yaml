@@ -1,4 +1,5 @@
 autoencoder:
+  model_type: variational
   latent_dim: 32
   base_channels: 32
   num_blocks: 2

@@ -17,7 +17,7 @@ training:
   learning_rate: 0.0003
   batch_size: 64
   beta_start: 0.0
-  beta_end: 0.5
+  beta_end: 1.0
   beta_anneal_epochs: 150
 
 wandb:

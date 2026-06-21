@@ -42,8 +42,7 @@ def _train_epoch(
         optimizer.zero_grad()
 
         recon, mu, logvar = model(images)
-        # loss, recon_loss, kl_loss = beta_vae_loss(
-        loss, recon_loss, kl_loss = vae_loss(
+        loss, recon_loss, kl_loss = beta_vae_loss(
             images, recon, mu, logvar, recon_loss_fn=loss_fn, beta=beta
         )
 
