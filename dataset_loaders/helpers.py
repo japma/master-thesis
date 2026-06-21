@@ -178,9 +178,11 @@ def build_data_loaders(
     if homogeneous:
         train_sampler = SingleClassSampler(train_dataset, batch_size)
         test_sampler = SingleClassSampler(test_dataset, batch_size)
+        shuffle = False
     else:
         train_sampler = None
         test_sampler = None
+        shuffle = True
 
     num_workers = 4
 
@@ -193,6 +195,7 @@ def build_data_loaders(
         batch_size=batch_size,
         persistent_workers=num_workers > 0,
         drop_last=True,
+        shuffle=shuffle,
     )
     test_loader = DataLoader(
         test_dataset,
@@ -203,6 +206,7 @@ def build_data_loaders(
         batch_size=batch_size,
         persistent_workers=num_workers > 0,
         drop_last=True,
+        shuffle=False,
     )
 
     return train_loader, test_loader
