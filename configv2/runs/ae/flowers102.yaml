@@ -1,5 +1,5 @@
 type: ae
 dataset: flowers102
 model: medium
-training: medium
+training: large
 wandb: online

@@ -1,0 +1,6 @@
+type: cspn
+dataset: flowers102
+model: small
+autoencoder: flowers
+training: medium
+wandb: online

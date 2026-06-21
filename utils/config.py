@@ -54,6 +54,7 @@ class BaseTrainingConfig:
 class AutoencoderTrainingConfig(BaseTrainingConfig):
     beta_start: float = 0.0
     beta_end: float = 1.0
+    beta_warmup_epochs: int = 0
     beta_anneal_epochs: int = 25
 
 

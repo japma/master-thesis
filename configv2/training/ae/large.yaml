@@ -2,5 +2,6 @@ epochs: 200
 learning_rate: 0.0003
 batch_size: 64
 beta_start: 0.0
-beta_end: 1.0
-beta_anneal_epochs: 150
+beta_end: 0.1
+beta_anneal_epochs: 120
+beta_warmup_epochs: 30

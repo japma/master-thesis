@@ -70,6 +70,11 @@ class Cub200Dataset(Dataset):
 
         return tt_split_ids
 
+    def download(self) -> None:
+        raise NotImplementedError(
+            "Automatic downloading is not implemented for CUB-200-2011."
+        )
+
     def __len__(self) -> int:
         return len(self.samples)
 

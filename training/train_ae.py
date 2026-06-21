@@ -15,10 +15,14 @@ def _beta_for_epoch(
     beta_start: float,
     beta_end: float,
     anneal_epochs: int,
+    warmup_epochs: int = 0,
 ) -> float:
+    if epoch < warmup_epochs:
+        return 0.0
+    adjusted_epoch = epoch - warmup_epochs
     if anneal_epochs <= 1:
         return beta_end
-    progress = min(epoch / (anneal_epochs - 1), 1.0)
+    progress = min(adjusted_epoch / (anneal_epochs - 1), 1.0)
     return beta_start + progress * (beta_end - beta_start)
 
 
@@ -119,6 +123,7 @@ def train_autoencoder(
     beta_start = cfg.training.beta_start
     beta_end = cfg.training.beta_end
     beta_anneal_epochs = min(cfg.training.beta_anneal_epochs, epochs)
+    beta_warmup_epochs = min(cfg.training.beta_warmup_epochs, epochs)
     log_sample_every = 10
 
     sample_images = next(iter(train_loader))[0][:16].to(device)
@@ -129,7 +134,9 @@ def train_autoencoder(
     )
 
     for epoch in range(epochs):
-        beta = _beta_for_epoch(epoch, beta_start, beta_end, beta_anneal_epochs)
+        beta = _beta_for_epoch(
+            epoch, beta_start, beta_end, beta_anneal_epochs, beta_warmup_epochs
+        )
 
         train_loss, train_recon, train_kl = _train_epoch(
             model, train_loader, optimizer, loss_fn, beta, device, epoch, epochs
@@ -146,6 +153,7 @@ def train_autoencoder(
                 "train_loss": train_loss,
                 "train_recon_loss": train_recon,
                 "train_kl_loss": train_kl,
+                "train_kl_weighted": beta * train_kl,
                 "val_loss": val_loss,
                 "val_recon_loss": val_recon,
                 "val_kl_loss": val_kl,
