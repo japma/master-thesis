@@ -182,24 +182,26 @@ def build_data_loaders(
         train_sampler = None
         test_sampler = None
 
+    num_workers = 4
+
     train_loader = DataLoader(
         train_dataset,
         sampler=train_sampler,
-        num_workers=cfg.num_workers,
-        prefetch_factor=4 if cfg.num_workers > 0 else None,
+        num_workers=num_workers,
+        prefetch_factor=4 if num_workers > 0 else None,
         pin_memory=torch.cuda.is_available(),
         batch_size=batch_size,
-        persistent_workers=cfg.num_workers > 0,
+        persistent_workers=num_workers > 0,
         drop_last=True,
     )
     test_loader = DataLoader(
         test_dataset,
         sampler=test_sampler,
-        num_workers=cfg.num_workers,
-        prefetch_factor=4 if cfg.num_workers > 0 else None,
+        num_workers=num_workers,
+        prefetch_factor=4 if num_workers > 0 else None,
         pin_memory=torch.cuda.is_available(),
         batch_size=batch_size,
-        persistent_workers=cfg.num_workers > 0,
+        persistent_workers=num_workers > 0,
         drop_last=True,
     )
 
