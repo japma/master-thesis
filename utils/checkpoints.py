@@ -59,7 +59,8 @@ def _create_autoencoder_from_checkpoint(cfg: dict) -> AbstractAutoencoder:
 
 
 def load_ae_from_path(path: Path, device=None) -> AbstractAutoencoder:
-    ckpt = torch.load(path, map_location=device, weights_only=True)
+    with torch.serialization.safe_globals([AutoencoderType]):
+        ckpt = torch.load(path, map_location=device, weights_only=True)
     model = _create_autoencoder_from_checkpoint(ckpt["model_cfg"])
     model.load_state_dict(ckpt["model_state"])
     return model

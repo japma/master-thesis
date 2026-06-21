@@ -15,47 +15,51 @@ def show(tensor, title=None, width=8):
     plt.show()
 
 
-def plot_latent_comparison(
-    latents_a: torch.Tensor,
-    latents_b: torch.Tensor,
-    reference: torch.Tensor | None = None,
-    name_a: str = "Model A",
-    name_b: str = "Model B",
-    name_reference: str = "Ground truth",
-    title: str = "Latent space comparison",
+def plot_latent_comparison():
+    raise NotImplementedError
+
+
+def plot_latent_space(
+    latents: torch.Tensor,
+    labels: torch.Tensor,
+    title: str = "Latent space",
+    class_names: list[str] | None = None,
 ):
-    a = latents_a.detach().cpu().numpy()
-    b = latents_b.detach().cpu().numpy()
-    n_a = a.shape[0]
-    n_b = b.shape[0]
+    a = latents.detach().cpu().numpy()
 
-    tensors = [a, b]
-    if reference is not None:
-        ref = reference.detach().cpu().numpy()
-        tensors.append(ref)
+    classes = sorted(np.unique(labels).tolist())
+    n_classes = len(classes)
 
-    combined = np.concatenate(tensors, axis=0)
+    cmap = plt.get_cmap("tab10" if n_classes <= 10 else "tab20")
+    class_to_color = {c: cmap(i / max(n_classes - 1, 1)) for i, c in enumerate(classes)}
 
     reducer = umap.UMAP(n_components=2)
-    projected = reducer.fit_transform(combined)
+    projected = reducer.fit_transform(a)
 
-    proj_a = projected[:n_a]
-    proj_b = projected[n_a : n_a + n_b]
+    fig, ax = plt.subplots(figsize=(9, 8))
 
-    plt.figure(figsize=(8, 8))
-    plt.scatter(proj_a[:, 0], proj_a[:, 1], marker="o", alpha=0.7, label=name_a)
-    plt.scatter(proj_b[:, 0], proj_b[:, 1], marker="o", alpha=0.7, label=name_b)
-
-    if reference is not None:
-        proj_ref = projected[n_a + n_b :]
-        plt.scatter(
-            proj_ref[:, 0], proj_ref[:, 1], marker="x", alpha=0.7, label=name_reference
+    for cls in classes:
+        mask = labels == cls
+        if not mask.any():
+            continue
+        label_str = class_names[cls] if class_names is not None else str(cls)
+        ax.scatter(
+            projected[mask, 0],
+            projected[mask, 1],
+            c=[class_to_color[cls]],
+            marker="x",
+            alpha=0.7,
+            s=60,
+            label=label_str,
         )
 
-    plt.title(title)
-    plt.xlabel("Component 1")
-    plt.ylabel("Component 2")
-    plt.legend()
+    ax.legend(
+        title="Class", loc="upper left", bbox_to_anchor=(1.01, 1), borderaxespad=0
+    )
+
+    ax.set_title(title)
+    ax.set_xlabel("UMAP component 1")
+    ax.set_ylabel("UMAP component 2")
     plt.tight_layout()
     plt.show()
 

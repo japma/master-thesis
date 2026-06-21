@@ -39,7 +39,7 @@ def beta_vae_loss(
 ):
     recon_loss = recon_loss_fn(recon, images)
 
-    kl_loss = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp()).sum(dim=1).mean()
+    kl_loss = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp()).mean()
 
     return recon_loss + beta * kl_loss, recon_loss, kl_loss
 

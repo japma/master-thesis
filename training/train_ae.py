@@ -76,8 +76,7 @@ def _val_epoch(
         for images, _ in tqdm.tqdm(loader, desc=f"Val   {epoch + 1}/{epochs}"):
             images = images.to(device, non_blocking=True)
             recon, mu, logvar = model(images)
-            # loss, recon_loss, kl_loss = beta_vae_loss(
-            loss, recon_loss, kl_loss = vae_loss(
+            loss, recon_loss, kl_loss = beta_vae_loss(
                 images, recon, mu, logvar, recon_loss_fn=loss_fn, beta=beta
             )
             total_loss += loss.detach()
