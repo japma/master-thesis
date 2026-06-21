@@ -175,7 +175,7 @@ def build_data_loaders(
     train_dataset = loader_fn(train=True, size=size)
     test_dataset = loader_fn(train=False, size=size)
 
-    if cfg.homogeneous:
+    if False:
         train_sampler = SingleClassSampler(train_dataset, batch_size)
         test_sampler = SingleClassSampler(test_dataset, batch_size)
     else:
