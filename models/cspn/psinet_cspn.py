@@ -1,4 +1,5 @@
 import torch
+import math
 
 from models.cspn import AbstractCSPN
 from models.cspn.abstract_cspn import CSPNType
@@ -10,7 +11,17 @@ from models.cspn.psinet.conditioning_nn import build_conditioning_mlp_for
 
 # TODO add more parameters
 class PsiNetCSPN(AbstractCSPN):
-    def __init__(self, latent_dim: int, num_classes: int, h_dims=None) -> None:
+    def __init__(
+        self,
+        latent_dim: int,
+        num_classes: int,
+        num_repetitions: int = 10,
+        num_input_distributions: int = 10,
+        num_sums: int = 10,
+        min_var: float = 1e-3,
+        max_var: float = 1.0,
+        h_dims: list[int] | None = None,
+    ) -> None:
         super().__init__()
         self.latent_dim = latent_dim
         self.num_classes = num_classes
@@ -18,18 +29,20 @@ class PsiNetCSPN(AbstractCSPN):
         if h_dims is None:
             h_dims = [100]
 
+        depth = math.floor(math.log2(latent_dim))
+
         self.graph = random_binary_trees(
-            num_var=latent_dim, depth=4, num_repetitions=10
+            num_var=latent_dim, depth=depth, num_repetitions=num_repetitions
         )
 
         self.args = Args(
             num_var=latent_dim,
             num_dims=1,
-            num_input_distributions=10,
-            num_sums=10,
+            num_input_distributions=num_input_distributions,
+            num_sums=num_sums,
             num_classes=1,
             exponential_family=NormalArray,
-            exponential_family_args={"min_var": 1e-3, "max_var": 1.0},
+            exponential_family_args={"min_var": min_var, "max_var": max_var},
             use_em=False,
         )
 
