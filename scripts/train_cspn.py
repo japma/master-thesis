@@ -1,10 +1,12 @@
 """Entry point for CSPN training."""
 
+from sympy import true
+
 from models import SPFlowCSPN
 from models.autoencoder import AutoencoderType
 from models.cspn.abstract_cspn import CSPNType
 from models.cspn.psinet_cspn import PsiNetCSPN
-from utils.checkpoints import load_ae_from_path
+from utils.checkpoints import load_ae_from_path, load_from_wandb
 from models.autoencoder.utils import load_pretrained_autoencoder
 from torchinfo import summary
 
@@ -57,10 +59,12 @@ def main():
         mode=wandb_cfg.mode,
     )
 
-    # TODO fix loading
-    # ae = load_pretrained_autoencoder("madebyollin/taesd")
-    ae_path = Path("/")
-    ae = load_ae_from_path(ae_path, device=device)
+    ae_cfg = cfg.autoencoder
+    if ae_cfg.external:
+        ae = load_pretrained_autoencoder(ae_cfg.name)
+    else:
+        ae_path = load_from_wandb(ckpt_name=ae_cfg.name, tag="best")
+        ae = load_ae_from_path(ae_path, device=device)
 
     print(f"Training CSPN on {dataset_name} | device={device} | seed={seed}")
 
@@ -96,7 +100,7 @@ def main():
     summary(cspn)
 
     train_loader, test_loader = build_data_loaders(
-        dataset_cfg, batch_size=training_cfg.batch_size
+        dataset_cfg, batch_size=training_cfg.batch_size, homogeneous=true
     )
 
     optimizer = torch.optim.Adam(cspn.parameters(), lr=training_cfg.learning_rate)

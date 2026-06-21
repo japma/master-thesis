@@ -164,7 +164,7 @@ _DATASETS = {
 
 
 def build_data_loaders(
-    cfg: DatasetConfig, batch_size: int = 32
+    cfg: DatasetConfig, batch_size: int = 32, homogeneous: bool = False
 ) -> tuple[DataLoader, DataLoader]:
     loader_fn = _DATASETS.get(cfg.name)
     if loader_fn is None:
@@ -175,7 +175,7 @@ def build_data_loaders(
     train_dataset = loader_fn(train=True, size=size)
     test_dataset = loader_fn(train=False, size=size)
 
-    if False:
+    if homogeneous:
         train_sampler = SingleClassSampler(train_dataset, batch_size)
         test_sampler = SingleClassSampler(test_dataset, batch_size)
     else:
