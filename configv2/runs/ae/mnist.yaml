@@ -1,0 +1,5 @@
+type: ae
+dataset: mnist
+model: small
+training: small
+wandb: online

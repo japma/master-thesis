@@ -175,27 +175,31 @@ def build_data_loaders(
     train_dataset = loader_fn(train=True, size=size)
     test_dataset = loader_fn(train=False, size=size)
 
-    train_sampler = SingleClassSampler(train_dataset, batch_size)
-    test_sampler = SingleClassSampler(test_dataset, batch_size)
+    if cfg.homogeneous:
+        train_sampler = SingleClassSampler(train_dataset, batch_size)
+        test_sampler = SingleClassSampler(test_dataset, batch_size)
+    else:
+        train_sampler = None
+        test_sampler = None
 
     train_loader = DataLoader(
         train_dataset,
         sampler=train_sampler,
         num_workers=cfg.num_workers,
-        prefetch_factor=4,
+        prefetch_factor=4 if cfg.num_workers > 0 else None,
         pin_memory=torch.cuda.is_available(),
         batch_size=batch_size,
-        persistent_workers=True,
+        persistent_workers=cfg.num_workers > 0,
         drop_last=True,
     )
     test_loader = DataLoader(
         test_dataset,
         sampler=test_sampler,
         num_workers=cfg.num_workers,
-        prefetch_factor=4,
+        prefetch_factor=4 if cfg.num_workers > 0 else None,
         pin_memory=torch.cuda.is_available(),
         batch_size=batch_size,
-        persistent_workers=True,
+        persistent_workers=cfg.num_workers > 0,
         drop_last=True,
     )
 

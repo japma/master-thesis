@@ -1,0 +1,5 @@
+name: celeba
+channels: 3
+width: 128
+height: 128
+num_classes: 200

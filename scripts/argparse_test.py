@@ -3,7 +3,6 @@ from utils.config import load_config
 
 def main():
     cfg = load_config()
-    print(f"Loaded config from {cfg}")
     print(cfg)
 
 

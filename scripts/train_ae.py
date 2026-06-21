@@ -12,17 +12,15 @@ from dataset_loaders import build_data_loaders
 from models import VariationalAutoencoder
 from training.train_ae import train_autoencoder
 from utils.checkpoints import save_autoencoder
-from utils.config import load_config, VariationalAutoencoderConfig
+from utils.config import load_config, AERunConfig
 from utils.reproducibility import resolve_device, seed_everything
 
 
 def main():
     cfg = load_config()
+    assert isinstance(cfg, AERunConfig)
     dataset_cfg = cfg.dataset
-    autoencoder_cfg = cfg.autoencoder
-    assert isinstance(autoencoder_cfg, VariationalAutoencoderConfig), (
-        "Only VariationalAutoencoderConfig is supported in this script"
-    )
+    autoencoder_cfg = cfg.model
     training_cfg = cfg.training
     wandb_cfg = cfg.wandb
 
@@ -100,7 +98,7 @@ def main():
         rtpt=rtpt,
     )
 
-    ckpt_path = Path(cfg.paths.autoencoder_path)
+    ckpt_path = Path("checkpoints") / f"{run_name}.pt"
     save_autoencoder(ae, ckpt_path)
 
     artifact = wandb.Artifact(name=run_name, type="autoencoder")

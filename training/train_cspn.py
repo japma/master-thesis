@@ -5,7 +5,6 @@ import tqdm
 import wandb
 from rtpt import RTPT
 
-from dataset_loaders.latent_normalizer import LatentNormalizer
 from models.autoencoder import AbstractAutoencoder
 from models.cspn import AbstractCSPN
 from training.losses import negative_log_likelihood_loss
@@ -16,7 +15,6 @@ def _train_epoch(
     autoencoder: AbstractAutoencoder,
     loader: torch.utils.data.DataLoader,
     optimizer: torch.optim.Optimizer,
-    normalizer: LatentNormalizer,
     device: torch.device,
     epoch: int,
     epochs: int,
@@ -30,9 +28,8 @@ def _train_epoch(
 
         with torch.no_grad():
             latent = autoencoder.encode(images)
-            normalized_latent = normalizer.normalize(latent)
 
-        loss = negative_log_likelihood_loss(model(normalized_latent, labels), labels)
+        loss = negative_log_likelihood_loss(model(latent, labels), labels)
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -45,7 +42,6 @@ def _val_epoch(
     model: AbstractCSPN,
     autoencoder: AbstractAutoencoder,
     loader: torch.utils.data.DataLoader,
-    normalizer: LatentNormalizer,
     device: torch.device,
     epoch: int,
     epochs: int,
@@ -58,10 +54,7 @@ def _val_epoch(
             images = images.to(device, non_blocking=True)
             labels = labels.to(device, non_blocking=True)
             latent = autoencoder.encode(images)
-            normalized_latent = normalizer.normalize(latent)
-            loss = negative_log_likelihood_loss(
-                model(normalized_latent, labels), labels
-            )
+            loss = negative_log_likelihood_loss(model(latent, labels), labels)
             total_loss += loss.detach()
 
     return (total_loss / len(loader)).item()
@@ -70,7 +63,6 @@ def _val_epoch(
 def _log_samples(
     model: AbstractCSPN,
     autoencoder: AbstractAutoencoder,
-    normalizer: LatentNormalizer,
     device: torch.device,
     num_classes: int,
     samples_per_class: int,
@@ -85,8 +77,7 @@ def _log_samples(
     with torch.no_grad():
         with torch.no_grad():
             sampled_latent = model.sample(sample_labels)
-            sampled_latent_denormalized = normalizer.denormalize(sampled_latent)
-            sampled_images = autoencoder.decode(sampled_latent_denormalized)
+            sampled_images = autoencoder.decode(sampled_latent)
     images_u8 = (sampled_images.clamp(0, 1) * 255).byte().cpu()
     wandb.log(
         {"samples/cspn_generated_images": [wandb.Image(img) for img in images_u8]},
@@ -103,7 +94,6 @@ def train_cspn(
     test_loader: torch.utils.data.DataLoader,
     optimizer: torch.optim.Optimizer,
     scheduler: torch.optim.lr_scheduler.LRScheduler,
-    normalizer: LatentNormalizer,
     rtpt: RTPT,
 ) -> None:
     model.to(device)
@@ -113,22 +103,17 @@ def train_cspn(
     epochs = cfg.training.epochs
     log_sample_every = 10
 
-    normalizer.fit(autoencoder, train_loader, device)
-
     for epoch in range(epochs):
         train_loss = _train_epoch(
             model,
             autoencoder,
             train_loader,
             optimizer,
-            normalizer,
             device,
             epoch,
             epochs,
         )
-        val_loss = _val_epoch(
-            model, autoencoder, test_loader, normalizer, device, epoch, epochs
-        )
+        val_loss = _val_epoch(model, autoencoder, test_loader, device, epoch, epochs)
         learning_rate = scheduler.get_last_lr()[0]
         scheduler.step()
 
@@ -145,7 +130,6 @@ def train_cspn(
             _log_samples(
                 model,
                 autoencoder,
-                normalizer,
                 device,
                 num_classes=cfg.dataset.num_classes,
                 samples_per_class=3,

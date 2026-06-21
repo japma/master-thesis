@@ -10,7 +10,7 @@ results/
 artifacts
 outputs/
 checkpoints/
-wandb/
+/wandb/
 
 .env
 

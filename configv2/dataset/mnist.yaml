@@ -1,0 +1,5 @@
+name: mnist
+channels: 3
+width: 28
+height: 28
+num_classes: 10
