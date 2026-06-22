@@ -92,6 +92,12 @@ def main():
         cspn = PsiNetCSPN(
             latent_dim=ae.get_latent_dim(),
             num_classes=dataset_cfg.num_classes,
+            num_repetitions=cspn_cfg.num_repetitions,
+            num_input_distributions=cspn_cfg.num_input_distributions,
+            num_sums=cspn_cfg.num_sums,
+            min_var=cspn_cfg.min_var,
+            max_var=cspn_cfg.max_var,
+            h_dims=cspn_cfg.h_dims,
         )
     else:
         raise ValueError(f"Unknown model type {cspn_cfg.model_type}")

@@ -1,5 +1,5 @@
 type: cspn
-dataset: flowers102
+dataset: cub200
 model: medium
 autoencoder: flowers
 training: large

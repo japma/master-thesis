@@ -1,0 +1,8 @@
+model_type: "psinet"
+num_repetitions: 3
+num_input_distributions: 8
+num_sums: 8
+min_var: 0.01
+max_var: 2.0
+nn_hidden_dims: [ 128, 64 ]
+

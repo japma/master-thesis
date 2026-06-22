@@ -35,12 +35,12 @@ class PretrainedAutoencoderConfig:
 @dataclass
 class CSPNConfig:
     model_type: str = "custom"
-    num_leaves: int = 10
+    num_repetitions: int = 10
+    num_input_distributions: int = 10
     num_sums: int = 10
-    depth: int = 3
-    num_repetitions: int = 1
-    nn_hidden_dim: int = 64
-    nn_num_hidden_layers: int = 2
+    min_var: float = 0.1
+    max_var: float = 1.0
+    h_dims: list[int] = field(default_factory=lambda: [100])
 
 
 @dataclass
