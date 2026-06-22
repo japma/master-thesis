@@ -1,6 +1,6 @@
 type: cspn
 dataset: flowers102
-model: medium
+model: large
 autoencoder: flowers
 training: large
 wandb: online

@@ -1,6 +1,6 @@
 type: cspn
 dataset: cub200
-model: medium
-autoencoder: flowers
+model: large
+autoencoder: cub
 training: large
 wandb: online
