@@ -1,0 +1,8 @@
+epochs: 150
+learning_rate: 5e-4
+batch_size: 64
+beta_start: 0.0
+beta_end: 0.5
+beta_warmup_epochs: 10
+beta_anneal_epochs: 60
+loss_type: hybrid

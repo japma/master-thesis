@@ -1,5 +1,6 @@
 """Autoencoder training loop."""
 
+from training.losses import kl_per_dim
 from training.losses import vae_loss
 import torch
 import tqdm
@@ -70,11 +71,14 @@ def _val_epoch(
     device: torch.device,
     epoch: int,
     epochs: int,
-) -> tuple[float, float, float]:
+) -> tuple[float, float, float, torch.Tensor]:
     model.eval()
     total_loss = torch.tensor(0.0, device=device)
     total_recon = torch.tensor(0.0, device=device)
     total_kl = torch.tensor(0.0, device=device)
+    total_kl_per_dim = torch.zeros(
+        model.get_latent_dim(), device=device, dtype=torch.float
+    )
 
     with torch.no_grad():
         for images, _ in tqdm.tqdm(loader, desc=f"Val   {epoch + 1}/{epochs}"):
@@ -86,9 +90,16 @@ def _val_epoch(
             total_loss += loss.detach()
             total_recon += recon_loss.detach()
             total_kl += kl_loss.detach()
+            batch_kl_dims = kl_per_dim(mu, logvar)
+            total_kl_per_dim += batch_kl_dims
 
     n = len(loader)
-    return (total_loss / n).item(), (total_recon / n).item(), (total_kl / n).item()
+    return (
+        (total_loss / n).item(),
+        (total_recon / n).item(),
+        (total_kl / n).item(),
+        (total_kl_per_dim / n),
+    )
 
 
 def _log_reconstructions(
@@ -142,11 +153,13 @@ def train_autoencoder(
             model, train_loader, optimizer, loss_fn, beta, device, epoch, epochs
         )
 
-        val_loss, val_recon, val_kl = _val_epoch(
+        val_loss, val_recon, val_kl, kl_dims = _val_epoch(
             model, test_loader, loss_fn, beta, device, epoch, epochs
         )
 
         scheduler.step()
+
+        active_dims = (kl_dims > 0.1).sum().item()
 
         wandb.log(
             {
@@ -158,6 +171,8 @@ def train_autoencoder(
                 "val_recon_loss": val_recon,
                 "val_kl_loss": val_kl,
                 "beta": beta,
+                "val_kl_per_dim": wandb.Histogram(kl_dims.cpu().tolist()),
+                "active_dims": active_dims,
             },
             step=epoch,
         )

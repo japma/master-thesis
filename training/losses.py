@@ -6,8 +6,6 @@ from torch import nn
 
 
 class HybridLoss(nn.Module):
-    """Combines MSE and L1 loss: 0.5*MSE + 0.5*L1. Better detail preservation than MSE alone."""
-
     def __init__(self):
         super().__init__()
         self.mse = nn.MSELoss()
@@ -52,3 +50,22 @@ def negative_log_likelihood_loss(
     # correct_class_ll = outputs.gather(-1, labels.unsqueeze(-1)).squeeze(-1)
     # return -correct_class_ll.mean()
     return -outputs.mean()
+
+
+def get_ae_loss_fn(loss_type: str) -> nn.Module:
+    if loss_type == "mse":
+        return nn.MSELoss()
+    elif loss_type == "l1":
+        return nn.L1Loss()
+    elif loss_type == "smooth_l1":
+        return nn.SmoothL1Loss()
+    elif loss_type == "bce":
+        return nn.BCELoss()
+    elif loss_type == "hybrid":
+        return HybridLoss()
+    else:
+        raise ValueError(f"Unknown loss type: {loss_type}")
+
+
+def kl_per_dim(mu: torch.Tensor, logvar: torch.Tensor) -> torch.Tensor:
+    return -0.5 * (1 + logvar - mu.pow(2) - logvar.exp()).mean(dim=0)

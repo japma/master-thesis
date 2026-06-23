@@ -1,5 +1,5 @@
 type: ae
 dataset: cub200
 model: large
-training: large
+training: flowers
 wandb: online

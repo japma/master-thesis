@@ -10,6 +10,7 @@ from torchinfo import summary
 
 from dataset_loaders import build_data_loaders
 from models import VariationalAutoencoder
+from training.losses import get_ae_loss_fn
 from training.train_ae import train_autoencoder
 from utils.checkpoints import save_autoencoder
 from utils.config import load_config, AERunConfig
@@ -72,12 +73,7 @@ def main():
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer, T_max=training_cfg.epochs
     )
-    loss_fn = nn.BCELoss()
-    # loss_fn = nn.MSELoss()
-    # loss_fn = nn.L1Loss()
-    # loss_fn = nn.SmoothL1Loss()
-    # loss_fn = HybridLoss()
-    # loss_fn = lpips.LPIPS(net="vgg").to(device)
+    loss_fn = get_ae_loss_fn("mse")
 
     rtpt = RTPT(
         name_initials="JM",

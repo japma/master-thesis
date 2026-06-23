@@ -68,27 +68,7 @@ def main():
 
     print(f"Training CSPN on {dataset_name} | device={device} | seed={seed}")
 
-    if cspn_cfg.model_type == CSPNType.SPFLOW:
-        cspn = SPFlowCSPN(
-            latent_dim=ae.get_latent_dim(),
-            num_classes=dataset_cfg.num_classes,
-            num_sums=cspn_cfg.num_sums,
-            num_leaves=cspn_cfg.num_leaves,
-            depth=cspn_cfg.depth,
-            num_repetitions=5,
-            nn_layers=cspn_cfg.nn_num_hidden_layers,
-            nn_hidden_dim=cspn_cfg.nn_hidden_dim,
-        )
-    elif cspn_cfg.model_type == CSPNType.CUSTOM:
-        cspn = Einet(
-            num_vars=ae.get_latent_dim(),
-            context_dim=dataset_cfg.num_classes,
-            num_leaves=cspn_cfg.num_leaves,
-            num_nodes=cspn_cfg.num_sums,
-            nn_hidden_dim=cspn_cfg.nn_hidden_dim,
-            nn_num_hidden_layers=cspn_cfg.nn_num_hidden_layers,
-        )
-    elif cspn_cfg.model_type == CSPNType.PSINET:
+    if cspn_cfg.model_type == CSPNType.PSINET:
         cspn = PsiNetCSPN(
             latent_dim=ae.get_latent_dim(),
             num_classes=dataset_cfg.num_classes,

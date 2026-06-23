@@ -7,9 +7,9 @@ set -e
 source .venv/bin/activate
 
 configs=(
-    "configs/autoencoder/mnist.yaml"
-    "configs/autoencoder/flowers.yaml"
-    "configs/autoencoder/cub.yaml"
+    "ae/mnist.yaml"
+    "ae/flowers.yaml"
+    "ae/cub.yaml"
 )
 
 for config in "${configs[@]}"; do
