@@ -1,30 +1,13 @@
 """Autoencoder training loop."""
 
 from training.losses import kl_per_dim
-from training.losses import vae_loss
 import torch
 import tqdm
 import wandb
 from torch import nn
 
 from models.autoencoder import AbstractAutoencoder
-from training.losses import beta_vae_loss
-
-
-def _beta_for_epoch(
-    epoch: int,
-    beta_start: float,
-    beta_end: float,
-    anneal_epochs: int,
-    warmup_epochs: int = 0,
-) -> float:
-    if epoch < warmup_epochs:
-        return 0.0
-    adjusted_epoch = epoch - warmup_epochs
-    if anneal_epochs <= 1:
-        return beta_end
-    progress = min(adjusted_epoch / (anneal_epochs - 1), 1.0)
-    return beta_start + progress * (beta_end - beta_start)
+from utils.config import AERunConfig
 
 
 def _train_epoch(
@@ -32,7 +15,6 @@ def _train_epoch(
     loader: torch.utils.data.DataLoader,
     optimizer: torch.optim.Optimizer,
     loss_fn: nn.Module,
-    beta: float,
     device: torch.device,
     epoch: int,
     epochs: int,
@@ -47,8 +29,8 @@ def _train_epoch(
         optimizer.zero_grad()
 
         recon, mu, logvar = model(images)
-        loss, recon_loss, kl_loss = beta_vae_loss(
-            images, recon, mu, logvar, recon_loss_fn=loss_fn, beta=beta
+        loss, recon_loss, kl_loss = loss_fn(
+            images=images, recon=recon, mu=mu, logvar=logvar
         )
 
         loss.backward()
@@ -67,7 +49,6 @@ def _val_epoch(
     model: AbstractAutoencoder,
     loader: torch.utils.data.DataLoader,
     loss_fn: nn.Module,
-    beta: float,
     device: torch.device,
     epoch: int,
     epochs: int,
@@ -84,8 +65,8 @@ def _val_epoch(
         for images, _ in tqdm.tqdm(loader, desc=f"Val   {epoch + 1}/{epochs}"):
             images = images.to(device, non_blocking=True)
             recon, mu, logvar = model(images)
-            loss, recon_loss, kl_loss = beta_vae_loss(
-                images, recon, mu, logvar, recon_loss_fn=loss_fn, beta=beta
+            loss, recon_loss, kl_loss = loss_fn(
+                images=images, recon=recon, mu=mu, logvar=logvar
             )
             total_loss += loss.detach()
             total_recon += recon_loss.detach()
@@ -120,7 +101,7 @@ def _log_reconstructions(
 def train_autoencoder(
     model: AbstractAutoencoder,
     device: torch.device,
-    cfg,
+    cfg: AERunConfig,
     train_loader: torch.utils.data.DataLoader,
     test_loader: torch.utils.data.DataLoader,
     optimizer: torch.optim.Optimizer,
@@ -131,10 +112,6 @@ def train_autoencoder(
     model.to(device)
 
     epochs = cfg.training.epochs
-    beta_start = cfg.training.beta_start
-    beta_end = cfg.training.beta_end
-    beta_anneal_epochs = min(cfg.training.beta_anneal_epochs, epochs)
-    beta_warmup_epochs = min(cfg.training.beta_warmup_epochs, epochs)
     log_sample_every = 10
 
     sample_images = next(iter(train_loader))[0][:16].to(device)
@@ -145,16 +122,12 @@ def train_autoencoder(
     )
 
     for epoch in range(epochs):
-        beta = _beta_for_epoch(
-            epoch, beta_start, beta_end, beta_anneal_epochs, beta_warmup_epochs
-        )
-
         train_loss, train_recon, train_kl = _train_epoch(
-            model, train_loader, optimizer, loss_fn, beta, device, epoch, epochs
+            model, train_loader, optimizer, loss_fn, device, epoch, epochs
         )
 
         val_loss, val_recon, val_kl, kl_dims = _val_epoch(
-            model, test_loader, loss_fn, beta, device, epoch, epochs
+            model, test_loader, loss_fn, device, epoch, epochs
         )
 
         scheduler.step()
@@ -166,11 +139,9 @@ def train_autoencoder(
                 "train_loss": train_loss,
                 "train_recon_loss": train_recon,
                 "train_kl_loss": train_kl,
-                "train_kl_weighted": beta * train_kl,
                 "val_loss": val_loss,
                 "val_recon_loss": val_recon,
                 "val_kl_loss": val_kl,
-                "beta": beta,
                 "val_kl_per_dim": wandb.Histogram(kl_dims.cpu().tolist()),
                 "active_dims": active_dims,
             },

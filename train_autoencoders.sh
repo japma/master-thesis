@@ -8,8 +8,8 @@ source .venv/bin/activate
 
 configs=(
     "ae/mnist.yaml"
-    "ae/flowers.yaml"
-    "ae/cub.yaml"
+    "ae/flowers102.yaml"
+    "ae/cub200.yaml"
 )
 
 for config in "${configs[@]}"; do

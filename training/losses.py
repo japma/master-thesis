@@ -15,18 +15,6 @@ class HybridLoss(nn.Module):
         return 0.5 * self.mse(recon, target) + 0.5 * self.l1(recon, target)
 
 
-def vae_loss(
-    images: torch.Tensor,
-    recon: torch.Tensor,
-    mu: torch.Tensor,
-    logvar: torch.Tensor,
-    beta: float = 1.0,
-    recon_loss_fn: nn.Module = nn.MSELoss(),
-):
-    recon_loss = recon_loss_fn(recon, images)
-    return recon_loss, recon_loss, torch.tensor(0.0)
-
-
 def beta_vae_loss(
     images: torch.Tensor,
     recon: torch.Tensor,
@@ -40,6 +28,25 @@ def beta_vae_loss(
     kl_loss = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp()).sum(dim=1).mean()
 
     return recon_loss + beta * kl_loss, recon_loss, kl_loss
+
+
+class BetaVAELoss(nn.Module):
+    def __init__(self, beta: float = 1.0):
+        super().__init__()
+        self.beta = beta
+
+    def forward(
+        self,
+        images: torch.Tensor,
+        recon: torch.Tensor,
+        mu: torch.Tensor,
+        logvar: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        recon_loss = torch.nn.functional.binary_cross_entropy(
+            recon, images, reduction="sum"
+        ) / images.size(0)
+        kl_loss = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp()).sum(dim=1).mean()
+        return recon_loss + self.beta * kl_loss, recon_loss, kl_loss
 
 
 def negative_log_likelihood_loss(
