@@ -107,9 +107,9 @@ def _load_coco(train=True, size: tuple[int, int] = (128, 128)):
 def _load_flowers102(train=True, size: tuple[int, int] = (128, 128)):
     train_transform = transforms.Compose(
         [
-            transforms.Resize(size),
-            transforms.RandomHorizontalFlip(),
             transforms.RandomRotation(10, expand=True),
+            transforms.RandomHorizontalFlip(),
+            transforms.Resize(size),
             transforms.ToTensor(),
         ]
     )
@@ -130,9 +130,9 @@ def _load_flowers102(train=True, size: tuple[int, int] = (128, 128)):
 def _load_cub200(train=True, size: tuple[int, int] = (128, 128)):
     train_transform = transforms.Compose(
         [
-            transforms.Resize(size),
             transforms.RandomHorizontalFlip(),
             transforms.RandomRotation(10, expand=True),
+            transforms.Resize(size),
             transforms.ToTensor(),
         ]
     )
