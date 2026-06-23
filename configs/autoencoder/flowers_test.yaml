@@ -1,0 +1,26 @@
+type: ae
+
+dataset:
+  name: flowers102
+  channels: 3
+  width: 128
+  height: 128
+  num_classes: 102
+
+model:
+  model_type: variational
+  latent_dim: 128
+  base_channels: 64
+  num_blocks: 3
+  res_blocks: 2
+
+training:
+  epochs: 1
+  learning_rate: 0.0005
+  batch_size: 64
+  beta: 1.0
+
+wandb:
+  mode: disabled
+  project: master-thesis
+  entity: jmartini-tu-darmstadt

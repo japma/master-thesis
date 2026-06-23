@@ -1,0 +1,31 @@
+type: cspn
+
+dataset:
+  name: mnist
+  channels: 1
+  height: 28
+  width: 28
+  num_classes: 10
+
+autoencoder:
+  name: "autoencoder_mnist"
+  external: false
+
+model:
+  model_type: "psinet"
+  num_repetitions: 5
+  num_input_distributions: 10
+  num_sums: 10
+  min_var: 0.001
+  max_var: 1.0
+  h_dims: [ 128, 128 ]
+
+training:
+  epochs: 50
+  learning_rate: 0.001
+  batch_size: 32
+
+wandb:
+  mode: online
+  project: master-thesis
+  entity: jmartini-tu-darmstadt

@@ -1,0 +1,31 @@
+type: cspn
+
+dataset:
+  name: cub200
+  channels: 3
+  height: 128
+  width: 128
+  num_classes: 200
+
+autoencoder:
+name: "autoencoder_cub200"
+external: false
+
+model:
+  model_type: "psinet"
+  num_repetitions: 5
+  num_input_distributions: 16
+  num_sums: 16
+  min_var: 0.001
+  max_var: 1.0
+  h_dims: [ 128, 128 ]
+
+training:
+  epochs: 250
+  learning_rate: 0.001
+  batch_size: 64
+
+wandb:
+  mode: online
+  project: master-thesis
+  entity: jmartini-tu-darmstadt
