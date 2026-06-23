@@ -1,5 +1,5 @@
 epochs: 150
-learning_rate: 5e-4
+learning_rate: 0.0005
 batch_size: 64
 beta_start: 0.0
 beta_end: 0.5
