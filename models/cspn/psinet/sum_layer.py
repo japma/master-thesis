@@ -111,13 +111,13 @@ class SumLayer(Layer):
         """
         if initializer is None:
             self.params = None
-        elif type(initializer) == str and initializer == "default":
+        elif isinstance(initializer, str) and initializer == "default":
             if self._use_em:
                 self.params = torch.nn.Parameter(self.default_initializer())
             else:
                 # self.params = torch.nn.Parameter(torch.randn(self.params_shape))
                 self.params = torch.nn.Parameter(self.default_initializer())
-        elif type(initializer) == torch.Tensor:
+        elif isinstance(initializer, torch.Tensor):
             if initializer.shape != self.params_shape:
                 raise AssertionError("Incorrect parameter shape.")
             self.params = torch.nn.Parameter(initializer)
@@ -247,13 +247,13 @@ class SumLayer(Layer):
             )
 
             other_shape = tuple(params_in.shape[i] for i in other_dims)
-            permutation = (0,) + tuple(p + 1 for p in permutation)
+            permutation = (0, *tuple(p + 1 for p in permutation))
             params_in_batch = params_in_batch.permute(permutation)
             orig_shape = params_in_batch.shape
-            other_shape = (params_in_batch.shape[0],) + other_shape
-            params_in_batch = params_in_batch.reshape(other_shape + (numel,))
+            other_shape = (params_in_batch.shape[0], *other_shape)
+            params_in_batch = params_in_batch.reshape((*other_shape, numel))
             out = softmax(params_in_batch, -1)
-            unpermutation = (0,) + tuple(p + 1 for p in unpermutation)
+            unpermutation = (0, *tuple(p + 1 for p in unpermutation))
             out = out.reshape(orig_shape).permute(unpermutation)
             return out
 
@@ -335,23 +335,21 @@ class EinsumLayer(SumLayer):
 
         self.products = products
 
-        self.num_sums = set([n.num_dist for p in self.products for n in graph.pred[p]])
+        self.num_sums = {n.num_dist for p in self.products for n in graph.pred[p]}
         if len(self.num_sums) != 1:
             raise AssertionError(
                 "Number of distributions must be the same for all parent nodes in one layer."
             )
-        self.num_sums = list(self.num_sums)[0]
+        self.num_sums = next(iter(self.num_sums))
 
-        self.num_input_dist = set(
-            [n.num_dist for p in self.products for n in graph.succ[p]]
-        )
+        self.num_input_dist = {n.num_dist for p in self.products for n in graph.succ[p]}
         if len(self.num_input_dist) != 1:
             raise AssertionError(
                 "Number of input distributions must be the same for all child nodes in one layer."
             )
-        self.num_input_dist = list(self.num_input_dist)[0]
+        self.num_input_dist = next(iter(self.num_input_dist))
 
-        if any([len(graph.succ[p]) != 2 for p in self.products]):
+        if any(len(graph.succ[p]) != 2 for p in self.products):
             raise AssertionError("Only 2-partitions are currently supported.")
 
         param_shape = (
@@ -360,9 +358,7 @@ class EinsumLayer(SumLayer):
             self.num_sums,
             len(self.products),
         )
-        super().__init__(
-            param_shape, normalization_dims=(0, 1), use_em=use_em
-        )
+        super().__init__(param_shape, normalization_dims=(0, 1), use_em=use_em)
 
         # get pairs of nodes which are input to the products (list of lists)
         # length of the outer list is same as self.products, length of inner lists is 2
@@ -371,14 +367,10 @@ class EinsumLayer(SumLayer):
 
         # collect all layers which contain left/right children
         self.left_layers = [
-            l
-            for l in layers
-            if any([i[0].einet_address.layer == l for i in self.inputs])
+            l for l in layers if any(i[0].einet_address.layer == l for i in self.inputs)
         ]
         self.right_layers = [
-            l
-            for l in layers
-            if any([i[1].einet_address.layer == l for i in self.inputs])
+            l for l in layers if any(i[1].einet_address.layer == l for i in self.inputs)
         ]
 
         # The following code does some index bookkeeping, in order that we can gather the required data in forward(...).
@@ -445,9 +437,7 @@ class EinsumLayer(SumLayer):
         """
 
         def cidx(layer_counter, child_num):
-            return self.__getattr__(
-                f"idx_layer_{layer_counter}_child_{child_num}"
-            )
+            return self.__getattr__(f"idx_layer_{layer_counter}_child_{child_num}")
 
         self._last_params = params
 
@@ -611,12 +601,12 @@ class EinsumMixingLayer(SumLayer):
 
         self.nodes = nodes
 
-        self.num_sums = set([n.num_dist for n in self.nodes])
+        self.num_sums = {n.num_dist for n in self.nodes}
         if len(self.num_sums) != 1:
             raise AssertionError(
                 "Number of distributions must be the same for all regions in one layer."
             )
-        self.num_sums = list(self.num_sums)[0]
+        self.num_sums = next(iter(self.num_sums))
 
         self.max_components = max([len(graph.succ[n]) for n in self.nodes])
         # einsum_layer is actually the only layer which gives input to EinsumMixingLayer

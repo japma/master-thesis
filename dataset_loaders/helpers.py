@@ -75,10 +75,7 @@ def _load_fashion_mnist(train=True, size: tuple[int, int] = (128, 128)):
 
 
 def _load_tinyimagenet(train=True, size: tuple[int, int] = (128, 128)):
-    if train:
-        split = "train"
-    else:
-        split = "val"
+    split = "train" if train else "val"
     return TinyImageNetDataset(
         root="./data/tiny-imagenet-200",
         split=split,
@@ -112,7 +109,7 @@ def _load_flowers102(train=True, size: tuple[int, int] = (128, 128)):
         [
             transforms.Resize(size),
             transforms.RandomHorizontalFlip(),
-            transforms.RandomRotation(10),
+            transforms.RandomRotation(10, expand=True),
             transforms.ToTensor(),
         ]
     )
@@ -135,7 +132,7 @@ def _load_cub200(train=True, size: tuple[int, int] = (128, 128)):
         [
             transforms.Resize(size),
             transforms.RandomHorizontalFlip(),
-            transforms.RandomRotation(10),
+            transforms.RandomRotation(10, expand=True),
             transforms.ToTensor(),
         ]
     )
