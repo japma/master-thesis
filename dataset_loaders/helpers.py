@@ -110,29 +110,48 @@ def _load_coco(train=True, size: tuple[int, int] = (128, 128)):
 
 
 def _load_flowers102(train=True, size: tuple[int, int] = (128, 128)):
+    train_transform = transforms.Compose(
+        [
+            transforms.Resize(size),
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomRotation(10),
+            transforms.ToTensor(),
+        ]
+    )
+    test_transform = transforms.Compose(
+        [
+            transforms.Resize(size),
+            transforms.ToTensor(),
+        ]
+    )
     return datasets.Flowers102(
         root=DATA_DIR,
         split="test" if train else "train",
         download=True,
-        transform=transforms.Compose(
-            [
-                transforms.Resize(size),
-                transforms.ToTensor(),
-            ]
-        ),
+        transform=train_transform if train else test_transform,
     )
 
 
 def _load_cub200(train=True, size: tuple[int, int] = (128, 128)):
+    train_transform = transforms.Compose(
+        [
+            transforms.Resize(size),
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomRotation(10),
+            transforms.ToTensor(),
+        ]
+    )
+    test_transform = transforms.Compose(
+        [
+            transforms.Resize(size),
+            transforms.ToTensor(),
+        ]
+    )
+
     return Cub200Dataset(
         root=os.path.join(DATA_DIR, "CUB_200_2011/CUB_200_2011/"),
         train=train,
-        transform=transforms.Compose(
-            [
-                transforms.Resize(size),
-                transforms.ToTensor(),
-            ]
-        ),
+        transform=train_transform if train else test_transform,
     )
 
 

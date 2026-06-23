@@ -30,6 +30,9 @@ def main():
     dataset_name = dataset_cfg.name
     run_name = f"autoencoder_{dataset_name}"
 
+    # TODO build this into the config
+    beta = 1.0
+
     wandb.init(
         entity=wandb_cfg.entity,
         project=wandb_cfg.project,
@@ -41,9 +44,7 @@ def main():
             "epochs": training_cfg.epochs,
             "latent_dim": autoencoder_cfg.latent_dim,
             "learning_rate": training_cfg.learning_rate,
-            "beta_start": training_cfg.beta_start,
-            "beta_end": training_cfg.beta_end,
-            "beta_anneal_epochs": training_cfg.beta_anneal_epochs,
+            "beta": beta,
             "seed": seed,
             "base_channels": autoencoder_cfg.base_channels,
             "num_blocks": autoencoder_cfg.num_blocks,
@@ -74,7 +75,7 @@ def main():
         optimizer, T_max=training_cfg.epochs
     )
 
-    loss_fn = BetaVAELoss(beta=1.0)
+    loss_fn = BetaVAELoss(beta=beta)
 
     rtpt = RTPT(
         name_initials="JM",
