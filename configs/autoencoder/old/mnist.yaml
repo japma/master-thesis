@@ -1,0 +1,31 @@
+autoencoder:
+  model_type: variational
+  latent_dim: 32
+  base_channels: 32
+  num_blocks: 2
+  res_blocks: 1
+
+dataset:
+  name: mnist
+  channels: 3
+  width: 28
+  height: 28
+  num_classes: 10
+
+training:
+  epochs: 50
+  learning_rate: 0.001
+  batch_size: 128
+  beta_start: 0.0
+  beta_end: 0.5
+  beta_anneal_epochs: 40
+
+wandb:
+  mode: online
+  project: master-thesis
+  entity: jmartini-tu-darmstadt
+
+paths:
+  autoencoder: "checkpoints/autoencoder/mnist.pt"
+
+seed: null

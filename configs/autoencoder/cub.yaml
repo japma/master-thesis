@@ -1,9 +1,4 @@
-autoencoder:
-  model_type: variational
-  latent_dim: 128
-  base_channels: 64
-  num_blocks: 3
-  res_blocks: 2
+type: ae
 
 dataset:
   name: cub200
@@ -12,20 +7,20 @@ dataset:
   height: 128
   num_classes: 200
 
+model:
+  model_type: variational
+  latent_dim: 256
+  base_channels: 64
+  num_blocks: 4
+  res_blocks: 2
+
 training:
   epochs: 200
   learning_rate: 0.0003
-  batch_size: 64
-  beta_start: 0.0
-  beta_end: 1.0
-  beta_anneal_epochs: 150
+  batch_size: 32
+  beta: 1.0
 
 wandb:
   mode: online
   project: master-thesis
   entity: jmartini-tu-darmstadt
-
-paths:
-  autoencoder: "checkpoints/autoencoder/cub200.pt"
-
-seed: null

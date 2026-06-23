@@ -17,20 +17,20 @@ from utils.reproducibility import resolve_device, seed_everything
 
 
 def main():
-    cfg = load_config()
+    cfg, cfg_seed = load_config()
     assert isinstance(cfg, AERunConfig)
     dataset_cfg = cfg.dataset
     autoencoder_cfg = cfg.model
     training_cfg = cfg.training
     wandb_cfg = cfg.wandb
 
-    seed = seed_everything(cfg.seed)
+    seed = seed_everything(cfg_seed)
+    # TODO build this into the config
+    beta = training_cfg.beta
     device = resolve_device()
     dataset_name = dataset_cfg.name
-    run_name = f"autoencoder_{dataset_name}"
-
-    # TODO build this into the config
-    beta = 1.0
+    model_name = f"autoencoder_{dataset_name}"
+    run_name = f"{model_name}_beta{beta}"
 
     wandb.init(
         entity=wandb_cfg.entity,
@@ -98,7 +98,7 @@ def main():
     ckpt_path = Path("checkpoints") / f"{run_name}.pt"
     save_autoencoder(ae, ckpt_path)
 
-    artifact = wandb.Artifact(name=run_name, type="autoencoder")
+    artifact = wandb.Artifact(name=model_name, type="autoencoder")
     artifact.add_file(str(ckpt_path))
     wandb.log_artifact(artifact)
     wandb.finish()

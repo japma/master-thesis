@@ -1,0 +1,31 @@
+autoencoder:
+  model_type: variational
+  latent_dim: 64
+  base_channels: 32
+  num_blocks: 2
+  res_blocks: 1
+
+dataset:
+  name: flowers102
+  channels: 3
+  width: 128
+  height: 128
+  num_classes: 102
+
+training:
+  epochs: 150
+  learning_rate: 0.001
+  batch_size: 64
+  beta_start: 0.0
+  beta_end: 0.5
+  beta_anneal_epochs: 100
+
+wandb:
+  mode: online
+  project: master-thesis
+  entity: jmartini-tu-darmstadt
+
+paths:
+  autoencoder: "checkpoints/autoencoder/flowers.pt"
+
+seed: null

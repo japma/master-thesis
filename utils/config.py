@@ -1,148 +1,121 @@
 import argparse
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
 import yaml
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
-_CONFIGS_DIR = Path(__file__).parent.parent / "configv2"
-_RUNS_DIR = _CONFIGS_DIR / "runs"
-
-
-@dataclass
-class DatasetConfig:
-    name: str = "mnist"
-    channels: int = 1
-    height: int = 28
-    width: int = 28
-    num_classes: int = 10
+_RUNS_DIR = Path(__file__).parent.parent / "configv2" / "runs"
 
 
-@dataclass
-class AutoencoderConfig:
-    model_type: str = "variational"
-    latent_dim: int = 32
-    base_channels: int = 32
-    num_blocks: int = 2
-    res_blocks: int = 1
+class DatasetConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    channels: int
+    height: int
+    width: int
+    num_classes: int
 
 
-@dataclass
-class PretrainedAutoencoderConfig:
-    name: str = "madebyollin/taesd"
-    external: bool = True
+class AutoencoderConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    model_type: Literal["variational", "vanilla"]
+    latent_dim: int
+    base_channels: int
+    num_blocks: int
+    res_blocks: int
 
 
-@dataclass
-class CSPNConfig:
-    model_type: str = "custom"
-    num_repetitions: int = 10
-    num_input_distributions: int = 10
-    num_sums: int = 10
-    min_var: float = 0.1
-    max_var: float = 1.0
-    h_dims: list[int] = field(default_factory=lambda: [100])
+class PretrainedAutoencoderConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    external: bool
 
 
-@dataclass
-class BaseTrainingConfig:
-    epochs: int = 50
-    learning_rate: float = 0.001
-    batch_size: int = 32
+class CSPNConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    model_type: Literal["custom", "spflow"]
+    num_repetitions: int
+    num_input_distributions: int
+    num_sums: int
+    min_var: float
+    max_var: float
+    h_dims: list[int]
+
+    @model_validator(mode="after")
+    def valid_var_range(self):
+        if self.min_var >= self.max_var:
+            raise ValueError(
+                f"min_var ({self.min_var}) must be less than max_var ({self.max_var})"
+            )
+        return self
 
 
-@dataclass
+class BaseTrainingConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    epochs: int
+    learning_rate: float
+    batch_size: int
+
+
 class AutoencoderTrainingConfig(BaseTrainingConfig):
-    beta_start: float = 0.0
-    beta_end: float = 1.0
-    beta_warmup_epochs: int = 0
-    beta_anneal_epochs: int = 25
-    loss_type: str = "mse"
+    beta: float
 
 
-@dataclass
-class WandbConfig:
-    mode: Literal["online", "offline", "shared", "disabled"] = "online"
-    project: str = "master-thesis"
-    entity: str = "jmartini-tu-darmstadt"
+class WandbConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["online", "offline", "shared", "disabled"]
+    project: str
+    entity: str
 
 
-@dataclass
-class AERunConfig:
-    dataset: DatasetConfig = field(default_factory=DatasetConfig)
-    model: AutoencoderConfig = field(default_factory=AutoencoderConfig)
-    training: AutoencoderTrainingConfig = field(
-        default_factory=AutoencoderTrainingConfig
-    )
-    wandb: WandbConfig = field(default_factory=WandbConfig)
-    seed: int | None = None
+class AERunConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["ae"]
+    dataset: DatasetConfig
+    model: AutoencoderConfig
+    training: AutoencoderTrainingConfig
+    wandb: WandbConfig
 
 
-@dataclass
-class CSPNRunConfig:
-    dataset: DatasetConfig = field(default_factory=DatasetConfig)
-    model: CSPNConfig = field(default_factory=CSPNConfig)
-    autoencoder: PretrainedAutoencoderConfig = field(
-        default_factory=PretrainedAutoencoderConfig
-    )
-    training: BaseTrainingConfig = field(default_factory=BaseTrainingConfig)
-    wandb: WandbConfig = field(default_factory=WandbConfig)
-    seed: int | None = None
+class CSPNRunConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["cspn"]
+    dataset: DatasetConfig
+    model: CSPNConfig
+    autoencoder: PretrainedAutoencoderConfig
+    training: BaseTrainingConfig
+    wandb: WandbConfig
 
 
-def _read_yaml(path: Path) -> dict:
-    with open(path) as f:
-        return yaml.safe_load(f)
-
-
-def _resolve(section: str, name: str) -> dict:
-    path = _CONFIGS_DIR / section / f"{name}.yaml"
-    if not path.exists():
-        raise FileNotFoundError(f"No config found at {path}")
-    return _read_yaml(path)
-
-
-def _build_ae_config(raw: dict) -> AERunConfig:
-    cfg = AERunConfig()
-    cfg.dataset = DatasetConfig(**_resolve("dataset", raw["dataset"]))
-    cfg.model = AutoencoderConfig(**_resolve("model/ae", raw["model"]))
-    cfg.training = AutoencoderTrainingConfig(**_resolve("training/ae", raw["training"]))
-    cfg.wandb.mode = raw.get("wandb", cfg.wandb.mode)
-    return cfg
-
-
-def _build_cspn_config(raw: dict) -> CSPNRunConfig:
-    cfg = CSPNRunConfig()
-    cfg.dataset = DatasetConfig(**_resolve("dataset", raw["dataset"]))
-    cfg.model = CSPNConfig(**_resolve("model/cspn", raw["model"]))
-    cfg.training = BaseTrainingConfig(**_resolve("training/cspn", raw["training"]))
-    cfg.autoencoder = PretrainedAutoencoderConfig(
-        **_resolve("model/pretrained_ae", raw["autoencoder"])
-    )
-    cfg.wandb.mode = raw.get("wandb", cfg.wandb.mode)
-    return cfg
-
-
-_BUILDERS = {
-    "ae": _build_ae_config,
-    "cspn": _build_cspn_config,
-}
-
-
-def load_config() -> AERunConfig | CSPNRunConfig:
+def load_config() -> tuple[AERunConfig | CSPNRunConfig, int | None]:
     parser = argparse.ArgumentParser()
     parser.add_argument("config_file", type=Path)
     parser.add_argument("--seed", type=int)
     args = parser.parse_args()
 
-    cfg_file = _RUNS_DIR / args.config_file
-    raw = _read_yaml(cfg_file)
-    run_type = raw.pop("type", None)
+    seed = args.seed
 
-    builder = _BUILDERS.get(run_type)
-    if builder is None:
-        raise ValueError(f"Unknown run type: {run_type!r}")
+    # path = _RUNS_DIR / args.config_file
+    path = args.config_file
+    if not path.exists():
+        raise FileNotFoundError(f"No config found at {path}")
 
-    cfg = builder(raw)
-    cfg.seed = args.seed
-    return cfg
+    with open(path) as f:
+        raw = yaml.safe_load(f)
+
+    run_type = raw.get("type")
+    if run_type == "ae":
+        return AERunConfig.model_validate(raw), seed
+    elif run_type == "cspn":
+        return CSPNRunConfig.model_validate(raw), seed
+    else:
+        raise ValueError(f"Unknown or missing run type: {run_type!r}")

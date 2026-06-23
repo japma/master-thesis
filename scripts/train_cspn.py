@@ -1,6 +1,5 @@
 """Entry point for CSPN training."""
 
-
 from pathlib import Path
 
 import torch
@@ -19,7 +18,7 @@ from utils.reproducibility import resolve_device, seed_everything
 
 
 def main():
-    cfg = load_config()
+    cfg, cfg_seed = load_config()
     assert isinstance(cfg, CSPNRunConfig)
     dataset_cfg = cfg.dataset
     cspn_cfg = cfg.model
@@ -27,7 +26,7 @@ def main():
     training_cfg = cfg.training
     wandb_cfg = cfg.wandb
 
-    seed = seed_everything(cfg.seed)
+    seed = seed_everything(cfg_seed)
     device = resolve_device()
     dataset_name = dataset_cfg.name
 

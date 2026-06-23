@@ -1,24 +1,24 @@
 type: ae
 
 dataset:
-  name: flowers102
+  name: cub200
   channels: 3
   width: 128
   height: 128
-  num_classes: 102
+  num_classes: 200
 
 model:
   model_type: variational
-  latent_dim: 128
+  latent_dim: 256
   base_channels: 64
-  num_blocks: 3
+  num_blocks: 4
   res_blocks: 2
 
 training:
-  epochs: 150
-  learning_rate: 0.0005
-  batch_size: 64
-  beta: 1.0
+  epochs: 200
+  learning_rate: 0.0003
+  batch_size: 32
+  beta: 8.0
 
 wandb:
   mode: online
