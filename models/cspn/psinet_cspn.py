@@ -26,6 +26,18 @@ class PsiNetCSPN(AbstractCSPN):
         self.latent_dim = latent_dim
         self.num_classes = num_classes
 
+        self.config = {
+            "model_type": CSPNType.PSINET,
+            "latent_dim": latent_dim,
+            "num_classes": num_classes,
+            "num_repetitions": num_repetitions,
+            "num_input_distributions": num_input_distributions,
+            "num_sums": num_sums,
+            "min_var": min_var,
+            "max_var": max_var,
+            "h_dims": h_dims,
+        }
+
         if h_dims is None:
             h_dims = [100]
 
@@ -68,16 +80,12 @@ class PsiNetCSPN(AbstractCSPN):
         return self.einet.forward(x=z, y=labels)
 
     def sample(self, labels: torch.Tensor) -> torch.Tensor:
-        results = torch.zeros(labels.shape[0], self.latent_dim, device=labels.device)
-        for cls in labels.unique():
-            mask = labels == cls
-            cls_labels = labels[mask]
-            results[mask] = self.einet.sample(y=cls_labels)
-        return results
+        # results = torch.zeros(labels.shape[0], self.latent_dim, device=labels.device)
+        # for cls in labels.unique():
+        #    mask = labels == cls
+        #    cls_labels = labels[mask]
+        #    results[mask] = self.einet.sample(y=cls_labels)
+        return self.einet.sample(y=labels)
 
     def get_config(self) -> dict:
-        return {
-            "model_type": CSPNType.PSINET,
-            "latent_dim": self.latent_dim,
-            "num_classes": self.num_classes,
-        }
+        return self.config

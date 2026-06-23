@@ -105,6 +105,12 @@ def _create_cspn_from_checkpoint(cfg: dict) -> AbstractCSPN:
             return PsiNetCSPN(
                 latent_dim=cfg["latent_dim"],
                 num_classes=cfg["num_classes"],
+                num_repetitions=5,
+                num_input_distributions=10,
+                num_sums=10,
+                min_var=1.0,
+                max_var=2.0,
+                h_dims=[128, 128],
             )
         case _:
             raise ValueError(f"Unknown CSPN type: {cfg['model_type']}")

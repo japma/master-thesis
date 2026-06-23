@@ -164,7 +164,7 @@ _DATASETS = {
 
 
 def build_data_loaders(
-    cfg: DatasetConfig, batch_size: int = 32, homogeneous: bool = False
+    cfg: DatasetConfig, batch_size: int = 32
 ) -> tuple[DataLoader, DataLoader]:
     loader_fn = _DATASETS.get(cfg.name)
     if loader_fn is None:
@@ -175,31 +175,20 @@ def build_data_loaders(
     train_dataset = loader_fn(train=True, size=size)
     test_dataset = loader_fn(train=False, size=size)
 
-    if homogeneous:
-        train_sampler = SingleClassSampler(train_dataset, batch_size)
-        test_sampler = SingleClassSampler(test_dataset, batch_size)
-        shuffle = False
-    else:
-        train_sampler = None
-        test_sampler = None
-        shuffle = True
-
     num_workers = 4
 
     train_loader = DataLoader(
         train_dataset,
-        sampler=train_sampler,
         num_workers=num_workers,
         prefetch_factor=4 if num_workers > 0 else None,
         pin_memory=torch.cuda.is_available(),
         batch_size=batch_size,
         persistent_workers=num_workers > 0,
         drop_last=True,
-        shuffle=shuffle,
+        shuffle=True,
     )
     test_loader = DataLoader(
         test_dataset,
-        sampler=test_sampler,
         num_workers=num_workers,
         prefetch_factor=4 if num_workers > 0 else None,
         pin_memory=torch.cuda.is_available(),

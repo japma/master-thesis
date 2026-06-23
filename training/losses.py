@@ -36,10 +36,10 @@ def beta_vae_loss(
     logvar: torch.Tensor,
     beta: float = 1.0,
     recon_loss_fn: nn.Module = nn.MSELoss(),
-):
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     recon_loss = recon_loss_fn(recon, images)
 
-    kl_loss = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp()).mean()
+    kl_loss = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp()).sum(dim=1).mean()
 
     return recon_loss + beta * kl_loss, recon_loss, kl_loss
 

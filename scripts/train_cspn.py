@@ -106,7 +106,7 @@ def main():
     summary(cspn)
 
     train_loader, test_loader = build_data_loaders(
-        dataset_cfg, batch_size=training_cfg.batch_size, homogeneous=true
+        dataset_cfg, batch_size=training_cfg.batch_size
     )
 
     optimizer = torch.optim.Adam(cspn.parameters(), lr=training_cfg.learning_rate)
