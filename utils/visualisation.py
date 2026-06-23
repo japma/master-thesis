@@ -1,7 +1,7 @@
-import torchvision.utils as vutils
 import matplotlib.pyplot as plt
-import torch
 import numpy as np
+import torch
+import torchvision.utils as vutils
 import umap
 
 

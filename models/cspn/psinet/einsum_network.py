@@ -1,18 +1,18 @@
-from models.cspn.psinet.exponential_family_array import NormalArray
 import torch
 
+from models.cspn.psinet.exponential_family_array import NormalArray
+from models.cspn.psinet.factorized_leaf_layer import FactorizedLeafLayer
 from models.cspn.psinet.graph import (
     check_graph,
-    get_roots,
     get_leaves,
+    get_roots,
     get_sums,
     topological_layers,
 )
-from models.cspn.psinet.factorized_leaf_layer import FactorizedLeafLayer
 from models.cspn.psinet.sum_layer import EinsumLayer, EinsumMixingLayer
 
 
-class Args(object):
+class Args:
     """
     Arguments for EinsumNetwork class.
 
@@ -80,7 +80,7 @@ class EinsumNetwork(torch.nn.Module):
 
     def __init__(self, graph, param_nn=None, args=None):
         """Make an EinsumNetwork."""
-        super(EinsumNetwork, self).__init__()
+        super().__init__()
 
         self.param_nn = param_nn
         self.last_params = None

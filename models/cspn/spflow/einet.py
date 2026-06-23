@@ -10,13 +10,11 @@ Reference:
 
 from __future__ import annotations
 
-from typing import Literal, Optional
+from typing import Literal
 
 import numpy as np
 import torch
 from einops import rearrange, repeat
-from torch import nn
-
 from spflow.exceptions import InvalidParameterError, UnsupportedOperationError
 from spflow.interfaces.classifier import Classifier
 from spflow.meta.data.scope import Scope
@@ -24,7 +22,6 @@ from spflow.modules.einsum.einsum_layer import EinsumLayer
 from spflow.modules.einsum.linsum_layer import LinsumLayer
 from spflow.modules.leaves.leaf import LeafModule
 from spflow.modules.module import Module
-from spflow.modules.module_shape import ModuleShape
 from spflow.modules.ops.split import SplitMode
 from spflow.modules.products.product import Product
 from spflow.modules.rat.factorize import Factorize
@@ -33,6 +30,7 @@ from spflow.modules.sums.sum import Sum
 from spflow.utils.cache import Cache, cached
 from spflow.utils.inference import log_posterior
 from spflow.utils.sampling_context import LeafParamRecord, SamplingContext
+from torch import nn
 
 
 class ConditionalEinet(Module, Classifier):

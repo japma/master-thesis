@@ -1,5 +1,5 @@
-from enum import StrEnum
 from abc import ABC, abstractmethod
+from enum import StrEnum
 
 import torch
 import torch.nn as nn

@@ -1,4 +1,4 @@
-from typing import List, Tuple
+
 import torch
 from torch import nn
 
@@ -9,7 +9,7 @@ class EinetConditioningNetwork(nn.Module):
         context_dim: int,
         num_scopes: int,
         num_leaves: int,
-        layer_nodes: List[int],
+        layer_nodes: list[int],
         nn_hidden_dim: int = 256,
         nn_num_hidden_layers: int = 2,
     ):
@@ -35,7 +35,7 @@ class EinetConditioningNetwork(nn.Module):
         # At layer l there are 2^(depth-1-l) region pairs (num_pairs_l).
         # Each pair needs out_nodes * in_nodes * in_nodes weights.
         # in_nodes for layer 0 = num_leaves, else layer_nodes[l-1].
-        self.layer_shapes: List[Tuple[int, int, int]] = []  # (num_pairs, out, in)
+        self.layer_shapes: list[tuple[int, int, int]] = []  # (num_pairs, out, in)
         weight_params = 0
         for l in range(self.depth):
             num_pairs = 2 ** (self.depth - 1 - l)

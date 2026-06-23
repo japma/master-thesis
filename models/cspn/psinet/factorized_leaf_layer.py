@@ -1,5 +1,6 @@
-from models.cspn.psinet.layer import Layer
 import torch
+
+from models.cspn.psinet.layer import Layer
 
 
 class FactorizedLeafLayer(Layer):
@@ -31,7 +32,7 @@ class FactorizedLeafLayer(Layer):
         :param ef_args: arguments of exponential_family
         :param use_em: use on-board EM algorithm? (boolean)
         """
-        super(FactorizedLeafLayer, self).__init__(use_em=use_em)
+        super().__init__(use_em=use_em)
 
         self.nodes = leaves
         self.num_var = num_var
@@ -182,17 +183,13 @@ class FactorizedLeafLayer(Layer):
                 for c, k in enumerate(node_idx[n]):
                     scope = list(self.nodes[k].scope)
                     rep = self.nodes[k].einet_address.replica_idx
-                    if mode == "sample":
-                        cur_value[scope, :] = ef_values[
-                            n, scope, :, dist_idx[n][c], rep
-                        ]
-                    elif mode == "argmax":
+                    if mode == "sample" or mode == "argmax":
                         cur_value[scope, :] = ef_values[
                             n, scope, :, dist_idx[n][c], rep
                         ]
                     else:
                         raise AssertionError(
-                            "Unknown backtracking mode {}".format(mode)
+                            f"Unknown backtracking mode {mode}"
                         )
                 values[n, :, :] = cur_value
 

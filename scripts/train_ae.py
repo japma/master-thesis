@@ -3,17 +3,16 @@
 from pathlib import Path
 
 import torch
-import wandb
 from rtpt import RTPT
-from torch import nn
 from torchinfo import summary
 
+import wandb
 from dataset_loaders import build_data_loaders
 from models import VariationalAutoencoder
-from training.losses import get_ae_loss_fn, BetaVAELoss
+from training.losses import BetaVAELoss
 from training.train_ae import train_autoencoder
 from utils.checkpoints import save_autoencoder
-from utils.config import load_config, AERunConfig
+from utils.config import AERunConfig, load_config
 from utils.reproducibility import resolve_device, seed_everything
 
 

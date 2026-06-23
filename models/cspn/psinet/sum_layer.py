@@ -1,8 +1,10 @@
-import torch
-import torch.nn.functional as F
-from models.cspn.psinet.layer import Layer
 import functools
 from itertools import count
+
+import torch
+import torch.nn.functional as F
+
+from models.cspn.psinet.layer import Layer
 from models.cspn.psinet.utils import sample_matrix_categorical
 
 softmax = torch.nn.functional.softmax
@@ -22,7 +24,7 @@ class SumLayer(Layer):
         :param use_em: use the on-board EM algorithm?
         :param params_mask: binary mask for masking out certain parameters (tensor of shape params_shape).
         """
-        super(SumLayer, self).__init__(use_em=use_em)
+        super().__init__(use_em=use_em)
 
         self.params_shape = params_shape
         self.params = None
@@ -149,7 +151,7 @@ class SumLayer(Layer):
         Helper routine for backtracking in EiNets, see _sample(...) for details.
         """
         if mode != "sample" and mode != "argmax":
-            raise AssertionError("Unknown backtracking mode {}".format(mode))
+            raise AssertionError(f"Unknown backtracking mode {mode}")
 
         if self._use_em:
             params = self.params
@@ -358,7 +360,7 @@ class EinsumLayer(SumLayer):
             self.num_sums,
             len(self.products),
         )
-        super(EinsumLayer, self).__init__(
+        super().__init__(
             param_shape, normalization_dims=(0, 1), use_em=use_em
         )
 
@@ -402,13 +404,13 @@ class EinsumLayer(SumLayer):
                             raise AssertionError("This should not happen.")
                         permutation[c] = next(permutation_counter)
                 self.register_buffer(
-                    "idx_layer_{}_child_{}".format(layer_counter, child_num),
+                    f"idx_layer_{layer_counter}_child_{child_num}",
                     torch.tensor(cur_idx),
                 )
             if any(i is None for i in permutation):
                 raise AssertionError("This should not happen.")
             self.register_buffer(
-                "permutation_child_{}".format(child_num), torch.tensor(permutation)
+                f"permutation_child_{child_num}", torch.tensor(permutation)
             )
 
         do_input_bookkeeping(self.left_layers, 0)
@@ -444,7 +446,7 @@ class EinsumLayer(SumLayer):
 
         def cidx(layer_counter, child_num):
             return self.__getattr__(
-                "idx_layer_{}_child_{}".format(layer_counter, child_num)
+                f"idx_layer_{layer_counter}_child_{child_num}"
             )
 
         self._last_params = params
@@ -643,7 +645,7 @@ class EinsumMixingLayer(SumLayer):
             node.einet_address.layer = self
             node.einet_address.idx = c
 
-        super(EinsumMixingLayer, self).__init__(
+        super().__init__(
             param_shape, normalization_dims=(2,), use_em=use_em, params_mask=params_mask
         )
 

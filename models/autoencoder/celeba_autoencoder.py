@@ -1,12 +1,11 @@
 from abc import ABC
 
 import torch
-from diffusers import AutoencoderTiny
+import torch.nn as nn
+import torch.nn.functional as F
 
 from models.autoencoder import AbstractAutoencoder
 
-import torch.nn as nn
-import torch.nn.functional as F
 # from torch.amp import autocast
 # import lpips
 

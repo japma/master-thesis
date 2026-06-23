@@ -1,14 +1,16 @@
 from pathlib import Path
+
 import torch
+
 import wandb
 from models.autoencoder import (
     AbstractAutoencoder,
-    VariationalAutoencoder,
     AutoencoderType,
+    VariationalAutoencoder,
 )
 from models.cspn import AbstractCSPN
-from models.cspn.CustomEinet.einet import Einet
 from models.cspn.abstract_cspn import CSPNType
+from models.cspn.CustomEinet.einet import Einet
 from models.cspn.psinet_cspn import PsiNetCSPN
 from models.cspn.spflow_cspn import SPFlowCSPN
 

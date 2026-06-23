@@ -5,13 +5,11 @@ import torch
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 
-from dataset_loaders.single_class_sampler import SingleClassSampler
-from utils.config import DatasetConfig
 from dataset_loaders.binarymnist import BinaryMNISTDataset
-from dataset_loaders.tinyimagenet import TinyImageNetDataset
-from dataset_loaders.coco import CocoDataset, CocoCachedDataset
+from dataset_loaders.coco import CocoDataset
 from dataset_loaders.cub200 import Cub200Dataset
-
+from dataset_loaders.tinyimagenet import TinyImageNetDataset
+from utils.config import DatasetConfig
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = PROJECT_ROOT / "data"

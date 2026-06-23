@@ -1,7 +1,8 @@
+import argparse
 from dataclasses import dataclass, field
 from pathlib import Path
-import argparse
 from typing import Literal
+
 import yaml
 
 _CONFIGS_DIR = Path(__file__).parent.parent / "configv2"

@@ -1,12 +1,11 @@
 """Abstract autoencoder base module."""
 
-from enum import StrEnum
 from abc import ABC, abstractmethod
+from enum import StrEnum
 from typing import TypeAlias
 
 import torch
 import torch.nn as nn
-
 
 AutoencoderForwardOutput: TypeAlias = (
     torch.Tensor | tuple[torch.Tensor, torch.Tensor, torch.Tensor]

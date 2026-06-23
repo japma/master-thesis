@@ -1,11 +1,10 @@
-from models.cspn.abstract_cspn import CSPNType
+import torch
+from spflow.meta.data.scope import Scope
 from spflow.modules.leaves.leaf import LeafModule
 from spflow.modules.leaves.normal import Normal
 from spflow.zoo.einet import Einet
-from spflow.meta.data.scope import Scope
-from models.cspn.abstract_cspn import AbstractCSPN
-import torch
 
+from models.cspn.abstract_cspn import AbstractCSPN, CSPNType
 from models.cspn.spflow.nn_for_spflow import NeuralNetworkForSPFlow
 
 

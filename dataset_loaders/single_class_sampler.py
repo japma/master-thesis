@@ -2,7 +2,7 @@ import random
 from collections import defaultdict
 
 import torch
-from torch.utils.data import Sampler, Dataset
+from torch.utils.data import Dataset, Sampler
 
 
 class SingleClassSampler(Sampler):

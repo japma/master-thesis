@@ -1,16 +1,15 @@
 """Inference pipeline for loading checkpoints and generating visualizations."""
 
-from models.autoencoder import AbstractAutoencoder
-import torch
-from torch.utils.data import DataLoader
-import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
-import umap
+import matplotlib.pyplot as plt
 import numpy as np
+import torch
+import umap
+from torch.utils.data import DataLoader
 
+from models.autoencoder import AbstractAutoencoder
 from models.cspn import AbstractCSPN
-from scripts.visualization.visualization import save_latent_umap, _to_numpy
-
+from scripts.visualization.visualization import _to_numpy, save_latent_umap
 
 NUM_CLASSES = 10
 SAMPLES_PER_CLASS = 100

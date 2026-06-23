@@ -1,9 +1,9 @@
 from matplotlib import pyplot as plt
 
-from utils.config import load_config
 from dataset_loaders import build_data_loaders
 from models.autoencoder import TinyAutoencoderWrapper
 from utils import resolve_device
+from utils.config import load_config
 
 
 def main():

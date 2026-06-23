@@ -1,12 +1,13 @@
-import torch
 import math
+
+import torch
 
 from models.cspn import AbstractCSPN
 from models.cspn.abstract_cspn import CSPNType
-from models.cspn.psinet.einsum_network import EinsumNetwork, Args
+from models.cspn.psinet.conditioning_nn import build_conditioning_mlp_for
+from models.cspn.psinet.einsum_network import Args, EinsumNetwork
 from models.cspn.psinet.exponential_family_array import NormalArray
 from models.cspn.psinet.graph import random_binary_trees
-from models.cspn.psinet.conditioning_nn import build_conditioning_mlp_for
 
 
 # TODO add more parameters

@@ -1,8 +1,8 @@
 from torchinfo import summary
 
-from models.cspn.psinet.einsum_network import EinsumNetwork, Args
-from models.cspn.psinet.graph import check_graph, random_binary_trees
+from models.cspn.psinet.einsum_network import Args, EinsumNetwork
 from models.cspn.psinet.exponential_family_array import NormalArray
+from models.cspn.psinet.graph import check_graph, random_binary_trees
 from models.cspn.psinet.nns import MLP
 
 num_var = 28 * 28

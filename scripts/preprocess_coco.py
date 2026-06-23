@@ -17,7 +17,6 @@ from pycocotools.coco import COCO
 from rtpt import RTPT
 from tqdm import tqdm
 
-
 DATA_DIR = "./data/coco-2017"
 TRAIN_IMAGES_DIR = os.path.join(DATA_DIR, "train")
 VAL_IMAGES_DIR = os.path.join(DATA_DIR, "val")

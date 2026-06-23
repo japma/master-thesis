@@ -1,7 +1,8 @@
+from warnings import deprecated
+
 import torch
 import torch.nn as nn
 
-from warnings import deprecated
 from .abstract_autoencoder import AbstractAutoencoder
 
 

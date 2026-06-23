@@ -1,27 +1,21 @@
 """Entry point for CSPN training."""
 
-from sympy import true
-
-from models import SPFlowCSPN
-from models.autoencoder import AutoencoderType
-from models.cspn.abstract_cspn import CSPNType
-from models.cspn.psinet_cspn import PsiNetCSPN
-from utils.checkpoints import load_ae_from_path, load_from_wandb
-from models.autoencoder.utils import load_pretrained_autoencoder
-from torchinfo import summary
 
 from pathlib import Path
 
 import torch
-import wandb
 from rtpt import RTPT
+from torchinfo import summary
 
-from utils.checkpoints import save_cspn
-from utils.config import load_config, CSPNConfig, CSPNRunConfig
-from utils.reproducibility import seed_everything, resolve_device
-from models.cspn.CustomEinet.einet import Einet
+import wandb
 from dataset_loaders import build_data_loaders
+from models.autoencoder.utils import load_pretrained_autoencoder
+from models.cspn.abstract_cspn import CSPNType
+from models.cspn.psinet_cspn import PsiNetCSPN
 from training.train_cspn import train_cspn
+from utils.checkpoints import load_ae_from_path, load_from_wandb, save_cspn
+from utils.config import CSPNRunConfig, load_config
+from utils.reproducibility import resolve_device, seed_everything
 
 
 def main():

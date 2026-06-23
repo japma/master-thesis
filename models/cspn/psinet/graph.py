@@ -1,6 +1,7 @@
-import numpy as np
 from itertools import count
+
 import networkx as nx
+import numpy as np
 
 
 class EiNetAddress:
@@ -245,9 +246,7 @@ def randomly_partition_on_node(
 
     if num_parts > len(node.scope):
         raise AssertionError(
-            "Cannot split scope of length {} into {} parts.".format(
-                len(node.scope), num_parts
-            )
+            f"Cannot split scope of length {len(node.scope)} into {num_parts} parts."
         )
 
     proportions /= proportions.sum()
@@ -667,9 +666,9 @@ def topological_layers(graph):
     visited_nodes = set()
     layers = []
 
-    sums = list(sorted(get_sums(graph)))
-    products = list(sorted(get_products(graph)))
-    leaves = list(sorted(get_leaves(graph)))
+    sums = sorted(get_sums(graph))
+    products = sorted(get_products(graph))
+    leaves = sorted(get_leaves(graph))
 
     num_internal_nodes = len(sums) + len(products)
 

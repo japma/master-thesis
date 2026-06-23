@@ -1,6 +1,7 @@
-import torch
 import numpy as np
+import torch
 from scipy.special import logsumexp
+
 from models.cspn.psinet.einsum_network import log_likelihoods
 
 

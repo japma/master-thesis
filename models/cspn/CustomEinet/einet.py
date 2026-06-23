@@ -1,15 +1,14 @@
 import math
-from typing import Dict, Any
 
-from models.cspn import AbstractCSPN
-from models.cspn.CustomEinet.nn_for_einet import EinetConditioningNetwork
-from models.cspn.CustomEinet.einsum_layer import EinsumLayer
-from models.cspn.CustomEinet.gaussian_leaf_layer import GaussianLeafLayer
 import torch
 import torch.nn.functional as F
 from torch import nn
 
+from models.cspn import AbstractCSPN
 from models.cspn.abstract_cspn import CSPNType
+from models.cspn.CustomEinet.einsum_layer import EinsumLayer
+from models.cspn.CustomEinet.gaussian_leaf_layer import GaussianLeafLayer
+from models.cspn.CustomEinet.nn_for_einet import EinetConditioningNetwork
 
 
 # TODO this does not look right

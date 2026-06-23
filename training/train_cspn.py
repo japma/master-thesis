@@ -2,9 +2,9 @@
 
 import torch
 import tqdm
-import wandb
 from rtpt import RTPT
 
+import wandb
 from models.autoencoder import AbstractAutoencoder
 from models.cspn import AbstractCSPN
 from training.losses import negative_log_likelihood_loss
@@ -74,10 +74,9 @@ def _log_samples(
         samples_per_class
     )
 
-    with torch.no_grad():
-        with torch.no_grad():
-            sampled_latent = model.sample(sample_labels)
-            sampled_images = autoencoder.decode(sampled_latent)
+    with torch.no_grad(), torch.no_grad():
+        sampled_latent = model.sample(sample_labels)
+        sampled_images = autoencoder.decode(sampled_latent)
     images_u8 = (sampled_images.clamp(0, 1) * 255).byte().cpu()
     wandb.log(
         {"samples/cspn_generated_images": [wandb.Image(img) for img in images_u8]},

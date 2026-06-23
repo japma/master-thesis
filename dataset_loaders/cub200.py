@@ -1,5 +1,5 @@
+from collections.abc import Callable
 from pathlib import Path
-from typing import Optional, Callable
 
 import torch
 from PIL import Image
@@ -8,7 +8,7 @@ from torch.utils.data import Dataset
 
 class Cub200Dataset(Dataset):
     def __init__(
-        self, root: str | Path, train: bool = True, transform: Optional[Callable] = None
+        self, root: str | Path, train: bool = True, transform: Callable | None = None
     ):
         self.root = Path(root)
         self.train = train
@@ -62,7 +62,7 @@ class Cub200Dataset(Dataset):
             raise FileNotFoundError(f"{tt_split_path} does not exist")
 
         tt_split_ids = []
-        with open(tt_split_path, "r") as f:
+        with open(tt_split_path) as f:
             for line in f.readlines():
                 parts = line.strip().split()
                 if (parts[1] == "1") == self.train:

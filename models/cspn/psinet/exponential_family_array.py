@@ -1,4 +1,5 @@
 import torch
+
 from models.cspn.psinet.utils import one_hot
 
 
@@ -53,7 +54,7 @@ class ExponentialFamilyArray(torch.nn.Module):
         :param num_stats: number of sufficient statistics of exponential family (int)
         :param use_em: use internal EM algorithm? (bool)
         """
-        super(ExponentialFamilyArray, self).__init__()
+        super().__init__()
 
         self.num_var = num_var
         self.num_dims = num_dims
@@ -400,7 +401,7 @@ class NormalArray(ExponentialFamilyArray):
     def __init__(
         self, num_var, num_dims, array_shape, min_var=0.0001, max_var=10.0, use_em=True
     ):
-        super(NormalArray, self).__init__(
+        super().__init__(
             num_var, num_dims, array_shape, 2 * num_dims, use_em=use_em
         )
         self.log_2pi = torch.tensor(1.8378770664093453)
@@ -550,7 +551,7 @@ class BinomialArray(ExponentialFamilyArray):
     """Implementation of Binomial distribution."""
 
     def __init__(self, num_var, num_dims, array_shape, N, use_em=True):
-        super(BinomialArray, self).__init__(
+        super().__init__(
             num_var, num_dims, array_shape, num_dims, use_em=use_em
         )
         self.N = torch.tensor(float(N))
@@ -638,7 +639,7 @@ class CategoricalArray(ExponentialFamilyArray):
     """Implementation of Categorical distribution."""
 
     def __init__(self, num_var, num_dims, array_shape, K, use_em=True):
-        super(CategoricalArray, self).__init__(
+        super().__init__(
             num_var, num_dims, array_shape, num_dims * K, use_em=use_em
         )
         self.K = K

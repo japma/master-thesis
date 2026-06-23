@@ -1,4 +1,3 @@
-from typing import List, Tuple
 
 import numpy as np
 import torch
@@ -9,7 +8,7 @@ from models.cspn.psinet.factorized_leaf_layer import FactorizedLeafLayer
 from models.cspn.psinet.sum_layer import EinsumLayer, EinsumMixingLayer
 
 
-def derive_head_shapes(einet_layers) -> List[Tuple]:
+def derive_head_shapes(einet_layers) -> list[tuple]:
     if not isinstance(einet_layers[0], FactorizedLeafLayer):
         raise AssertionError("einet_layers[0] must be the FactorizedLeafLayer.")
 
@@ -37,7 +36,7 @@ def derive_head_shapes(einet_layers) -> List[Tuple]:
 
 
 class ConditioningMLP(nn.Module):
-    def __init__(self, num_classes: int, einet_layers, h_dims: List[int]):
+    def __init__(self, num_classes: int, einet_layers, h_dims: list[int]):
         super().__init__()
         self.num_classes = num_classes
 
@@ -55,7 +54,7 @@ class ConditioningMLP(nn.Module):
             [nn.Linear(h_dims[-1], flat_sizes[i]) for i in range(len(head_shapes))]
         )
 
-    def forward(self, labels: torch.Tensor, x_unused=None) -> List[torch.Tensor]:
+    def forward(self, labels: torch.Tensor, x_unused=None) -> list[torch.Tensor]:
         if labels.dim() != 1:
             raise AssertionError(
                 f"Expected labels of shape (batch,), got shape {tuple(labels.shape)}."
@@ -79,7 +78,7 @@ class ConditioningMLP(nn.Module):
 
 
 def build_conditioning_mlp_for(
-    einet, num_classes: int, h_dims: List[int]
+    einet, num_classes: int, h_dims: list[int]
 ) -> ConditioningMLP:
     return ConditioningMLP(
         num_classes=num_classes,

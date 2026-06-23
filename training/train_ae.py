@@ -1,12 +1,12 @@
 """Autoencoder training loop."""
 
-from training.losses import kl_per_dim
 import torch
 import tqdm
-import wandb
 from torch import nn
 
+import wandb
 from models.autoencoder import AbstractAutoencoder
+from training.losses import kl_per_dim
 from utils.config import AERunConfig
 
 
@@ -114,7 +114,7 @@ def train_autoencoder(
     epochs = cfg.training.epochs
     log_sample_every = 10
 
-    sample_images = next(iter(train_loader))[0][:16].to(device)
+    sample_images = next(iter(test_loader))[0][:16].to(device)
     sample_images_u8 = (sample_images.clamp(0, 1) * 255).byte().cpu()
     wandb.log(
         {"samples/input": [wandb.Image(img) for img in sample_images_u8]},

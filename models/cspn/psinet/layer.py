@@ -7,7 +7,7 @@ class Layer(torch.nn.Module):
     """
 
     def __init__(self, use_em=True):
-        super(Layer, self).__init__()
+        super().__init__()
         self._use_em = use_em
         self.prob = None
 
