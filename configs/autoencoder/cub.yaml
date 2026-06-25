@@ -11,13 +11,13 @@ model:
   model_type: variational
   latent_dim: 256
   base_channels: 64
-  num_blocks: 4
+  num_blocks: 3
   res_blocks: 2
 
 training:
   epochs: 200
-  learning_rate: 0.0003
-  batch_size: 32
+  learning_rate: 0.0005
+  batch_size: 64
   beta: 1.0
 
 wandb:
