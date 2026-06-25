@@ -12,11 +12,11 @@ model:
   latent_dim: 16
   base_channels: 32
   num_blocks: 2
-  res_blocks: 1
+  res_blocks: 0
 
 training:
   epochs: 50
-  learning_rate: 0.001
+  learning_rate: 0.0005
   batch_size: 256
   beta: 1.0
 
