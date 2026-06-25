@@ -38,14 +38,13 @@ class BetaVAELoss(nn.Module):
     def forward(
         self,
         images: torch.Tensor,
-        recon_logits: torch.Tensor,  # <-- now expects logits, not probabilities
+        recon: torch.Tensor,
         mu: torch.Tensor,
         logvar: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         B = images.size(0)
         recon_loss = (
-            F.binary_cross_entropy_with_logits(recon_logits, images, reduction="sum")
-            / B
+            F.binary_cross_entropy_with_logits(recon, images, reduction="sum") / B
         )
         kl_loss = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp()).sum(dim=1).mean()
         return recon_loss + self.beta * kl_loss, recon_loss, kl_loss
