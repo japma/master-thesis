@@ -25,7 +25,6 @@ def main():
     wandb_cfg = cfg.wandb
 
     seed = seed_everything(cfg_seed)
-    # TODO build this into the config
     beta = training_cfg.beta
     device = resolve_device()
     dataset_name = dataset_cfg.name

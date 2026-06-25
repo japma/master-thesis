@@ -86,16 +86,14 @@ class VariationalAutoencoder(AbstractAutoencoder):
             for _ in range(res_blocks):
                 dec_layers.append(ResBlock(ch_in))
 
-            dec_layers.append(
-                nn.ConvTranspose2d(
-                    ch_in, ch_out, kernel_size=4, stride=2, padding=1, bias=False
-                )
-            )
+            dec_layers += [
+                nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False),
+                nn.Conv2d(ch_in, ch_out, kernel_size=3, padding=1, bias=False),
+            ]
             if not is_last:
                 dec_layers += [nn.BatchNorm2d(ch_out), nn.ReLU(inplace=True)]
 
         self.decoder = nn.Sequential(*dec_layers)
-        self.output_activation = nn.Sigmoid()
 
     def encode_distribution(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         features = self.encoder(x)
@@ -108,15 +106,19 @@ class VariationalAutoencoder(AbstractAutoencoder):
         mu, _ = self.encode_distribution(x)
         return mu
 
-    def decode(self, z: torch.Tensor) -> torch.Tensor:
+    def _decode(self, z: torch.Tensor) -> torch.Tensor:
         decoded = self.decoder_input(z)
         decoded = decoded.view(z.size(0), *self.encoded_shape)
-        return self.output_activation(self.decoder(decoded))
+        return self.decoder(decoded)
+
+    def decode(self, z: torch.Tensor) -> torch.Tensor:
+        logits = self._decode(z)
+        return torch.sigmoid(logits)
 
     def forward(self, x: torch.Tensor) -> AutoencoderForwardOutput:
         mu, logvar = self.encode_distribution(x)
         z = reparameterize(mu, logvar)
-        recon = self.decode(z)
+        recon = self._decode(z)
         return recon, mu, logvar
 
     def get_config(self) -> dict:

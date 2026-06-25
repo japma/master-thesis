@@ -9,7 +9,7 @@ from utils.config import load_config
 def main():
     ae = TinyAutoencoderWrapper()
 
-    cfg = load_config()
+    cfg, _ = load_config()
     dataset_cfg = cfg.dataset
 
     dataloader, _ = build_data_loaders(dataset_cfg)

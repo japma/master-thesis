@@ -1,15 +1,15 @@
 type: cspn
 
 dataset:
-  name: mnist
+  name: coco
   channels: 3
-  height: 28
-  width: 28
-  num_classes: 10
+  height: 128
+  width: 128
+  num_classes: 80
 
 autoencoder:
-  name: "autoencoder_mnist"
-  external: false
+  name: "madebyollins/taesd"
+  external: true
 
 model:
   model_type: "psinet"
@@ -21,7 +21,7 @@ model:
   h_dims: [ 128, 128 ]
 
 training:
-  epochs: 50
+  epochs: 250
   learning_rate: 0.001
   batch_size: 32
 
