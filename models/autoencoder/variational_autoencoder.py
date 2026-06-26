@@ -34,6 +34,7 @@ class VariationalAutoencoder(AbstractAutoencoder):
                     nn.Conv2d(
                         current_channels, h_dim, kernel_size=3, padding=1, stride=2
                     ),
+                    nn.BatchNorm2d(h_dim),
                     nn.ReLU(),
                 )
             )
@@ -79,8 +80,7 @@ class VariationalAutoencoder(AbstractAutoencoder):
                     padding=1,
                     stride=2,
                     output_padding=1,
-                ),
-                nn.Sigmoid(),
+                )
             )
         )
 
@@ -104,8 +104,7 @@ class VariationalAutoencoder(AbstractAutoencoder):
         return self.decoder(h)
 
     def decode(self, z: torch.Tensor) -> torch.Tensor:
-        logits = self._decode(z)
-        return torch.sigmoid(logits)
+        return self._decode(z)
 
     def forward(self, x: torch.Tensor) -> AutoencoderForwardOutput:
         mu, log_var = self._encode_distribution(x)

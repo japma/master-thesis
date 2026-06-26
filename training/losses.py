@@ -31,9 +31,10 @@ def beta_vae_loss(
 
 
 class BetaVAELoss(nn.Module):
-    def __init__(self, beta: float = 1.0):
+    def __init__(self, beta: float = 1.0, free_bits: float = 0.5):
         super().__init__()
         self.beta = beta
+        self.free_bits = free_bits
 
     def forward(
         self,
@@ -41,13 +42,18 @@ class BetaVAELoss(nn.Module):
         recon: torch.Tensor,
         mu: torch.Tensor,
         logvar: torch.Tensor,
+        beta: float | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         B = images.size(0)
         recon_loss = (
             F.binary_cross_entropy_with_logits(recon, images, reduction="sum") / B
         )
-        kl_loss = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp()).sum(dim=1).mean()
-        return recon_loss + self.beta * kl_loss, recon_loss, kl_loss
+
+        kl_per_dim = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp())
+        kl_loss = kl_per_dim.clamp(min=self.free_bits).mean()
+
+        effective_beta = beta if beta is not None else self.beta
+        return recon_loss + effective_beta * kl_loss, recon_loss, kl_loss
 
 
 def negative_log_likelihood_loss(

@@ -178,7 +178,10 @@ _DATASETS = {
 
 
 def build_data_loaders(
-    cfg: DatasetConfig, batch_size: int = 32, shuffle_test: bool = False
+    cfg: DatasetConfig,
+    batch_size: int = 32,
+    shuffle_test: bool = False,
+    num_workers: int = 4,
 ) -> tuple[DataLoader, DataLoader]:
     loader_fn = _DATASETS.get(cfg.name)
     if loader_fn is None:
@@ -188,8 +191,6 @@ def build_data_loaders(
 
     train_dataset = loader_fn(train=True, size=size)
     test_dataset = loader_fn(train=False, size=size)
-
-    num_workers = 4
 
     train_loader = DataLoader(
         train_dataset,

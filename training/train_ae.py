@@ -18,11 +18,14 @@ def _train_epoch(
     device: torch.device,
     epoch: int,
     epochs: int,
+    warmup_epochs: int = 10,
 ) -> tuple[float, float, float]:
     model.train()
     total_loss = torch.tensor(0.0, device=device)
     total_recon = torch.tensor(0.0, device=device)
     total_kl = torch.tensor(0.0, device=device)
+
+    annealed_beta = min(1.0, epoch / max(warmup_epochs, 1))
 
     for images, _ in tqdm.tqdm(loader, desc=f"Train {epoch + 1}/{epochs}"):
         images = images.to(device, non_blocking=True)
@@ -30,7 +33,7 @@ def _train_epoch(
 
         recon, mu, logvar = model(images)
         loss, recon_loss, kl_loss = loss_fn(
-            images=images, recon=recon, mu=mu, logvar=logvar
+            images=images, recon=recon, mu=mu, logvar=logvar, beta=annealed_beta
         )
 
         loss.backward()
@@ -90,7 +93,8 @@ def _log_reconstructions(
 ) -> None:
     model.eval()
     with torch.no_grad():
-        recon, _, _ = model(sample_images)
+        logits, _, _ = model(sample_images)
+        recon = torch.sigmoid(logits)
     recon_u8 = (recon.clamp(0, 1) * 255).byte().cpu()
     wandb.log(
         {"samples/recon_images": [wandb.Image(img) for img in recon_u8]},
@@ -121,9 +125,18 @@ def train_autoencoder(
         step=0,
     )
 
+    warmup_epochs = 10
+
     for epoch in range(epochs):
         train_loss, train_recon, train_kl = _train_epoch(
-            model, train_loader, optimizer, loss_fn, device, epoch, epochs
+            model,
+            train_loader,
+            optimizer,
+            loss_fn,
+            device,
+            epoch,
+            epochs,
+            warmup_epochs=warmup_epochs,
         )
 
         val_loss, val_recon, val_kl, kl_dims = _val_epoch(
@@ -133,6 +146,8 @@ def train_autoencoder(
         scheduler.step()
 
         active_dims = (kl_dims > 0.1).sum().item()
+
+        annealed_beta = min(1.0, epoch / max(warmup_epochs, 1))
 
         wandb.log(
             {
@@ -144,6 +159,7 @@ def train_autoencoder(
                 "val_kl_loss": val_kl,
                 "val_kl_per_dim": wandb.Histogram(kl_dims.cpu().tolist()),
                 "active_dims": active_dims,
+                "kl_beta": annealed_beta,
             },
             step=epoch,
         )
