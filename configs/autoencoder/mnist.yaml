@@ -11,6 +11,7 @@ model:
   model_type: variational
   latent_dim: 16
   num_blocks: 2
+  base_channels: 32
 
 training:
   epochs: 50

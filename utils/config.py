@@ -35,6 +35,7 @@ class AutoencoderConfig(BaseModel):
     model_type: AutoencoderType
     latent_dim: int
     num_blocks: int
+    base_channels: int
     image_size: int = 0
 
 

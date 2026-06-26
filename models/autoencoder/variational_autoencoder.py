@@ -1,8 +1,5 @@
-from dataclasses import asdict
-
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 from utils.config import AutoencoderConfig
 
@@ -22,11 +19,16 @@ class VariationalAutoencoder(AbstractAutoencoder):
     ):
         super().__init__()
         self.config = config
-        print(type(self.config))
+
+        self.input_proj = nn.Sequential(
+            nn.Conv2d(3, config.base_channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(config.base_channels),
+            nn.ReLU(),
+        )
 
         # --- Encoder ---
         encoder_blocks = []
-        current_channels = 3  # for rgb
+        current_channels = config.base_channels
         for _ in range(config.num_blocks):
             h_dim = current_channels * 2
             encoder_blocks.append(
@@ -75,21 +77,24 @@ class VariationalAutoencoder(AbstractAutoencoder):
             nn.Sequential(
                 nn.ConvTranspose2d(
                     current_channels,
-                    3,
+                    config.base_channels,  # unchanged
                     kernel_size=3,
                     padding=1,
                     stride=2,
                     output_padding=1,
-                )
+                ),
+                nn.ReLU(),
             )
         )
-
         self.decoder = nn.Sequential(*decoder_blocks)
+
+        self.output_proj = nn.Conv2d(config.base_channels, 3, kernel_size=3, padding=1)
 
     def _encode_distribution(
         self, x: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        h = self.encoder(x).flatten(start_dim=1)
+        x_proj = self.input_proj(x)
+        h = self.encoder(x_proj).flatten(start_dim=1)
         mu = self.mu_head(h)
         log_var = self.log_var_head(h)
         return mu, log_var
@@ -101,7 +106,8 @@ class VariationalAutoencoder(AbstractAutoencoder):
     def _decode(self, z: torch.Tensor) -> torch.Tensor:
         h = self.fc_decode(z)
         h = h.view(-1, self.bottleneck_channels, self.encoded_size, self.encoded_size)
-        return self.decoder(h)
+        x_proj = self.decoder(h)
+        return self.output_proj(x_proj)
 
     def decode(self, z: torch.Tensor) -> torch.Tensor:
         return self._decode(z)
