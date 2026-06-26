@@ -1,5 +1,0 @@
-type: ae
-dataset: flowers102
-model: medium
-training: flowers
-wandb: online

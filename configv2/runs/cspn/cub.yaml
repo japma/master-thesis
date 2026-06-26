@@ -1,6 +1,0 @@
-type: cspn
-dataset: cub200
-model: large
-autoencoder: cub
-training: large
-wandb: online

@@ -1,5 +1,0 @@
-type: ae
-dataset: cub200
-model: large
-training: flowers
-wandb: online

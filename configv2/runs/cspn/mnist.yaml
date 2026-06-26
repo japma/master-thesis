@@ -1,6 +1,0 @@
-type: cspn
-dataset: mnist
-model: small
-autoencoder: mnist
-training: small
-wandb: online
