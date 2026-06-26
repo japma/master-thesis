@@ -214,3 +214,11 @@ def build_data_loaders(
     )
 
     return train_loader, test_loader
+
+
+def download_datasets():
+    """Download all available datasets by instantiating all of them"""
+    for name in _DATASETS:
+        ds_fn = _DATASETS[name]
+        print(f"Processing dataset '{name}' ...")
+        ds_fn(train=True)
