@@ -44,7 +44,7 @@ def main():
             "learning_rate": training_cfg.learning_rate,
             "beta": beta,
             "seed": seed,
-            "base_channels": autoencoder_cfg.base_channels,
+            # "base_channels": autoencoder_cfg.base_channels,
             "num_blocks": autoencoder_cfg.num_blocks,
         },
         mode=wandb_cfg.mode,
@@ -52,15 +52,7 @@ def main():
 
     print(f"Training Autoencoder on {dataset_name} | device={device} | seed={seed}")
 
-    input_shape = (dataset_cfg.channels, dataset_cfg.height, dataset_cfg.width)
-
-    ae = VariationalAutoencoder(
-        input_shape=input_shape,
-        latent_dim=autoencoder_cfg.latent_dim,
-        base_channels=autoencoder_cfg.base_channels,
-        num_blocks=autoencoder_cfg.num_blocks,
-        res_blocks=autoencoder_cfg.res_blocks,
-    )
+    ae = VariationalAutoencoder(config=autoencoder_cfg).to(device)
     print("Autoencoder Architecture:")
     summary(ae)
 

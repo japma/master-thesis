@@ -1,4 +1,5 @@
 import argparse
+from enum import StrEnum
 from pathlib import Path
 from typing import Literal
 
@@ -6,6 +7,11 @@ import yaml
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 _RUNS_DIR = Path(__file__).parent.parent / "configv2" / "runs"
+
+
+class AutoencoderType(StrEnum):
+    VARIATIONAL = "variational"
+    OTHER = "other"
 
 
 class DatasetConfig(BaseModel):
@@ -17,15 +23,19 @@ class DatasetConfig(BaseModel):
     width: int
     num_classes: int
 
+    @model_validator(mode="after")
+    def is_square(self):
+        assert self.height == self.width
+        return self
+
 
 class AutoencoderConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    model_type: Literal["variational", "vanilla"]
+    model_type: AutoencoderType
     latent_dim: int
-    base_channels: int
     num_blocks: int
-    res_blocks: int
+    image_size: int = 0
 
 
 class PretrainedAutoencoderConfig(BaseModel):
@@ -83,6 +93,11 @@ class AERunConfig(BaseModel):
     model: AutoencoderConfig
     training: AutoencoderTrainingConfig
     wandb: WandbConfig
+
+    @model_validator(mode="after")
+    def inject_image_size(self):
+        self.model.image_size = self.dataset.height
+        return self
 
 
 class CSPNRunConfig(BaseModel):

@@ -7,7 +7,7 @@ from typing import TypeAlias
 import torch
 import torch.nn as nn
 
-AutoencoderForwardOutput: TypeAlias = (
+type AutoencoderForwardOutput = (
     torch.Tensor | tuple[torch.Tensor, torch.Tensor, torch.Tensor]
 )
 

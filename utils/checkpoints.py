@@ -13,6 +13,7 @@ from models.cspn.abstract_cspn import CSPNType
 from models.cspn.CustomEinet.einet import Einet
 from models.cspn.psinet_cspn import PsiNetCSPN
 from models.cspn.spflow_cspn import SPFlowCSPN
+from utils.config import AutoencoderConfig, AutoencoderType
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 ARTIFACTS_DIR = PROJECT_ROOT / "artifacts"
@@ -46,24 +47,21 @@ def save_autoencoder(model: AbstractAutoencoder, path: Path) -> None:
     print("Saved autoencoder checkpoint to", path)
 
 
-def _create_autoencoder_from_checkpoint(cfg: dict) -> AbstractAutoencoder:
-    match cfg["model_type"]:
+def _create_autoencoder_from_checkpoint(cfg: AutoencoderConfig) -> AbstractAutoencoder:
+    match cfg.model_type:
         case AutoencoderType.VARIATIONAL:
             return VariationalAutoencoder(
-                input_shape=cfg["input_shape"],
-                latent_dim=cfg["latent_dim"],
-                base_channels=cfg["base_channels"],
-                num_blocks=cfg["num_blocks"],
-                res_blocks=cfg["res_blocks"],
+                config=cfg,
             )
         case _:
-            raise ValueError(f"Unknown autoencoder type: {cfg['model_type']}")
+            raise ValueError(f"Unknown autoencoder type: {cfg.model_type}")
 
 
 def load_ae_from_path(path: Path, device=None) -> AbstractAutoencoder:
     with torch.serialization.safe_globals([AutoencoderType]):
         ckpt = torch.load(path, map_location=device, weights_only=True)
-    model = _create_autoencoder_from_checkpoint(ckpt["model_cfg"])
+    cfg = AutoencoderConfig.model_validate(ckpt["model_cfg"])
+    model = _create_autoencoder_from_checkpoint(cfg)
     model.load_state_dict(ckpt["model_state"])
     return model
 

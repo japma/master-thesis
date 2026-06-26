@@ -1,8 +1,11 @@
+from dataclasses import asdict
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from . import AutoencoderType
+from utils.config import AutoencoderConfig
+
 from .abstract_autoencoder import AbstractAutoencoder, AutoencoderForwardOutput
 
 
@@ -12,124 +15,107 @@ def reparameterize(mu: torch.Tensor, logvar: torch.Tensor) -> torch.Tensor:
     return mu + eps * std
 
 
-class ResBlock(nn.Module):
-    def __init__(self, channels: int):
-        super().__init__()
-
-        self.block = nn.Sequential(
-            nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(channels),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(channels),
-        )
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return F.relu(x + self.block(x), inplace=True)
-
-
 class VariationalAutoencoder(AbstractAutoencoder):
     def __init__(
         self,
-        input_shape: tuple[int, int, int],
-        latent_dim: int = 32,
-        base_channels: int = 32,
-        num_blocks: int = 2,
-        res_blocks: int = 1,
+        config: AutoencoderConfig,
     ):
         super().__init__()
-        self.input_shape = input_shape
-        self.latent_dim = latent_dim
-        self.base_channels = base_channels
-        self.num_blocks = num_blocks
-        self.res_blocks = res_blocks
-
-        channels, height, width = input_shape
+        self.config = config
+        print(type(self.config))
 
         # --- Encoder ---
-        enc_layers = []
-        ch_in = channels
-        for i in range(num_blocks):
-            ch_out = base_channels * (2**i)
-            enc_layers += [
-                nn.Conv2d(
-                    ch_in, ch_out, kernel_size=4, stride=2, padding=1, bias=False
-                ),
-                nn.BatchNorm2d(ch_out),
-                nn.ReLU(inplace=True),
-            ]
-            for _ in range(res_blocks):
-                enc_layers.append(ResBlock(ch_out))
-            ch_in = ch_out
+        encoder_blocks = []
+        current_channels = 3  # for rgb
+        for _ in range(config.num_blocks):
+            h_dim = current_channels * 2
+            encoder_blocks.append(
+                nn.Sequential(
+                    nn.Conv2d(
+                        current_channels, h_dim, kernel_size=3, padding=1, stride=2
+                    ),
+                    nn.ReLU(),
+                )
+            )
+            current_channels = h_dim
 
-        self.encoder = nn.Sequential(*enc_layers)
+        self.encoder = nn.Sequential(*encoder_blocks)
 
-        with torch.no_grad():
-            example = torch.zeros(1, channels, height, width)
-            encoded_example = self.encoder(example)
+        self.encoded_size = config.image_size // (2**config.num_blocks)
+        flat_dim = current_channels * self.encoded_size * self.encoded_size
 
-        self.encoded_shape = tuple(encoded_example.shape[1:])
-        self.encoded_flat_dim = encoded_example.numel()
+        self.mu_head = nn.Linear(flat_dim, config.latent_dim)
+        self.log_var_head = nn.Linear(flat_dim, config.latent_dim)
 
-        self.mu_head = nn.Linear(self.encoded_flat_dim, latent_dim)
-        self.logvar_head = nn.Linear(self.encoded_flat_dim, latent_dim)
-
-        self.decoder_input = nn.Linear(latent_dim, self.encoded_flat_dim)
+        self.bottleneck_channels = current_channels
 
         # --- Decoder ---
-        dec_layers = []
-        for i in range(num_blocks - 1, -1, -1):
-            ch_in = base_channels * (2**i)
-            ch_out = base_channels * (2 ** (i - 1)) if i > 0 else channels
-            is_last = i == 0
+        self.fc_decode = nn.Linear(config.latent_dim, flat_dim)
 
-            for _ in range(res_blocks):
-                dec_layers.append(ResBlock(ch_in))
+        decoder_blocks = []
+        for _ in range(config.num_blocks - 1):
+            h_dim = current_channels // 2
+            decoder_blocks.append(
+                nn.Sequential(
+                    nn.ConvTranspose2d(
+                        current_channels,
+                        h_dim,
+                        kernel_size=3,
+                        padding=1,
+                        stride=2,
+                        output_padding=1,
+                    ),
+                    nn.ReLU(),
+                )
+            )
+            current_channels = h_dim
 
-            dec_layers += [
-                nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False),
-                nn.Conv2d(ch_in, ch_out, kernel_size=3, padding=1, bias=False),
-            ]
-            if not is_last:
-                dec_layers += [nn.BatchNorm2d(ch_out), nn.ReLU(inplace=True)]
+        decoder_blocks.append(
+            nn.Sequential(
+                nn.ConvTranspose2d(
+                    current_channels,
+                    3,
+                    kernel_size=3,
+                    padding=1,
+                    stride=2,
+                    output_padding=1,
+                ),
+                nn.Sigmoid(),
+            )
+        )
 
-        self.decoder = nn.Sequential(*dec_layers)
+        self.decoder = nn.Sequential(*decoder_blocks)
 
-    def encode_distribution(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        features = self.encoder(x)
-        flat = features.view(features.size(0), -1)
-        mu = self.mu_head(flat)
-        logvar = self.logvar_head(flat).clamp(-10, 10)  # prevent KL overflow
-        return mu, logvar
+    def _encode_distribution(
+        self, x: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        h = self.encoder(x).flatten(start_dim=1)
+        mu = self.mu_head(h)
+        log_var = self.log_var_head(h)
+        return mu, log_var
 
     def encode(self, x: torch.Tensor) -> torch.Tensor:
-        mu, _ = self.encode_distribution(x)
+        mu, _ = self._encode_distribution(x)
         return mu
 
     def _decode(self, z: torch.Tensor) -> torch.Tensor:
-        decoded = self.decoder_input(z)
-        decoded = decoded.view(z.size(0), *self.encoded_shape)
-        return self.decoder(decoded)
+        h = self.fc_decode(z)
+        h = h.view(-1, self.bottleneck_channels, self.encoded_size, self.encoded_size)
+        return self.decoder(h)
 
     def decode(self, z: torch.Tensor) -> torch.Tensor:
         logits = self._decode(z)
         return torch.sigmoid(logits)
 
     def forward(self, x: torch.Tensor) -> AutoencoderForwardOutput:
-        mu, logvar = self.encode_distribution(x)
-        z = reparameterize(mu, logvar)
-        recon = self._decode(z)
-        return recon, mu, logvar
+        mu, log_var = self._encode_distribution(x)
+        z = reparameterize(mu, log_var)
+        recon = self.decode(z)
+        return recon, mu, log_var
 
     def get_config(self) -> dict:
-        return {
-            "model_type": AutoencoderType.VARIATIONAL,
-            "input_shape": self.input_shape,
-            "latent_dim": self.latent_dim,
-            "base_channels": self.base_channels,
-            "num_blocks": self.num_blocks,
-            "res_blocks": self.res_blocks,
-        }
+        cfg = self.config.model_dump()
+        return cfg
 
     def get_latent_dim(self) -> int:
-        return self.latent_dim
+        return self.config.latent_dim
