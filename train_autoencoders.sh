@@ -8,6 +8,7 @@ source .venv/bin/activate
 
 configs=(
     "configs/autoencoder/mnist.yaml"
+    "configs/autoencoder/celeba.yaml"
     "configs/autoencoder/flowers.yaml"
     "configs/autoencoder/cub.yaml"
 #    "configs/autoencoder/mnist_beta4.yaml"

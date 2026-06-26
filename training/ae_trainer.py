@@ -118,14 +118,17 @@ def train_autoencoder(
     epochs = cfg.training.epochs
     log_sample_every = 10
 
-    sample_images = next(iter(test_loader))[0][:16].to(device)
+    sample_indices = torch.randperm(len(train_loader))[:16]
+    sample_images = torch.stack(
+        [train_loader.dataset[i][0] for i in sample_indices]
+    ).to(device)
     sample_images_u8 = (sample_images.clamp(0, 1) * 255).byte().cpu()
     wandb.log(
         {"samples/input": [wandb.Image(img) for img in sample_images_u8]},
         step=0,
     )
 
-    warmup_epochs = 10
+    warmup_epochs = cfg.training.kl_warmup_epochs
 
     for epoch in range(epochs):
         train_loss, train_recon, train_kl = _train_epoch(
@@ -157,7 +160,7 @@ def train_autoencoder(
                 "val_loss": val_loss,
                 "val_recon_loss": val_recon,
                 "val_kl_loss": val_kl,
-                "val_kl_per_dim": wandb.Histogram(kl_dims.cpu().tolist()),
+                # "val_kl_per_dim": wandb.Histogram(kl_dims.cpu().tolist()),
                 "active_dims": active_dims,
                 "kl_beta": annealed_beta,
             },

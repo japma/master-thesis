@@ -21,6 +21,6 @@ training:
   kl_warmup_epochs: 10
 
 wandb:
-  mode: online
+  mode: disabled
   project: master-thesis
   entity: jmartini-tu-darmstadt

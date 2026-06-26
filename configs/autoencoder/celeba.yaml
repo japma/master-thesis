@@ -1,22 +1,22 @@
 type: ae
 
 dataset:
-  name: cub200
+  name: celeba
   channels: 3
-  width: 128
-  height: 128
-  num_classes: 200
+  width: 64
+  height: 64
+  num_classes: 2
 
 model:
   model_type: variational
-  latent_dim: 256
-  num_blocks: 3
+  latent_dim: 128
+  num_blocks: 4
   base_channels: 64
 
 training:
   epochs: 200
-  learning_rate: 0.0005
-  batch_size: 64
+  learning_rate: 0.0001
+  batch_size: 128
   beta: 1.0
   kl_warmup_epochs: 20
 

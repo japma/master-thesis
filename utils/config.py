@@ -76,6 +76,7 @@ class BaseTrainingConfig(BaseModel):
 
 class AutoencoderTrainingConfig(BaseTrainingConfig):
     beta: float
+    kl_warmup_epochs: int
 
 
 class WandbConfig(BaseModel):

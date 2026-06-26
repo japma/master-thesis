@@ -18,6 +18,7 @@ training:
   learning_rate: 0.0005
   batch_size: 64
   beta: 1.0
+  kl_warmup_epochs: 20
 
 wandb:
   mode: online
