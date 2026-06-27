@@ -58,7 +58,6 @@ class BetaVAELoss(nn.Module):
 
 def negative_log_likelihood_loss(
     outputs: torch.Tensor,
-    labels: torch.Tensor,
 ) -> torch.Tensor:
     """Negative log-likelihood loss for SPN outputs."""
     # correct_class_ll = outputs.gather(-1, labels.unsqueeze(-1)).squeeze(-1)

@@ -54,7 +54,7 @@ class PsiNetCSPN(AbstractCSPN):
         self.einet.param_nn = conditioning_network
 
     def forward(self, z: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
-        return self.einet.forward(x=z, y=labels)
+        return self.einet.forward(x=z, y=labels).squeeze(-1)
 
     def sample(self, labels: torch.Tensor) -> torch.Tensor:
         return self.einet.sample(y=labels)

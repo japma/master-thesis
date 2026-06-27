@@ -38,16 +38,16 @@ class FactorizedLeafLayer(Layer):
         self.num_var = num_var
         self.num_dims = num_dims
 
-        num_dist = list(set([n.num_dist for n in self.nodes]))
+        num_dist = list({n.num_dist for n in self.nodes})
         if len(num_dist) != 1:
             raise AssertionError(
                 "All leaves must have the same number of distributions."
             )
         num_dist = num_dist[0]
 
-        replica_indices = set([n.einet_address.replica_idx for n in self.nodes])
+        replica_indices = {n.einet_address.replica_idx for n in self.nodes}
         print(replica_indices)
-        if sorted(list(replica_indices)) != list(range(len(replica_indices))):
+        if sorted(replica_indices) != list(range(len(replica_indices))):
             raise AssertionError(
                 "Replica indices should be consecutive, starting with 0."
             )
@@ -154,43 +154,45 @@ class FactorizedLeafLayer(Layer):
         with torch.no_grad():
             phi = self.ef_array.reparam(stored_params)
 
-            phi_mean = phi.mean(dim=0)
-
             N = len(dist_idx)
-
-            if mode == "sample":
-                ef_values = self.ef_array._sample(N, phi_mean, **kwargs)
-            elif mode == "argmax":
-                ef_values = self.ef_array._argmax(phi_mean, **kwargs)
-            else:
-                raise AssertionError(f"Unknown backtracking mode {mode}")
 
             values = torch.zeros(
                 (N, self.num_var, self.num_dims),
-                device=ef_values.device,
-                dtype=ef_values.dtype,
+                device=phi.device,
+                dtype=phi.dtype,
             )
 
             for n in range(N):
+                if len(dist_idx[n]) != len(node_idx[n]):
+                    raise AssertionError("Invalid input.")
+
                 cur_value = torch.zeros(
                     self.num_var,
                     self.num_dims,
-                    device=ef_values.device,
-                    dtype=ef_values.dtype,
+                    device=phi.device,
+                    dtype=phi.dtype,
                 )
-                if len(dist_idx[n]) != len(node_idx[n]):
-                    raise AssertionError("Invalid input.")
+
+                phi_n = phi[n]  # (num_var, num_dist, num_replica, num_stats)
+
                 for c, k in enumerate(node_idx[n]):
                     scope = list(self.nodes[k].scope)
                     rep = self.nodes[k].einet_address.replica_idx
-                    if mode == "sample" or mode == "argmax":
-                        cur_value[scope, :] = ef_values[
-                            n, scope, :, dist_idx[n][c], rep
-                        ]
+                    d = dist_idx[n][c]
+
+                    phi_selected = phi_n[scope, d, rep, :]  # (len(scope), num_stats)
+
+                    phi_selected = phi_selected.unsqueeze(1).unsqueeze(1)
+
+                    if mode == "sample":
+                        sample = self.ef_array._sample(1, phi_selected, **kwargs)
+                        cur_value[scope, :] = sample[0, :, :, 0, 0]
+                    elif mode == "argmax":
+                        argmax = self.ef_array._argmax(phi_selected, **kwargs)
+                        cur_value[scope, :] = argmax[:, :, 0, 0]
                     else:
-                        raise AssertionError(
-                            f"Unknown backtracking mode {mode}"
-                        )
+                        raise AssertionError(f"Unknown backtracking mode {mode}")
+
                 values[n, :, :] = cur_value
 
             return values

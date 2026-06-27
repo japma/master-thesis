@@ -1,4 +1,3 @@
-import functools
 from itertools import count
 
 import torch
@@ -220,41 +219,37 @@ class SumLayer(Layer):
 
     def reparam_function(self):
         """
-        Reparametrization function, transforming unconstrained parameters into valid sum-weight
-        (non-negative, normalized).
+        Reparametrization function, transforming unconstrained parameters into valid sum-weights
+        (non-negative, normalized). Handles a leading batch dimension in params_in.
         """
 
         def reparam(params_in):
-            params_in_batch = torch.clone(params_in)
-            params_in = params_in_batch[0]
+            # params_in: (batch, *params_shape)
+            # self.normalization_dims indexes into params_shape (without the batch dim).
+            # Shift them up by 1 to account for the leading batch dim.
+            norm_dims_with_batch = tuple(d + 1 for d in self.normalization_dims)
+
+            param_ndim = len(params_in.shape) - 1  # number of non-batch dims
             other_dims = tuple(
-                i
-                for i in range(len(params_in.shape))
-                if i not in self.normalization_dims
+                i + 1 for i in range(param_ndim) if i not in self.normalization_dims
             )
 
-            permutation = other_dims + self.normalization_dims
-            unpermutation = tuple(
-                c
-                for i in range(len(permutation))
-                for c, j in enumerate(permutation)
-                if j == i
-            )
+            permutation = (0, *other_dims, *norm_dims_with_batch)
+            params_perm = params_in.permute(permutation)
+            orig_shape = params_perm.shape
 
-            numel = functools.reduce(
-                lambda x, y: x * y,
-                [params_in.shape[i] for i in self.normalization_dims],
-            )
+            numel_norm = 1
+            for d in self.normalization_dims:
+                numel_norm *= params_in.shape[d + 1]
+            other_shape = orig_shape[: 1 + len(other_dims)]
+            params_flat = params_perm.reshape(*other_shape, numel_norm)
+            out_flat = softmax(params_flat, -1)
 
-            other_shape = tuple(params_in.shape[i] for i in other_dims)
-            permutation = (0, *tuple(p + 1 for p in permutation))
-            params_in_batch = params_in_batch.permute(permutation)
-            orig_shape = params_in_batch.shape
-            other_shape = (params_in_batch.shape[0], *other_shape)
-            params_in_batch = params_in_batch.reshape((*other_shape, numel))
-            out = softmax(params_in_batch, -1)
-            unpermutation = (0, *tuple(p + 1 for p in unpermutation))
-            out = out.reshape(orig_shape).permute(unpermutation)
+            out_perm = out_flat.reshape(orig_shape)
+            inv_permutation = [0] * len(permutation)
+            for i, p in enumerate(permutation):
+                inv_permutation[p] = i
+            out = out_perm.permute(inv_permutation)
             return out
 
         return reparam

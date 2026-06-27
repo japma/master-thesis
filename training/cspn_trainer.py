@@ -29,7 +29,7 @@ def _train_epoch(
         with torch.no_grad():
             latent = autoencoder.encode(images)
 
-        loss = negative_log_likelihood_loss(model(latent, labels), labels)
+        loss = negative_log_likelihood_loss(model(latent, labels))
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -54,7 +54,7 @@ def _val_epoch(
             images = images.to(device, non_blocking=True)
             labels = labels.to(device, non_blocking=True)
             latent = autoencoder.encode(images)
-            loss = negative_log_likelihood_loss(model(latent, labels), labels)
+            loss = negative_log_likelihood_loss(model(latent, labels))
             total_loss += loss.detach()
 
     return (total_loss / len(loader)).item()
