@@ -26,6 +26,8 @@ training:
   epochs: 1
   learning_rate: 0.001
   batch_size: 128
+  early_stopping_patience: 10
+  early_stopping_min_delta: 0.01
 
 wandb:
   mode: disabled

@@ -7,7 +7,9 @@ from rtpt import RTPT
 import wandb
 from models.autoencoder import AbstractAutoencoder
 from models.cspn import AbstractCSPN
+from training.early_stopping import EarlyStopping
 from training.losses import negative_log_likelihood_loss
+from utils.config import CSPNRunConfig
 
 
 def _train_epoch(
@@ -74,7 +76,7 @@ def _log_samples(
         samples_per_class
     )
 
-    with torch.no_grad(), torch.no_grad():
+    with torch.no_grad():
         sampled_latent = model.sample(sample_labels)
         sampled_images = autoencoder.decode(sampled_latent)
     images_u8 = (sampled_images.clamp(0, 1) * 255).byte().cpu()
@@ -88,7 +90,7 @@ def train_cspn(
     model: AbstractCSPN,
     autoencoder: AbstractAutoencoder,
     device: torch.device,
-    cfg,
+    cfg: CSPNRunConfig,
     train_loader: torch.utils.data.DataLoader,
     test_loader: torch.utils.data.DataLoader,
     optimizer: torch.optim.Optimizer,
@@ -101,6 +103,11 @@ def train_cspn(
 
     epochs = cfg.training.epochs
     log_sample_every = 10
+
+    early_stopping = EarlyStopping(
+        patience=cfg.training.early_stopping_patience,
+        min_delta=cfg.training.early_stopping_min_delta,
+    )
 
     for epoch in range(epochs):
         train_loss = _train_epoch(
@@ -135,4 +142,20 @@ def train_cspn(
                 epoch=epoch,
             )
 
+        if early_stopping.step(val_loss, model):
+            print(f"Early stopping triggered at epoch {epoch + 1}.")
+            break
+
         rtpt.step(subtitle=f"{epoch + 1}/{epochs}")
+
+    early_stopping.restore_best_weights(model)
+
+    _log_samples(
+        model,
+        autoencoder,
+        device,
+        num_classes=cfg.dataset.num_classes,
+        samples_per_class=3,
+        epoch=epoch,
+    )
+    wandb.log({"best_val_loss": early_stopping.best_loss})

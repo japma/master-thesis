@@ -10,21 +10,24 @@ dataset:
 autoencoder:
   name: "autoencoder_celeba"
   external: false
+  latent_dim: 128
 
 model:
   model_type: "psinet"
   num_vars: 128
-  num_repetitions: 5
-  num_input_distributions: 8
+  num_repetitions: 2
+  num_input_distributions: 6
   num_sums: 8
   min_var: 0.001
-  max_var: 1.0
-  h_dims: [ 128 ]
+  max_var: 4.0
+  h_dims: [ 512, 256 ]
 
 training:
-  epochs: 100
+  epochs: 200
   learning_rate: 0.001
-  batch_size: 32
+  batch_size: 128
+  early_stopping_patience: 10
+  early_stopping_min_delta: 0.01
 
 wandb:
   mode: online

@@ -1,4 +1,3 @@
-
 import numpy as np
 import torch
 import torch.nn as nn
@@ -53,6 +52,7 @@ class ConditioningMLP(nn.Module):
         self.heads = nn.ModuleList(
             [nn.Linear(h_dims[-1], flat_sizes[i]) for i in range(len(head_shapes))]
         )
+        self.dropout = nn.Dropout(p=0.1)
 
     def forward(self, labels: torch.Tensor, x_unused=None) -> list[torch.Tensor]:
         if labels.dim() != 1:
@@ -64,16 +64,17 @@ class ConditioningMLP(nn.Module):
         for linear in self.trunk:
             h = linear(h)
             h = torch.relu(h)
+            h = self.dropout(h)
 
         head_out = [head(h) for head in self.heads]
 
         reshaped = [
             o.reshape(o.shape[0], *shape)
-            for o, shape in zip(head_out, self.head_shapes)
+            for o, shape in zip(head_out, self.head_shapes, strict=False)
         ]
 
         leaf_params = torch.cat(reshaped[:2], dim=-1)
-        params = [leaf_params] + reshaped[2:]
+        params = [leaf_params, *reshaped[2:]]
         return params
 
 

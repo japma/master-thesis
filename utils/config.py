@@ -90,6 +90,11 @@ class AutoencoderTrainingConfig(BaseTrainingConfig):
     kl_warmup_epochs: int
 
 
+class CSPNTrainingConfig(BaseTrainingConfig):
+    early_stopping_patience: int
+    early_stopping_min_delta: float
+
+
 class WandbConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -120,7 +125,7 @@ class CSPNRunConfig(BaseModel):
     dataset: DatasetConfig
     model: CSPNConfig
     autoencoder: PretrainedAutoencoderConfig
-    training: BaseTrainingConfig
+    training: CSPNTrainingConfig
     wandb: WandbConfig
 
     @model_validator(mode="after")
