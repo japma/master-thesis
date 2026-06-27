@@ -10,21 +10,22 @@ dataset:
 autoencoder:
   name: "autoencoder_mnist"
   external: false
+  latent_dim: 16
 
 model:
   model_type: "psinet"
   num_vars: 16
   num_repetitions: 5
-  num_input_distributions: 10
-  num_sums: 10
+  num_input_distributions: 20
+  num_sums: 20
   min_var: 0.001
-  max_var: 1.0
-  h_dims: [ 128 ]
+  max_var: 4.0
+  h_dims: [ 256, 256 ]
 
 training:
   epochs: 50
   learning_rate: 0.001
-  batch_size: 32
+  batch_size: 128
 
 wandb:
   mode: online

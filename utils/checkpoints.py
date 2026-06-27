@@ -76,6 +76,7 @@ def _create_cspn_from_checkpoint(cfg: CSPNConfig) -> AbstractCSPN:
 def load_cspn_from_path(path: Path, device=None) -> AbstractCSPN:
     with torch.serialization.safe_globals([CSPNType]):
         ckpt = torch.load(path, map_location=device, weights_only=True)
-    model = _create_cspn_from_checkpoint(ckpt["model_cfg"])
+    cfg = CSPNConfig.model_validate(ckpt["model_cfg"])
+    model = _create_cspn_from_checkpoint(cfg)
     model.load_state_dict(ckpt["model_state"])
     return model

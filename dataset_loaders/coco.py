@@ -1,6 +1,7 @@
 import json
 from collections import Counter
 from pathlib import Path
+from typing import Callable, Optional
 
 import torch
 from PIL import Image
@@ -9,7 +10,7 @@ from torch.utils.data import Dataset
 
 
 class CocoDataset(Dataset):
-    def __init__(self, root, ann_file, transform=None):
+    def __init__(self, root: Path, split: str, transform: Callable | None = None):
         self.root = Path(root)
         self.transform = transform
         self.coco = COCO(ann_file)

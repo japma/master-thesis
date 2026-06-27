@@ -1,4 +1,3 @@
-from dataset_loaders.single_attribute_celeba import SingleAttributeCelebA
 import os
 from pathlib import Path
 
@@ -9,6 +8,7 @@ from torchvision import datasets, transforms
 from dataset_loaders.binarymnist import BinaryMNISTDataset
 from dataset_loaders.coco import CocoDataset
 from dataset_loaders.cub200 import Cub200Dataset
+from dataset_loaders.single_attribute_celeba import SingleAttributeCelebA
 from dataset_loaders.tinyimagenet import TinyImageNetDataset
 from utils.config import DatasetConfig
 
@@ -94,8 +94,8 @@ def _load_coco(train=True, size: tuple[int, int] = (128, 128)):
         f"./data/coco-2017/annotations/instances_{'train' if train else 'val'}2017.json"
     )
     return CocoDataset(
-        root=root,
-        ann_file=ann_file,
+        root=DATA_DIR,
+        split="train" if train else "val",
         transform=transforms.Compose(
             [
                 transforms.Resize(size),
