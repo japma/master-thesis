@@ -13,13 +13,13 @@ autoencoder:
 
 model:
   model_type: "psinet"
-  num_var: ^
+  num_var: 16
   num_repetitions: 5
   num_input_distributions: 10
   num_sums: 10
   min_var: 0.001
   max_var: 1.0
-  h_dims: [ 128, 128 ]
+  h_dims: [ 128 ]
 
 training:
   epochs: 50
