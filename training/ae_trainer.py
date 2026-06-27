@@ -118,10 +118,10 @@ def train_autoencoder(
     epochs = cfg.training.epochs
     log_sample_every = 10
 
-    sample_indices = torch.randperm(len(train_loader))[:16]
-    sample_images = torch.stack(
-        [train_loader.dataset[i][0] for i in sample_indices]
-    ).to(device)
+    sample_indices = torch.randperm(len(test_loader))[:16]
+    sample_images = torch.stack([test_loader.dataset[i][0] for i in sample_indices]).to(
+        device
+    )
     sample_images_u8 = (sample_images.clamp(0, 1) * 255).byte().cpu()
     wandb.log(
         {"samples/input": [wandb.Image(img) for img in sample_images_u8]},

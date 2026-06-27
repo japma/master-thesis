@@ -14,6 +14,14 @@ class AutoencoderType(StrEnum):
     OTHER = "other"
 
 
+class CSPNType(StrEnum):
+    PSINET = "psinet"
+    SPFLOW = "spflow"
+    CUSTOM = "custom"
+    PSINET_DEPRECATED = "PsiNetCSPN"
+    CUSTOM_DEPRECATED = "custom_cspn"
+
+
 class DatasetConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -49,13 +57,15 @@ class PretrainedAutoencoderConfig(BaseModel):
 class CSPNConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    model_type: Literal["custom", "spflow"]
+    model_type: CSPNType
+    num_vars: int
     num_repetitions: int
     num_input_distributions: int
     num_sums: int
     min_var: float
     max_var: float
     h_dims: list[int]
+    num_classes: int = 0
 
     @model_validator(mode="after")
     def valid_var_range(self):
@@ -111,6 +121,11 @@ class CSPNRunConfig(BaseModel):
     autoencoder: PretrainedAutoencoderConfig
     training: BaseTrainingConfig
     wandb: WandbConfig
+
+    @model_validator(mode="after")
+    def inject_num_classes(self):
+        self.model.num_classes = self.dataset.num_classes
+        return self
 
 
 def load_config() -> tuple[AERunConfig | CSPNRunConfig, int | None]:

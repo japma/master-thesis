@@ -41,6 +41,12 @@ dev = [
     "pyrefly>=1.0.0",
 ]
 
+[project.scripts]
+train_ae = "scripts.train_ae:main"
+train_cspn = "scripts.train_cspn:main"
+download_data = "scripts.download_data:main"
+
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -64,4 +70,10 @@ ignore = [
     "N812",
     "N806",
     "E501",
+]
+
+[tool.pyrefly]
+project-includes = [
+    "**/*.py*",
+    "**/*.ipynb",
 ]

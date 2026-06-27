@@ -158,9 +158,9 @@ class EinsumNetwork(torch.nn.Module):
         :return: None
         """
         if init_dict is None:
-            init_dict = dict()
-        if all([type(k) == int for k in init_dict.keys()]):
-            init_dict = {self.einet_layers[k]: init_dict[k] for k in init_dict.keys()}
+            init_dict = {}
+        if all(isinstance(k, int) for k in init_dict):
+            init_dict = {self.einet_layers[k]: init_dict[k] for k in init_dict}
         for layer in self.einet_layers:
             layer.initialize(init_dict.get(layer, "default"))
 
@@ -217,7 +217,7 @@ class EinsumNetwork(torch.nn.Module):
                 f"param_nn produced {len(params)} param tensors but there are "
                 f"{len(self.einet_layers)} einet_layers. These must match 1:1."
             )
-        layer_to_params = dict(zip(self.einet_layers, params))
+        layer_to_params = dict(zip(self.einet_layers, params, strict=False))
         if x is not None:
             self.forward(x, y)
             num_samples = x.shape[0]
@@ -291,7 +291,7 @@ class EinsumNetwork(torch.nn.Module):
                     reg_idx[layer_out].append(reg_idx_out[c])
 
             elif type(layer) is FactorizedLeafLayer:
-                unique_sample_idx = sorted(list(set(sample_idx[layer])))
+                unique_sample_idx = sorted(set(sample_idx[layer]))
                 if unique_sample_idx != sample_idx[root]:
                     raise AssertionError("This should not happen.")
 
@@ -328,6 +328,7 @@ class EinsumNetwork(torch.nn.Module):
                     samples[:, keep_idx] = x[:, keep_idx]
 
                 return samples
+        return None
 
     def sample(self, y, num_samples=1, class_idx=0, x=None, **kwargs):
         return self.backtrack(
@@ -401,10 +402,7 @@ def eval_loglikelihood_batched(einet, x, labels=None, batch_size=100):
         ll_total = 0.0
         for batch_count, idx in enumerate(idx_batches):
             batch_x = x[idx, :]
-            if labels is not None:
-                batch_labels = labels[idx]
-            else:
-                batch_labels = None
+            batch_labels = labels[idx] if labels is not None else None
             outputs = einet(batch_x)
             ll_sample = log_likelihoods(outputs, batch_labels)
             ll_total += ll_sample.sum().item()

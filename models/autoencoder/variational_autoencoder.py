@@ -6,8 +6,8 @@ from utils.config import AutoencoderConfig
 from .abstract_autoencoder import AbstractAutoencoder, AutoencoderForwardOutput
 
 
-def reparameterize(mu: torch.Tensor, logvar: torch.Tensor) -> torch.Tensor:
-    std = torch.exp(0.5 * logvar)
+def reparameterize(mu: torch.Tensor, log_var: torch.Tensor) -> torch.Tensor:
+    std = torch.exp(0.5 * log_var)
     eps = torch.randn_like(std)
     return mu + eps * std
 

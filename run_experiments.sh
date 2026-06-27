@@ -18,7 +18,7 @@ for config in "${configs[@]}"; do
     echo "Started at: $(date)"
     echo "========================================"
 
-    python scripts/train_cspn.py "$config"
+    uv run train_cspn "$config"
 
     echo "Finished $config at $(date)"
     echo ""

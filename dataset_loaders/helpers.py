@@ -1,3 +1,4 @@
+from dataset_loaders.single_attribute_celeba import SingleAttributeCelebA
 import os
 from pathlib import Path
 
@@ -164,6 +165,23 @@ def _load_celeba(train=True, size: tuple[int, int] = (64, 64)):
     )
 
 
+def _load_celeba_single_attribute(train=True, size: tuple[int, int] = (64, 64)):
+    transform = transforms.Compose(
+        [
+            transforms.Resize(size),
+            transforms.ToTensor(),
+        ]
+    )
+    attribute = "Black_Hair"
+    return SingleAttributeCelebA(
+        attribute=attribute,
+        root=DATA_DIR,
+        split="train" if train else "test",
+        download=True,
+        transform=transform,
+    )
+
+
 _DATASETS = {
     "mnist": _load_mnist,
     "binary_mnist": _load_binary_mnist,
@@ -174,6 +192,7 @@ _DATASETS = {
     "flowers102": _load_flowers102,
     "cub200": _load_cub200,
     "celeba": _load_celeba,
+    "celeba_single_attribute": _load_celeba_single_attribute,
 }
 
 

@@ -9,8 +9,8 @@ from torchinfo import summary
 import wandb
 from dataset_loaders import build_data_loaders
 from models import VariationalAutoencoder
-from training.losses import BetaVAELoss
 from training.ae_trainer import train_autoencoder
+from training.losses import BetaVAELoss
 from utils.checkpoints import save_autoencoder
 from utils.config import AERunConfig, load_config
 from utils.reproducibility import resolve_device, seed_everything

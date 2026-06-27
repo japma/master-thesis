@@ -4,8 +4,9 @@ from spflow.modules.leaves.leaf import LeafModule
 from spflow.modules.leaves.normal import Normal
 from spflow.zoo.einet import Einet
 
-from models.cspn.abstract_cspn import AbstractCSPN, CSPNType
+from models.cspn.abstract_cspn import AbstractCSPN
 from models.cspn.spflow.nn_for_spflow import NeuralNetworkForSPFlow
+from utils.config import CSPNType
 
 
 class SPFlowCSPN(AbstractCSPN):

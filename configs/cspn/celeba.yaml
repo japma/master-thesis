@@ -1,28 +1,28 @@
 type: cspn
 
 dataset:
-  name: flowers102
+  name: celeba_single_attribute
   channels: 3
-  height: 128
-  width: 128
-  num_classes: 102
+  height: 64
+  width: 64
+  num_classes: 2
 
 autoencoder:
-  name: "autoencoder_flowers102"
+  name: "autoencoder_celeba"
   external: false
 
 model:
   model_type: "psinet"
   num_vars: 128
   num_repetitions: 5
-  num_input_distributions: 16
-  num_sums: 16
+  num_input_distributions: 8
+  num_sums: 8
   min_var: 0.001
   max_var: 1.0
-  h_dims: [ 128, 128 ]
+  h_dims: [ 128 ]
 
 training:
-  epochs: 200
+  epochs: 100
   learning_rate: 0.001
   batch_size: 32
 

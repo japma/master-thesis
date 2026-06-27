@@ -9,11 +9,10 @@ from torchinfo import summary
 import wandb
 from dataset_loaders import build_data_loaders
 from models.autoencoder.utils import load_pretrained_autoencoder
-from models.cspn.abstract_cspn import CSPNType
 from models.cspn.psinet_cspn import PsiNetCSPN
 from training.cspn_trainer import train_cspn
 from utils.checkpoints import load_ae_from_path, load_from_wandb, save_cspn
-from utils.config import CSPNRunConfig, load_config
+from utils.config import CSPNRunConfig, CSPNType, load_config
 from utils.reproducibility import resolve_device, seed_everything
 
 
@@ -62,16 +61,7 @@ def main():
     print(f"Training CSPN on {dataset_name} | device={device} | seed={seed}")
 
     if cspn_cfg.model_type == CSPNType.PSINET:
-        cspn = PsiNetCSPN(
-            latent_dim=ae.get_latent_dim(),
-            num_classes=dataset_cfg.num_classes,
-            num_repetitions=cspn_cfg.num_repetitions,
-            num_input_distributions=cspn_cfg.num_input_distributions,
-            num_sums=cspn_cfg.num_sums,
-            min_var=cspn_cfg.min_var,
-            max_var=cspn_cfg.max_var,
-            h_dims=cspn_cfg.h_dims,
-        )
+        cspn = PsiNetCSPN(config=cspn_cfg)
     else:
         raise ValueError(f"Unknown model type {cspn_cfg.model_type}")
 

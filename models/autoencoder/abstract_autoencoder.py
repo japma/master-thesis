@@ -12,11 +12,6 @@ type AutoencoderForwardOutput = (
 )
 
 
-class AutoencoderType(StrEnum):
-    VARIATIONAL = "variational"
-    OTHER = "other"
-
-
 class AbstractAutoencoder(nn.Module, ABC):
     @abstractmethod
     def encode(self, x: torch.Tensor) -> torch.Tensor:
