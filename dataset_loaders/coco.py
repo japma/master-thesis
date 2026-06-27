@@ -1,7 +1,7 @@
 import json
 from collections import Counter
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Optional
 
 import torch
 from PIL import Image

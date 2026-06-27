@@ -70,7 +70,7 @@ def _log_samples(
 ) -> None:
     model.eval()
     class_sample_count = min(num_classes, 16)
-    sample_labels = torch.arange(class_sample_count, device=device).repeat(
+    sample_labels = torch.arange(class_sample_count, device=device).repeat_interleave(
         samples_per_class
     )
 

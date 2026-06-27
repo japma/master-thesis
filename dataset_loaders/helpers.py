@@ -75,6 +75,7 @@ def _load_fashion_mnist(train=True, size: tuple[int, int] = (128, 128)):
     )
 
 
+# TODO fix the path here
 def _load_tinyimagenet(train=True, size: tuple[int, int] = (128, 128)):
     split = "train" if train else "val"
     return TinyImageNetDataset(
@@ -88,6 +89,7 @@ def _load_tinyimagenet(train=True, size: tuple[int, int] = (128, 128)):
     )
 
 
+# TODO fix this, this is a not good
 def _load_coco(train=True, size: tuple[int, int] = (128, 128)):
     root = f"./data/coco-2017/{'train' if train else 'val'}/"
     ann_file = (

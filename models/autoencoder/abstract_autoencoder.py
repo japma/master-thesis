@@ -1,8 +1,6 @@
 """Abstract autoencoder base module."""
 
 from abc import ABC, abstractmethod
-from enum import StrEnum
-from typing import TypeAlias
 
 import torch
 import torch.nn as nn
