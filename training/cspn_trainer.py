@@ -78,7 +78,8 @@ def _log_samples(
 
     with torch.no_grad():
         sampled_latent = model.sample(sample_labels)
-        sampled_images = autoencoder.decode(sampled_latent)
+        sampled_images_logits = autoencoder.decode(sampled_latent)
+        sampled_images = torch.sigmoid(sampled_images_logits)
     images_u8 = (sampled_images.clamp(0, 1) * 255).byte().cpu()
     wandb.log(
         {"samples/cspn_generated_images": [wandb.Image(img) for img in images_u8]},

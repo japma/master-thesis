@@ -15,6 +15,54 @@ def show(tensor, title=None, width=8):
     plt.show()
 
 
+def show_comparison(originals, reconstructions, title=None, dpi=150):
+    assert originals.shape == reconstructions.shape, (
+        "originals and reconstructions must have the same shape"
+    )
+
+    n = originals.shape[0]
+
+    # Stack as two blocks: first all originals, then all reconstructions
+    # make_grid with nrow=n → row 1 = originals, row 2 = reconstructions
+    combined = torch.cat(
+        [originals.cpu(), reconstructions.cpu()], dim=0
+    )  # (2n, C, H, W)
+
+    grid = vutils.make_grid(combined, nrow=n, normalize=True, padding=2)
+
+    fig_width = max(n * 1.5, 6)
+    fig, ax = plt.subplots(1, 1, figsize=(fig_width, 3.5), dpi=dpi)
+    ax.imshow(grid.permute(1, 2, 0))
+    ax.axis("off")
+
+    ax.text(
+        -0.01,
+        0.75,
+        "Original",
+        va="center",
+        ha="right",
+        transform=ax.transAxes,
+        fontsize=10,
+        fontweight="bold",
+    )
+    ax.text(
+        -0.01,
+        0.25,
+        "Recon",
+        va="center",
+        ha="right",
+        transform=ax.transAxes,
+        fontsize=10,
+        fontweight="bold",
+    )
+
+    if title:
+        fig.suptitle(title, fontsize=12, y=1.02)
+
+    plt.tight_layout()
+    plt.show()
+
+
 def plot_latent_comparison():
     raise NotImplementedError
 

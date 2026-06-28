@@ -14,7 +14,7 @@ model:
   base_channels: 32
 
 training:
-  epochs: 50
+  epochs: 1
   learning_rate: 0.0005
   batch_size: 256
   beta: 1.0

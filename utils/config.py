@@ -88,6 +88,11 @@ class BaseTrainingConfig(BaseModel):
 class AutoencoderTrainingConfig(BaseTrainingConfig):
     beta: float
     kl_warmup_epochs: int
+    # TODO move into config files if needed
+    free_bits: float = 0.5
+    lambda_perceptual: float = 1.0
+    lambda_adversarial: float = 0.1
+    adversarial_warmup_steps: int = 1000
 
 
 class CSPNTrainingConfig(BaseTrainingConfig):
