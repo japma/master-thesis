@@ -8,6 +8,7 @@ from .abstract_autoencoder import AbstractAutoencoder, AutoencoderForwardOutput
 
 
 def reparameterize(mu: torch.Tensor, log_var: torch.Tensor) -> torch.Tensor:
+    log_var = log_var.clamp(-30.0, 20.0)
     std = torch.exp(0.5 * log_var)
     eps = torch.randn_like(std)
     return mu + eps * std
@@ -169,6 +170,11 @@ class VariationalAutoencoder(AbstractAutoencoder):
             elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
                 nn.init.ones_(m.weight)
                 nn.init.zeros_(m.bias)
+
+        nn.init.normal_(self.mu_head.weight, mean=0.0, std=0.01)
+        nn.init.zeros_(self.mu_head.bias)
+        nn.init.normal_(self.log_var_head.weight, mean=0.0, std=0.01)
+        nn.init.zeros_(self.log_var_head.bias)
 
     def _encode_distribution(
         self, x: torch.Tensor

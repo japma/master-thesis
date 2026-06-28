@@ -46,6 +46,7 @@ class BetaVAELoss(nn.Module):
         logvar: torch.Tensor,
         beta: float | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        logvar = logvar.clamp(-30.0, 20.0)
         B = images.size(0)
         recon_loss = (
             F.binary_cross_entropy_with_logits(recon, images, reduction="sum") / B
