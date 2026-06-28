@@ -49,7 +49,7 @@ class BetaVAELoss(nn.Module):
         logvar = logvar.clamp(-30.0, 20.0)
         B = images.size(0)
         recon_loss = (
-            F.binary_cross_entropy_with_logits(recon, images, reduction="sum") / B
+            F.binary_cross_entropy_with_logits(recon, images, reduction="mean") / B
         )
 
         kl_per_dim = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp())
