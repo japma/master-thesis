@@ -10,7 +10,7 @@ import wandb
 from dataset_loaders import build_data_loaders
 from models import VariationalAutoencoder
 from training.ae_trainer import train_autoencoder
-from training.losses import BetaVAELoss, PatchDiscriminator, VAELoss
+from training.losses import BetaVAELoss, VAELoss
 from utils.checkpoints import save_autoencoder
 from utils.config import AERunConfig, load_config
 from utils.reproducibility import resolve_device, seed_everything
@@ -44,11 +44,8 @@ def main() -> None:
             "learning_rate": training_cfg.learning_rate,
             "beta": beta,
             "seed": seed,
-            # "base_channels": autoencoder_cfg.base_channels,
             "num_blocks": autoencoder_cfg.num_blocks,
             "lambda_perceptual": training_cfg.lambda_perceptual,
-            "lambda_adversarial": training_cfg.lambda_adversarial,
-            "adversarial_warmup_steps": training_cfg.adversarial_warmup_steps,
         },
         mode=wandb_cfg.mode,
     )
@@ -63,27 +60,14 @@ def main() -> None:
         dataset_cfg, batch_size=training_cfg.batch_size
     )
 
-    optimizer_g = torch.optim.Adam(ae.parameters(), lr=training_cfg.learning_rate)
-    scheduler_g = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optimizer_g, T_max=training_cfg.epochs
-    )
-
-    discriminator = PatchDiscriminator().to(device)
-    optimizer_d = torch.optim.Adam(
-        discriminator.parameters(),
-        lr=training_cfg.learning_rate * 0.5,
-        betas=(0.5, 0.999),  # standard GAN discriminator betas
-    )
-    scheduler_d = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optimizer_d, T_max=training_cfg.epochs
+    optimizer = torch.optim.Adam(ae.parameters(), lr=training_cfg.learning_rate)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=training_cfg.epochs
     )
 
     loss_fn = VAELoss(
         beta_vae_loss=BetaVAELoss(beta=beta, free_bits=training_cfg.free_bits),
-        discriminator=discriminator,
         lambda_perceptual=training_cfg.lambda_perceptual,
-        lambda_adversarial=training_cfg.lambda_adversarial,
-        adversarial_warmup_steps=training_cfg.adversarial_warmup_steps,
     )
 
     rtpt = RTPT(
@@ -99,10 +83,8 @@ def main() -> None:
         cfg=cfg,
         train_loader=train_loader,
         test_loader=test_loader,
-        optimizer_g=optimizer_g,
-        optimizer_d=optimizer_d,
-        scheduler_g=scheduler_g,
-        scheduler_d=scheduler_d,
+        optimizer=optimizer,
+        scheduler=scheduler,
         loss_fn=loss_fn,
         rtpt=rtpt,
     )

@@ -2,7 +2,6 @@
 
 import torch
 import tqdm
-from torch import nn
 
 import wandb
 from models.autoencoder import AbstractAutoencoder
@@ -13,74 +12,53 @@ from utils.config import AERunConfig
 def _train_epoch(
     model: AbstractAutoencoder,
     loader: torch.utils.data.DataLoader,
-    optimizer_g: torch.optim.Optimizer,
-    optimizer_d: torch.optim.Optimizer,
+    optimizer: torch.optim.Optimizer,
     loss_fn: VAELoss,
     device: torch.device,
     epoch: int,
     epochs: int,
     annealed_beta: float,
-    global_step: int,
-) -> tuple[float, float, float, float, float, int]:
+) -> tuple[float, float, float, float]:
     """Run one training epoch.
 
     Returns:
-        mean_total_g, mean_recon, mean_kl, mean_perceptual, mean_adv_g,
-        updated global_step
+        mean_total, mean_recon, mean_kl, mean_perceptual
     """
     model.train()
 
-    total_g = torch.tensor(0.0, device=device)
+    total_loss = torch.tensor(0.0, device=device)
     total_recon = torch.tensor(0.0, device=device)
     total_kl = torch.tensor(0.0, device=device)
     total_perc = torch.tensor(0.0, device=device)
-    total_adv_g = torch.tensor(0.0, device=device)
 
     for images, _ in tqdm.tqdm(loader, desc=f"Train {epoch + 1}/{epochs}"):
         images = images.to(device, non_blocking=True)
 
-        # --- Generator step (VAE) ---
         logits, mu, logvar = model(images)
-        out = loss_fn.generator_loss(
+        out = loss_fn(
             images=images,
             logits=logits,
             mu=mu,
             logvar=logvar,
-            last_decoder_layer=model.output_proj,
-            step=global_step,
             beta=annealed_beta,
         )
 
-        optimizer_g.zero_grad()
-        out["total_g"].backward()
+        optimizer.zero_grad()
+        out["total"].backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-        optimizer_g.step()
+        optimizer.step()
 
-        # --- Discriminator step ---
-        recon_img = torch.sigmoid(logits).detach()
-        d_loss = loss_fn.discriminator_loss(images, recon_img)
-
-        optimizer_d.zero_grad()
-        d_loss.backward()
-        torch.nn.utils.clip_grad_norm_(loss_fn.discriminator.parameters(), max_norm=1.0)
-        optimizer_d.step()
-
-        total_g += out["total_g"].detach()
+        total_loss += out["total"].detach()
         total_recon += out["recon"].detach()
         total_kl += out["kl"].detach()
         total_perc += out["perceptual"].detach()
-        total_adv_g += out["adversarial_g"].detach()
-
-        global_step += 1
 
     n = len(loader)
     return (
-        (total_g / n).item(),
+        (total_loss / n).item(),
         (total_recon / n).item(),
         (total_kl / n).item(),
         (total_perc / n).item(),
-        (total_adv_g / n).item(),
-        global_step,
     )
 
 
@@ -92,14 +70,7 @@ def _val_epoch(
     epoch: int,
     epochs: int,
 ) -> tuple[float, float, float, torch.Tensor]:
-    """Run one validation epoch.
-
-    Uses only the beta_vae component (recon + KL) — no perceptual or
-    adversarial — so that:
-      - val loss is comparable across all epochs regardless of warmup state
-      - autograd.grad (used by adaptive weighting) is never called under
-        no_grad, which would crash
-    """
+    """Run one validation epoch using only recon + KL (no perceptual)."""
     model.eval()
 
     total_loss = torch.tensor(0.0, device=device)
@@ -125,7 +96,7 @@ def _val_epoch(
             total_recon += recon_loss.detach()
             total_kl += kl_loss.detach()
 
-            batch_kl_dims = kl_per_dim(mu, logvar)  # (latent_dim,)
+            batch_kl_dims = kl_per_dim(mu, logvar)
             total_kl_per_dim += batch_kl_dims * B
             total_samples += B
 
@@ -143,7 +114,7 @@ def _log_reconstructions(
     sample_images: torch.Tensor,
     epoch: int,
 ) -> None:
-    """Log side-by-side reconstructions of fixed validation images."""
+    """Log reconstructions of fixed validation images."""
     model.eval()
     with torch.no_grad():
         logits, _, _ = model(sample_images)
@@ -161,7 +132,7 @@ def _log_generations(
     epoch: int,
     n: int = 16,
 ) -> None:
-    """Sample random latent vectors and decode them."""
+    """Decode random latent vectors as a latent space health diagnostic."""
     model.eval()
     with torch.no_grad():
         z = torch.randn(n, model.get_latent_dim(), device=device)
@@ -179,10 +150,8 @@ def train_autoencoder(
     cfg: AERunConfig,
     train_loader: torch.utils.data.DataLoader,
     test_loader: torch.utils.data.DataLoader,
-    optimizer_g: torch.optim.Optimizer,
-    optimizer_d: torch.optim.Optimizer,
-    scheduler_g: torch.optim.lr_scheduler.LRScheduler,
-    scheduler_d: torch.optim.lr_scheduler.LRScheduler,
+    optimizer: torch.optim.Optimizer,
+    scheduler: torch.optim.lr_scheduler.LRScheduler,
     loss_fn: VAELoss,
     rtpt,
 ) -> None:
@@ -204,54 +173,40 @@ def train_autoencoder(
         step=0,
     )
 
-    global_step = 0
-
     for epoch in range(epochs):
         annealed_beta = min(1.0, epoch / max(warmup_epochs, 1))
 
-        (
-            train_g,
-            train_recon,
-            train_kl,
-            train_perc,
-            train_adv_g,
-            global_step,
-        ) = _train_epoch(
+        train_loss, train_recon, train_kl, train_perc = _train_epoch(
             model=model,
             loader=train_loader,
-            optimizer_g=optimizer_g,
-            optimizer_d=optimizer_d,
+            optimizer=optimizer,
             loss_fn=loss_fn,
             device=device,
             epoch=epoch,
             epochs=epochs,
             annealed_beta=annealed_beta,
-            global_step=global_step,
         )
 
         val_loss, val_recon, val_kl, kl_dims = _val_epoch(
             model, test_loader, loss_fn, device, epoch, epochs
         )
 
-        scheduler_g.step()
-        scheduler_d.step()
+        scheduler.step()
 
         active_dims = (kl_dims > 0.1).sum().item()
 
         wandb.log(
             {
-                "train/loss_g": train_g,
+                "train/loss": train_loss,
                 "train/recon": train_recon,
                 "train/kl": train_kl,
                 "train/perceptual": train_perc,
-                "train/adv_g": train_adv_g,
                 "val/loss": val_loss,
                 "val/recon": val_recon,
                 "val/kl": val_kl,
                 # "val/kl_per_dim":  wandb.Histogram(kl_dims.cpu().tolist()),
                 "latent/active_dims": active_dims,
                 "latent/kl_beta": annealed_beta,
-                "train/global_step": global_step,
             },
             step=epoch,
         )
