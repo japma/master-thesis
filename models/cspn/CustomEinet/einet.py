@@ -8,6 +8,7 @@ from models.cspn import AbstractCSPN
 from models.cspn.CustomEinet.einsum_layer import EinsumLayer
 from models.cspn.CustomEinet.gaussian_leaf_layer import GaussianLeafLayer
 from models.cspn.CustomEinet.nn_for_einet import EinetConditioningNetwork
+from utils.config import CSPNType
 
 
 # TODO this does not look right

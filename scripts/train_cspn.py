@@ -58,6 +58,11 @@ def main():
         ae_path = load_from_wandb(ckpt_name=ae_cfg.name, tag="best")
         ae = load_ae_from_path(ae_path, device=device)
 
+    if ae.get_latent_dim() != ae_cfg.latent_dim:
+        raise ValueError(
+            f"Latent dimension of autoencoder checkpoint ({ae.get_latent_dim()}) does not match the expected latent dimension ({ae_cfg.latent_dim})"
+        )
+
     print(f"Training CSPN on {dataset_name} | device={device} | seed={seed}")
 
     if cspn_cfg.model_type == CSPNType.PSINET:

@@ -46,7 +46,6 @@ class FactorizedLeafLayer(Layer):
         num_dist = num_dist[0]
 
         replica_indices = {n.einet_address.replica_idx for n in self.nodes}
-        print(replica_indices)
         if sorted(replica_indices) != list(range(len(replica_indices))):
             raise AssertionError(
                 "Replica indices should be consecutive, starting with 0."

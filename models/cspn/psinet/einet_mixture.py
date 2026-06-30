@@ -18,16 +18,15 @@ class EinetMixture:
         self.p = p
         self.einets = einets
 
-        num_var = set([e.args.num_var for e in einets])
-        print(num_var)
+        num_var = {e.args.num_var for e in einets}
         if len(num_var) != 1:
             raise AssertionError("all EiNet components must have the same num_var.")
-        self.num_var = list(num_var)[0]
+        self.num_var = next(iter(num_var))
 
-        num_dims = set([e.args.num_dims for e in einets])
+        num_dims = {e.args.num_dims for e in einets}
         if len(num_dims) != 1:
             raise AssertionError("all EiNet components must have the same num_dims.")
-        self.num_dims = list(num_dims)[0]
+        self.num_dims = next(iter(num_dims))
 
     def sample(self, N, **kwargs):
         samples = np.zeros((N, self.num_var, self.num_dims))
@@ -82,10 +81,7 @@ class EinetMixture:
             ll_total = 0.0
             for batch_count, idx in enumerate(idx_batches):
                 batch_x = x[idx, :]
-                if labels is not None:
-                    batch_labels = labels[idx]
-                else:
-                    batch_labels = None
+                batch_labels = labels[idx] if labels is not None else None
 
                 lls = torch.zeros(len(idx), self.num_components, device=x.device)
                 for einet_count, einet in enumerate(self.einets):

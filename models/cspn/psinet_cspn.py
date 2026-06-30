@@ -57,7 +57,9 @@ class PsiNetCSPN(AbstractCSPN):
         return self.einet.forward(x=z, y=labels).squeeze(-1)
 
     def sample(self, labels: torch.Tensor) -> torch.Tensor:
-        return self.einet.sample(y=labels)
+        samples = self.einet.sample(y=labels)
+        assert samples is not None
+        return samples
 
     def get_config(self) -> dict:
         return self.config.model_dump()

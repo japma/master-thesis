@@ -219,8 +219,12 @@ class EinsumNetwork(torch.nn.Module):
             )
         layer_to_params = dict(zip(self.einet_layers, params, strict=False))
         if x is not None:
+            if x.shape[0] != y.shape[0]:
+                raise AssertionError(
+                    f"x and y must share the same batch size, got x.shape[0]={x.shape[0]} "
+                    f"and y.shape[0]={y.shape[0]}."
+                )
             self.forward(x, y)
-            num_samples = x.shape[0]
         else:
             dummy_x = torch.zeros(
                 y.shape[0], self.args.num_var, device=y.device, dtype=torch.float32

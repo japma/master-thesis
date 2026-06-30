@@ -51,7 +51,7 @@ class DistributionVector:
         self.id = next(self._id_counter)
 
     def __lt__(self, other):
-        if type(other) == Product:
+        if isinstance(other, Product):
             return True
         else:
             return (self.scope, self.id) < (other.scope, other.id)
@@ -72,7 +72,7 @@ class Product:
         self.id = next(self._id_counter)
 
     def __lt__(self, other):
-        if type(other) == DistributionVector:
+        if isinstance(other, DistributionVector):
             return False
         else:
             return (self.scope, self.id) < (other.scope, other.id)
@@ -103,7 +103,7 @@ def check_graph(graph):
     """
 
     contains_only_PC_nodes = all(
-        [type(n) == DistributionVector or type(n) == Product for n in graph.nodes()]
+        isinstance(n, (DistributionVector, Product)) for n in graph.nodes()
     )
 
     is_DAG = nx.is_directed_acyclic_graph(graph)
@@ -112,29 +112,23 @@ def check_graph(graph):
     sums = get_sums(graph)
     products = get_products(graph)
 
-    products_one_parents = all(
-        [len(list(graph.predecessors(p))) == 1 for p in products]
-    )
-    products_two_children = all([len(list(graph.successors(p))) == 2 for p in products])
+    products_one_parents = all(len(list(graph.predecessors(p))) == 1 for p in products)
+    products_two_children = all(len(list(graph.successors(p))) == 2 for p in products)
 
     sum_to_products = all(
-        [all([type(p) == Product for p in graph.successors(s)]) for s in sums]
+        all(isinstance(p, Product) for p in graph.successors(s)) for s in sums
     )
     product_to_dist = all(
-        [
-            all([type(s) == DistributionVector for s in graph.successors(p)])
-            for p in products
-        ]
+        all(isinstance(s, DistributionVector) for s in graph.successors(p))
+        for p in products
     )
     alternating = sum_to_products and product_to_dist
 
-    proper_scope = all([len(n.scope) == len(set(n.scope)) for n in graph.nodes()])
-    smooth = all([all([p.scope == s.scope for p in graph.successors(s)]) for s in sums])
+    proper_scope = all(len(n.scope) == len(set(n.scope)) for n in graph.nodes())
+    smooth = all(all(p.scope == s.scope for p in graph.successors(s)) for s in sums)
     decomposable = all(
-        [
-            check_if_is_partition(p.scope, [s.scope for s in graph.successors(p)])
-            for p in products
-        ]
+        check_if_is_partition(p.scope, [s.scope for s in graph.successors(p)])
+        for p in products
     )
 
     check_passed = (
@@ -177,11 +171,13 @@ def get_roots(graph):
 
 
 def get_sums(graph):
-    return [n for n, d in graph.out_degree() if d > 0 and type(n) == DistributionVector]
+    return [
+        n for n, d in graph.out_degree() if d > 0 and isinstance(n, DistributionVector)
+    ]
 
 
 def get_products(graph):
-    return [n for n in graph.nodes() if type(n) == Product]
+    return [n for n in graph.nodes() if isinstance(n, Product)]
 
 
 def get_leaves(graph):
@@ -191,7 +187,7 @@ def get_leaves(graph):
 def get_distribution_nodes_by_scope(graph, scope):
     scope = tuple(sorted(scope))
     return [
-        n for n in graph.nodes if type(n) == DistributionVector and n.scope == scope
+        n for n in graph.nodes if isinstance(n, DistributionVector) and n.scope == scope
     ]
 
 
@@ -478,7 +474,7 @@ def poon_domingos_structure(shape, delta, axes=None, max_split_depth=None):
     :return: PC graph (DiGraph)
     """
     shape = tuple(shape)
-    if any([type(s) != int for s in shape]):
+    if any(not isinstance(s, int) for s in shape):
         raise TypeError("Elements in shape must be ints.")
 
     if axes is None:
@@ -499,14 +495,14 @@ def poon_domingos_structure(shape, delta, axes=None, max_split_depth=None):
         except TypeError:
             delta[c] = [float(delta[c])] * len(axes)
 
-    if any([dd < 1.0 for d in delta for dd in d]):
+    if any(dd < 1.0 for d in delta for dd in d):
         raise AssertionError("Any delta must be >= 1.0.")
 
     sub_shape = tuple(s for c, s in enumerate(shape) if c in axes)
     global_cut_points = []
     for dd in delta:
         cur_global_cur_points = []
-        for s, d in zip(sub_shape, dd):
+        for s, d in zip(sub_shape, dd, strict=False):
             num_cuts = int(np.floor(float(s - 1) / d))
             cps = [int(np.ceil((i + 1) * d)) for i in range(num_cuts)]
             cur_global_cur_points.append(cps)
@@ -618,13 +614,13 @@ def binary_tree_spn(shape):
         #   hamming distance = (1 - 0) + (1 - 0) = 2
         # As we assume square sized input and we always split input into two halves,
         # this condition holds iff we have reached the leaf node layer
-        if all([l == 2 for l in hypercube_lens]):
+        if all(length == 2 for length in hypercube_lens):
             return graph
 
         new_hypercubes = []
         if depth % 2 == 0:
             # scope of product = scope of its parent sum
-            for hc, node in zip(hypercubes, curr_leafs):
+            for hc, node in zip(hypercubes, curr_leafs, strict=False):
                 prod_left = Product(node.scope)
                 prod_right = Product(node.scope)
                 graph.add_edge(node, prod_left)
@@ -635,7 +631,7 @@ def binary_tree_spn(shape):
                 ]  # add same hypercube twice as we have two product nodes
             new_ax = axis
         else:
-            for node, hc in zip(curr_leafs, hypercubes):
+            for node, hc in zip(curr_leafs, hypercubes, strict=False):
                 pos = (hc[1][axis] + hc[0][axis]) / 2
                 hc_left, hc_right = cut_hypercube(hc, axis, int(pos))
                 new_hypercubes += [hc_left, hc_right]
@@ -677,7 +673,7 @@ def topological_layers(graph):
             s
             for s in sums
             if s not in visited_nodes
-            and all([p in visited_nodes for p in graph.predecessors(s)])
+            and all(p in visited_nodes for p in graph.predecessors(s))
         ]
         sum_layer = sorted(sum_layer)
         layers.insert(0, sum_layer)
@@ -687,7 +683,7 @@ def topological_layers(graph):
             p
             for p in products
             if p not in visited_nodes
-            and all([s in visited_nodes for s in graph.predecessors(p)])
+            and all(s in visited_nodes for s in graph.predecessors(p))
         ]
         product_layer = sorted(product_layer)
         layers.insert(0, product_layer)
@@ -710,8 +706,8 @@ def plot_graph(graph):
         for j, item in enumerate(layer):
             pos[item] = np.array([float(j) - 0.25 + 0.5 * np.random.rand(), float(i)])
 
-    distributions = [n for n in graph.nodes if type(n) == DistributionVector]
-    products = [n for n in graph.nodes if type(n) == Product]
+    distributions = [n for n in graph.nodes if type(n) == DistributionVector]  # noqa: E721
+    products = [n for n in graph.nodes if type(n) == Product]  # noqa: E721
     node_sizes = [3 + 10 * i for i in range(len(graph))]
 
     nx.draw_networkx_nodes(graph, pos, distributions, node_shape="p")

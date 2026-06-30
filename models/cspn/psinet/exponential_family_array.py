@@ -215,7 +215,7 @@ class ExponentialFamilyArray(torch.nn.Module):
                 raise AssertionError("Incorrect parameter shape.")
             self.params = torch.nn.Parameter(initializer)
         else:
-            raise AssertionError("Unknown initializer.")
+            raise AssertionError(f"Unknown initializer.{initializer}")
 
     def forward(self, x, params):
         """
@@ -401,9 +401,7 @@ class NormalArray(ExponentialFamilyArray):
     def __init__(
         self, num_var, num_dims, array_shape, min_var=0.0001, max_var=10.0, use_em=True
     ):
-        super().__init__(
-            num_var, num_dims, array_shape, 2 * num_dims, use_em=use_em
-        )
+        super().__init__(num_var, num_dims, array_shape, 2 * num_dims, use_em=use_em)
         self.log_2pi = torch.tensor(1.8378770664093453)
         self.min_var = min_var
         self.max_var = max_var
@@ -551,9 +549,7 @@ class BinomialArray(ExponentialFamilyArray):
     """Implementation of Binomial distribution."""
 
     def __init__(self, num_var, num_dims, array_shape, N, use_em=True):
-        super().__init__(
-            num_var, num_dims, array_shape, num_dims, use_em=use_em
-        )
+        super().__init__(num_var, num_dims, array_shape, num_dims, use_em=use_em)
         self.N = torch.tensor(float(N))
 
     def default_initializer(self):
@@ -639,9 +635,7 @@ class CategoricalArray(ExponentialFamilyArray):
     """Implementation of Categorical distribution."""
 
     def __init__(self, num_var, num_dims, array_shape, K, use_em=True):
-        super().__init__(
-            num_var, num_dims, array_shape, num_dims * K, use_em=use_em
-        )
+        super().__init__(num_var, num_dims, array_shape, num_dims * K, use_em=use_em)
         self.K = K
 
     def default_initializer(self):

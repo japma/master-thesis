@@ -59,7 +59,7 @@ class CSPNConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     model_type: CSPNType
-    num_vars: int
+    num_vars: int = 0
     num_repetitions: int
     num_input_distributions: int
     num_sums: int
@@ -136,6 +136,11 @@ class CSPNRunConfig(BaseModel):
     @model_validator(mode="after")
     def inject_num_classes(self):
         self.model.num_classes = self.dataset.num_classes
+        return self
+
+    @model_validator(mode="after")
+    def inject_num_vars(self):
+        self.model.num_vars = self.autoencoder.latent_dim
         return self
 
 

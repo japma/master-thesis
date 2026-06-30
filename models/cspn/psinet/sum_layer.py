@@ -516,18 +516,22 @@ class EinsumLayer(SumLayer):
                     log_posterior - torch.logsumexp(log_posterior, 1, keepdim=True)
                 )
             else:
-                param_indices = list(range(params.shape[0])) * int(
-                    len(dist_idx) / params.shape[0]
+                batch_size: int = params.shape[0]
+                num_dist_idx: int = len(dist_idx)
+                if num_dist_idx % batch_size != 0:
+                    raise AssertionError(
+                        f"len(dist_idx) ({num_dist_idx}) must be an exact multiple of "
+                        f"the params batch size ({batch_size}); got a remainder of "
+                        f"{num_dist_idx % batch_size}. This indicates a mismatch between "
+                        "the number of samples routed to this layer and the conditioning "
+                        "batch size, which would silently misalign param_indices with "
+                        "dist_idx/node_idx and corrupt sampling."
+                    )
+                param_indices: list[int] = list(range(batch_size)) * (
+                    num_dist_idx // batch_size
                 )
                 posterior = params[param_indices, :, :, dist_idx, node_idx]
-                # posterior = posterior.permute(2, 0, 1)
                 posterior = posterior.reshape(posterior.shape[0], -1)
-                # posterior = params[:, :, :, dist_idx, node_idx]
-                # posterior = posterior.permute(0, 3, 1, 2)
-                # posterior = posterior.reshape(posterior.shape[:2], -1)
-                # posterior = params[0, :, :, dist_idx, node_idx]
-                # posterior = posterior.permute(2, 0, 1)
-                # posterior = posterior.reshape(posterior.shape[0], -1)
 
             if mode == "sample":
                 idx = sample_matrix_categorical(posterior)
@@ -677,8 +681,19 @@ class EinsumMixingLayer(SumLayer):
                     log_posterior - torch.logsumexp(log_posterior, 1, keepdim=True)
                 )
             else:
-                param_indices = list(range(params.shape[0])) * int(
-                    len(dist_idx) / params.shape[0]
+                batch_size: int = params.shape[0]
+                num_dist_idx: int = len(dist_idx)
+                if num_dist_idx % batch_size != 0:
+                    raise AssertionError(
+                        f"len(dist_idx) ({num_dist_idx}) must be an exact multiple of "
+                        f"the params batch size ({batch_size}); got a remainder of "
+                        f"{num_dist_idx % batch_size}. This indicates a mismatch between "
+                        "the number of samples routed to this layer and the conditioning "
+                        "batch size, which would silently misalign param_indices with "
+                        "dist_idx/node_idx and corrupt sampling."
+                    )
+                param_indices: list[int] = list(range(batch_size)) * (
+                    num_dist_idx // batch_size
                 )
                 posterior = params[param_indices, dist_idx, node_idx, :]
 

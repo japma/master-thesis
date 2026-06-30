@@ -42,7 +42,7 @@ class BetaVAELoss(nn.Module):
 class VGGPerceptualLoss(nn.Module):
     """Feature-space L1 loss using a frozen VGG16."""
 
-    _FEATURE_LAYERS: tuple[int, ...] = (9, 16)  # relu2_2, relu3_3 in VGG16 features
+    _FEATURE_LAYERS: tuple[int, int] = (9, 16)  # relu2_2, relu3_3 in VGG16 features
 
     def __init__(self) -> None:
         super().__init__()
@@ -130,21 +130,6 @@ def negative_log_likelihood_loss(
 ) -> torch.Tensor:
     """Negative log-likelihood loss for SPN outputs."""
     return -outputs.mean()
-
-
-def get_ae_loss_fn(loss_type: str) -> nn.Module:
-    if loss_type == "mse":
-        return nn.MSELoss()
-    elif loss_type == "l1":
-        return nn.L1Loss()
-    elif loss_type == "smooth_l1":
-        return nn.SmoothL1Loss()
-    elif loss_type == "bce":
-        return nn.BCELoss()
-    elif loss_type == "hybrid":
-        return HybridLoss()
-    else:
-        raise ValueError(f"Unknown loss type: {loss_type}")
 
 
 def kl_per_dim(mu: torch.Tensor, logvar: torch.Tensor) -> torch.Tensor:
