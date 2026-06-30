@@ -104,6 +104,8 @@ class VariationalAutoencoder(AbstractAutoencoder):
         super().__init__()
         self.config = config
 
+        self.use_skip_connections = config.use_skip_connections
+
         self.input_proj = nn.Sequential(
             nn.Conv2d(3, config.base_channels, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(config.base_channels),
@@ -224,7 +226,9 @@ class VariationalAutoencoder(AbstractAutoencoder):
     def forward(self, x: torch.Tensor) -> AutoencoderForwardOutput:
         mu, log_var, skips = self._encode_distribution(x)
         z = reparameterize(mu, log_var)
-        logits = self.decode_logits(z, skips=skips)
+        logits = self.decode_logits(
+            z, skips=skips if self.use_skip_connections else None
+        )
         return logits, mu, log_var
 
     def get_config(self) -> dict:
