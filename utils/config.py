@@ -96,8 +96,8 @@ class AutoencoderTrainingConfig(BaseTrainingConfig):
 
 
 class CSPNTrainingConfig(BaseTrainingConfig):
-    early_stopping_patience: int
-    early_stopping_min_delta: float
+    early_stopping_patience: int = 10
+    early_stopping_min_delta: float = 0.01
 
 
 class WandbConfig(BaseModel):

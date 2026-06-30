@@ -3,17 +3,17 @@ type: cspn
 dataset:
   name: flowers102
   channels: 3
-  height: 128
-  width: 128
+  height: 64
+  width: 64
   num_classes: 102
 
 autoencoder:
   name: "autoencoder_flowers102"
   external: false
+  latent_dim: 128
 
 model:
   model_type: "psinet"
-  num_vars: 128
   num_repetitions: 5
   num_input_distributions: 16
   num_sums: 16
@@ -22,11 +22,11 @@ model:
   h_dims: [ 128, 128 ]
 
 training:
-  epochs: 200
+  epochs: 1
   learning_rate: 0.001
-  batch_size: 32
+  batch_size: 128
 
 wandb:
-  mode: online
+  mode: disabled
   project: master-thesis
   entity: jmartini-tu-darmstadt
