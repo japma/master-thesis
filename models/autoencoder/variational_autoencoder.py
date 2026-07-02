@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 from utils.config import AutoencoderConfig
 
@@ -37,17 +36,21 @@ class SelfAttention2d(nn.Module):
         self.attn = nn.MultiheadAttention(channels, num_heads, batch_first=True)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        B, C, H, W = x.shape
+        batch_size, channels, height, width = x.shape
         h = self.norm(x)
 
-        h = h.view(B, C, H * W).permute(0, 2, 1)  # (B, H*W, C)
+        h = h.view(batch_size, channels, height * width).permute(0, 2, 1)
         h, _ = self.attn(h, h, h, need_weights=False)
-        h = h.permute(0, 2, 1).view(B, C, H, W)
+        h = h.permute(0, 2, 1).view(batch_size, channels, height, width)
         return x + h
 
 
 class EncoderBlock(nn.Module):
-    def __init__(self, in_channels: int, out_channels: int) -> None:
+    """Strided downsample followed by `num_resblocks` residual blocks."""
+
+    def __init__(
+        self, in_channels: int, out_channels: int, num_resblocks: int = 1
+    ) -> None:
         super().__init__()
         self.down = nn.Sequential(
             nn.Conv2d(
@@ -61,15 +64,19 @@ class EncoderBlock(nn.Module):
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True),
         )
-        self.res = ResBlock(out_channels)
+        self.res = nn.Sequential(
+            *[ResBlock(out_channels) for _ in range(num_resblocks)]
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.res(self.down(x))
 
 
 class DecoderBlock(nn.Module):
+    """Upsample followed by `num_resblocks` residual blocks."""
+
     def __init__(
-        self, in_channels: int, out_channels: int, skip_channels: int = 0
+        self, in_channels: int, out_channels: int, num_resblocks: int = 1
     ) -> None:
         super().__init__()
         self.up = nn.Sequential(
@@ -78,25 +85,12 @@ class DecoderBlock(nn.Module):
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True),
         )
-        fused_channels = out_channels + skip_channels
-        self.fuse = (
-            nn.Sequential(
-                nn.Conv2d(fused_channels, out_channels, kernel_size=1, bias=False),
-                nn.BatchNorm2d(out_channels),
-                nn.ReLU(inplace=True),
-            )
-            if skip_channels > 0
-            else nn.Identity()
+        self.res = nn.Sequential(
+            *[ResBlock(out_channels) for _ in range(num_resblocks)]
         )
-        self.res = ResBlock(out_channels)
 
-    def forward(
-        self, x: torch.Tensor, skip: torch.Tensor | None = None
-    ) -> torch.Tensor:
-        x = self.up(x)
-        if skip is not None:
-            x = self.fuse(torch.cat([x, skip], dim=1))
-        return self.res(x)
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.res(self.up(x))
 
 
 class VariationalAutoencoder(AbstractAutoencoder):
@@ -104,7 +98,8 @@ class VariationalAutoencoder(AbstractAutoencoder):
         super().__init__()
         self.config = config
 
-        self.use_skip_connections = config.use_skip_connections
+        num_encoder_resblocks = config.num_encoder_resblocks
+        num_decoder_resblocks = config.num_decoder_resblocks
 
         self.input_proj = nn.Sequential(
             nn.Conv2d(3, config.base_channels, kernel_size=3, padding=1, bias=False),
@@ -113,13 +108,17 @@ class VariationalAutoencoder(AbstractAutoencoder):
         )
 
         # --- Encoder ---
-        encoder_blocks = []
-        self._encoder_out_channels: list[int] = []
+        encoder_blocks: list[nn.Module] = []
         current_channels = config.base_channels
         for _ in range(config.num_blocks):
             out_channels = current_channels * 2
-            encoder_blocks.append(EncoderBlock(current_channels, out_channels))
-            self._encoder_out_channels.append(out_channels)
+            encoder_blocks.append(
+                EncoderBlock(
+                    current_channels,
+                    out_channels,
+                    num_resblocks=num_encoder_resblocks,
+                )
+            )
             current_channels = out_channels
 
         self.encoder = nn.ModuleList(encoder_blocks)
@@ -136,13 +135,15 @@ class VariationalAutoencoder(AbstractAutoencoder):
         # --- Decoder ---
         self.fc_decode = nn.Linear(config.latent_dim, flat_dim)
 
-        decoder_blocks = []
-        skip_channels_list = list(reversed(self._encoder_out_channels))
-        for i in range(config.num_blocks - 1):
+        decoder_blocks: list[nn.Module] = []
+        for _ in range(config.num_blocks - 1):
             out_channels = current_channels // 2
-            skip_ch = skip_channels_list[i + 1]
             decoder_blocks.append(
-                DecoderBlock(current_channels, out_channels, skip_channels=skip_ch)
+                DecoderBlock(
+                    current_channels,
+                    out_channels,
+                    num_resblocks=num_decoder_resblocks,
+                )
             )
             current_channels = out_channels
 
@@ -150,7 +151,7 @@ class VariationalAutoencoder(AbstractAutoencoder):
             DecoderBlock(
                 current_channels,
                 config.base_channels,
-                skip_channels=config.base_channels,
+                num_resblocks=num_decoder_resblocks,
             )
         )
         self.decoder = nn.ModuleList(decoder_blocks)
@@ -180,58 +181,40 @@ class VariationalAutoencoder(AbstractAutoencoder):
 
     def _encode_distribution(
         self, x: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor, list[torch.Tensor]]:
-        x_proj = self.input_proj(x)
-        skips: list[torch.Tensor] = [x_proj]
-
-        h = x_proj
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        h = self.input_proj(x)
         for block in self.encoder:
             h = block(h)
-            skips.append(h)
 
         h = self.bottleneck_attn(h)
         flat = h.flatten(start_dim=1)
         mu = self.mu_head(flat)
         log_var = self.log_var_head(flat)
-        return mu, log_var, skips
+        return mu, log_var
 
     def encode(self, x: torch.Tensor) -> torch.Tensor:
-        mu, _, _ = self._encode_distribution(x)
+        mu, _ = self._encode_distribution(x)
         return mu
 
-    def decode_logits(
-        self, z: torch.Tensor, skips: list[torch.Tensor] | None = None
-    ) -> torch.Tensor:
+    def decode_logits(self, z: torch.Tensor) -> torch.Tensor:
         h = self.fc_decode(z)
         h = h.view(
             z.shape[0], self.bottleneck_channels, self.encoded_size, self.encoded_size
         )
-
-        reversed_skips = list(reversed(skips)) if skips is not None else None
-
-        for i, block in enumerate(self.decoder):
-            skip = None
-            if reversed_skips is not None:
-                skip_idx = i + 1
-                skip = (
-                    reversed_skips[skip_idx] if skip_idx < len(reversed_skips) else None
-                )
-            h = block(h, skip)
-
+        for block in self.decoder:
+            h = block(h)
         return self.output_proj(h)
 
     def decode(self, z: torch.Tensor) -> torch.Tensor:
-        return torch.sigmoid(self.decode_logits(z, skips=None))
+        return torch.sigmoid(self.decode_logits(z))
 
     def forward(self, x: torch.Tensor) -> AutoencoderForwardOutput:
-        mu, log_var, skips = self._encode_distribution(x)
+        mu, log_var = self._encode_distribution(x)
         z = reparameterize(mu, log_var)
-        logits = self.decode_logits(
-            z, skips=skips if self.use_skip_connections else None
-        )
+        logits = self.decode_logits(z)
         return logits, mu, log_var
 
-    def get_config(self) -> dict:
+    def get_config(self) -> dict[str, object]:
         return self.config.model_dump()
 
     def get_latent_dim(self) -> int:

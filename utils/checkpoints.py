@@ -20,6 +20,7 @@ def load_from_wandb(
     ckpt_name: str,
     tag: str = "latest",
 ) -> Path:
+    """Load a checkpoint from wandb artifacts. Uses the most recent checkpoint unless tag is provided."""
     entity = "jmartini-tu-darmstadt"
     project = "master-thesis"
     name = f"{entity}/{project}/{ckpt_name}:{tag}"

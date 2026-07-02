@@ -45,7 +45,8 @@ class AutoencoderConfig(BaseModel):
     num_blocks: int
     base_channels: int
     image_size: int = 0
-    use_skip_connections: bool = False
+    num_encoder_resblocks: int = 1
+    num_decoder_resblocks: int = 1
 
 
 class PretrainedAutoencoderConfig(BaseModel):
