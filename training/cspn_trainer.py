@@ -105,10 +105,10 @@ def train_cspn(
     epochs = cfg.training.epochs
     log_sample_every = 10
 
-    early_stopping = EarlyStopping(
-        patience=cfg.training.early_stopping_patience,
-        min_delta=cfg.training.early_stopping_min_delta,
-    )
+    # early_stopping = EarlyStopping(
+    #    patience=cfg.training.early_stopping_patience,
+    #    min_delta=cfg.training.early_stopping_min_delta,
+    # )
 
     for epoch in range(epochs):
         train_loss = _train_epoch(
@@ -143,13 +143,13 @@ def train_cspn(
                 epoch=epoch,
             )
 
-        if early_stopping.step(val_loss, model):
-            print(f"Early stopping triggered at epoch {epoch + 1}.")
-            break
+        # if early_stopping.step(val_loss, model):
+        #     print(f"Early stopping triggered at epoch {epoch + 1}.")
+        #     break
 
         rtpt.step(subtitle=f"{epoch + 1}/{epochs}")
 
-    early_stopping.restore_best_weights(model)
+    # early_stopping.restore_best_weights(model)
 
     _log_samples(
         model,
@@ -159,4 +159,4 @@ def train_cspn(
         samples_per_class=3,
         epoch=epoch,
     )
-    wandb.log({"best_val_loss": early_stopping.best_loss})
+    # wandb.log({"best_val_loss": early_stopping.best_loss})
