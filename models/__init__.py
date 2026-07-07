@@ -1,4 +1,3 @@
 from .autoencoder.variational_autoencoder import VariationalAutoencoder
-from .cspn import SPFlowCSPN
 
-__all__ = ["SPFlowCSPN", "VariationalAutoencoder"]
+__all__ = ["VariationalAutoencoder"]
