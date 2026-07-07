@@ -212,7 +212,7 @@ class VariationalAutoencoder(AbstractAutoencoder):
         mu, log_var = self._encode_distribution(x)
         z = reparameterize(mu, log_var)
         logits = self.decode_logits(z)
-        return logits, mu, log_var
+        return logits, mu, log_var, z
 
     def get_config(self) -> dict[str, object]:
         return self.config.model_dump()

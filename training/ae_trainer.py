@@ -5,7 +5,7 @@ import tqdm
 
 import wandb
 from models.autoencoder import AbstractAutoencoder
-from training.losses import VAELoss, kl_per_dim
+from training.losses import BetaTCVAELoss, VAELoss, kl_per_dim, BetaVAELoss
 from utils.config import AERunConfig
 
 
@@ -13,7 +13,7 @@ def _train_epoch(
     model: AbstractAutoencoder,
     loader: torch.utils.data.DataLoader,
     optimizer: torch.optim.Optimizer,
-    loss_fn: VAELoss,
+    loss_fn: BetaTCVAELoss,
     device: torch.device,
     epoch: int,
     epochs: int,
@@ -34,13 +34,14 @@ def _train_epoch(
     for images, _ in tqdm.tqdm(loader, desc=f"Train {epoch + 1}/{epochs}"):
         images = images.to(device, non_blocking=True)
 
-        logits, mu, logvar = model(images)
+        logits, mu, logvar, z = model(images)
         out = loss_fn(
             images=images,
-            logits=logits,
+            recon=logits,
             mu=mu,
             logvar=logvar,
             beta=annealed_beta,
+            z=z,
         )
 
         optimizer.zero_grad()
@@ -65,7 +66,7 @@ def _train_epoch(
 def _val_epoch(
     model: AbstractAutoencoder,
     loader: torch.utils.data.DataLoader,
-    loss_fn: VAELoss,
+    loss_fn: BetaVAELoss,
     device: torch.device,
     epoch: int,
     epochs: int,
@@ -87,8 +88,8 @@ def _val_epoch(
             images = images.to(device, non_blocking=True)
             B = images.size(0)
 
-            logits, mu, logvar = model(images)
-            total, recon_loss, kl_loss = loss_fn.beta_vae(
+            logits, mu, logvar, z = model(images)
+            total, recon_loss, kl_loss = loss_fn(
                 images=images, recon=logits, mu=mu, logvar=logvar
             )
 
@@ -117,7 +118,7 @@ def _log_reconstructions(
     """Log reconstructions of fixed validation images."""
     model.eval()
     with torch.no_grad():
-        logits, _, _ = model(sample_images)
+        logits, _, _, _ = model(sample_images)
         recon = torch.sigmoid(logits)
     recon_u8 = (recon.clamp(0, 1) * 255).byte().cpu()
     wandb.log(
@@ -152,7 +153,7 @@ def train_autoencoder(
     test_loader: torch.utils.data.DataLoader,
     optimizer: torch.optim.Optimizer,
     scheduler: torch.optim.lr_scheduler.LRScheduler,
-    loss_fn: VAELoss,
+    loss_fn: BetaTCVAELoss,
     rtpt,
 ) -> None:
     model.to(device)
@@ -162,6 +163,7 @@ def train_autoencoder(
     warmup_epochs = cfg.training.kl_warmup_epochs
     log_sample_every = 10
 
+    # pyrefly: ignore [bad-argument-type]
     sample_indices = torch.randperm(len(test_loader.dataset))[:16]
     sample_images = torch.stack([test_loader.dataset[i][0] for i in sample_indices]).to(
         device
@@ -172,6 +174,7 @@ def train_autoencoder(
         {"samples/input": [wandb.Image(img) for img in sample_images_u8]},
         step=0,
     )
+    val_loss_fn = BetaVAELoss(1.0, 0.5)
 
     for epoch in range(epochs):
         annealed_beta = min(1.0, epoch / max(warmup_epochs, 1))
@@ -188,7 +191,7 @@ def train_autoencoder(
         )
 
         val_loss, val_recon, val_kl, kl_dims = _val_epoch(
-            model, test_loader, loss_fn, device, epoch, epochs
+            model, test_loader, val_loss_fn, device, epoch, epochs
         )
 
         scheduler.step()

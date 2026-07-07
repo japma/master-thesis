@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 
 type AutoencoderForwardOutput = (
-    torch.Tensor | tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+    torch.Tensor | tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
 )
 
 

@@ -3,6 +3,8 @@ import numpy as np
 import torch
 import torchvision.utils as vutils
 import umap
+from matplotlib.colors import Colormap
+from numpy.typing import NDArray
 
 
 def show(tensor, title=None, width=8):
@@ -67,30 +69,40 @@ def plot_latent_comparison():
     raise NotImplementedError
 
 
+def _get_class_colors(
+    labels: torch.Tensor,
+) -> tuple[list[int], dict[int, tuple[float, float, float, float]]]:
+    classes: list[int] = sorted(np.unique(labels.detach().cpu().numpy()).tolist())
+    n_classes: int = len(classes)
+
+    cmap: Colormap = plt.get_cmap("tab10" if n_classes <= 10 else "tab20")
+    class_to_color: dict[int, tuple[float, float, float, float]] = {
+        c: cmap(i / max(n_classes - 1, 1)) for i, c in enumerate(classes)
+    }
+    return classes, class_to_color
+
+
 def plot_latent_space(
     latents: torch.Tensor,
     labels: torch.Tensor,
     title: str = "Latent space",
     class_names: list[str] | None = None,
-):
-    a = latents.detach().cpu().numpy()
+) -> None:
+    a: NDArray[np.float32] = latents.detach().cpu().numpy()
+    labels_np: NDArray[np.int64] = labels.detach().cpu().numpy()
 
-    classes = sorted(np.unique(labels).tolist())
-    n_classes = len(classes)
+    classes, class_to_color = _get_class_colors(labels)
 
-    cmap = plt.get_cmap("tab10" if n_classes <= 10 else "tab20")
-    class_to_color = {c: cmap(i / max(n_classes - 1, 1)) for i, c in enumerate(classes)}
-
-    reducer = umap.UMAP(n_components=2)
-    projected = reducer.fit_transform(a)
+    reducer: umap.UMAP = umap.UMAP(n_components=2)
+    projected: NDArray[np.float32] = reducer.fit_transform(a)
 
     fig, ax = plt.subplots(figsize=(9, 8))
 
     for cls in classes:
-        mask = labels == cls
+        mask: NDArray[np.bool_] = labels_np == cls
         if not mask.any():
             continue
-        label_str = class_names[cls] if class_names is not None else str(cls)
+        label_str: str = class_names[cls] if class_names is not None else str(cls)
         ax.scatter(
             projected[mask, 0],
             projected[mask, 1],
@@ -103,6 +115,104 @@ def plot_latent_space(
 
     ax.legend(
         title="Class", loc="upper left", bbox_to_anchor=(1.01, 1), borderaxespad=0
+    )
+
+    ax.set_title(title)
+    ax.set_xlabel("UMAP component 1")
+    ax.set_ylabel("UMAP component 2")
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_latent_space_comparison(
+    latents_a: torch.Tensor,
+    latents_b: torch.Tensor,
+    labels: torch.Tensor,
+    model_names: tuple[str, str] = ("Model A", "Model B"),
+    title: str = "Latent space comparison",
+    class_names: list[str] | None = None,
+    markers: tuple[str, str] = ("x", "o"),
+    joint_projection: bool = True,
+) -> None:
+    """Compare the latent spaces of two models sharing the same labels."""
+    a_np: NDArray[np.float32] = latents_a.detach().cpu().numpy()
+    b_np: NDArray[np.float32] = latents_b.detach().cpu().numpy()
+    labels_np: NDArray[np.int64] = labels.detach().cpu().numpy()
+
+    classes, class_to_color = _get_class_colors(labels)
+
+    reducer: umap.UMAP = umap.UMAP(n_components=2)
+
+    projected_a: NDArray[np.float32]
+    projected_b: NDArray[np.float32]
+    if joint_projection:
+        combined: NDArray[np.float32] = np.concatenate([a_np, b_np], axis=0)
+        projected: NDArray[np.float32] = reducer.fit_transform(combined)
+        n_a: int = a_np.shape[0]
+        projected_a, projected_b = projected[:n_a], projected[n_a:]
+    else:
+        projected_a = reducer.fit_transform(a_np)
+        projected_b = umap.UMAP(n_components=2).fit_transform(b_np)
+
+    fig, ax = plt.subplots(figsize=(10, 8))
+
+    for projected, model_name, marker in zip(
+        (projected_a, projected_b), model_names, markers, strict=False
+    ):
+        for cls in classes:
+            mask: NDArray[np.bool_] = labels_np == cls
+            if not mask.any():
+                continue
+            class_str: str = class_names[cls] if class_names is not None else str(cls)
+            ax.scatter(
+                projected[mask, 0],
+                projected[mask, 1],
+                c=[class_to_color[cls]],
+                marker=marker,
+                alpha=0.7,
+                s=60,
+                label=f"{class_str} ({model_name})",
+            )
+
+    class_handles: list[plt.Line2D] = [
+        plt.Line2D(
+            [0],
+            [0],
+            marker="s",
+            color="w",
+            markerfacecolor=class_to_color[cls],
+            markersize=8,
+            label=class_names[cls] if class_names is not None else str(cls),
+        )
+        for cls in classes
+    ]
+    model_handles: list[plt.Line2D] = [
+        plt.Line2D(
+            [0],
+            [0],
+            marker=marker,
+            color="black",
+            linestyle="None",
+            markersize=8,
+            label=model_name,
+        )
+        for model_name, marker in zip(model_names, markers, strict=False)
+    ]
+
+    legend1 = ax.legend(
+        handles=class_handles,
+        title="Class",
+        loc="upper left",
+        bbox_to_anchor=(1.01, 1),
+        borderaxespad=0,
+    )
+    ax.add_artist(legend1)
+    ax.legend(
+        handles=model_handles,
+        title="Model",
+        loc="upper left",
+        bbox_to_anchor=(1.01, 0.5),
+        borderaxespad=0,
     )
 
     ax.set_title(title)
