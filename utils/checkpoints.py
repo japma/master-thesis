@@ -7,7 +7,7 @@ from models.autoencoder import (
     AbstractAutoencoder,
     VariationalAutoencoder,
 )
-from models.cspn import AbstractCSPN
+from models.cspn.abstract_cspn import AbstractCSPN
 from models.cspn.psinet_cspn import PsiNetCSPN
 from utils.config import AutoencoderConfig, AutoencoderType, CSPNConfig, CSPNType
 

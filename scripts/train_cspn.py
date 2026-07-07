@@ -35,19 +35,7 @@ def main():
         entity=wandb_cfg.entity,
         project=wandb_cfg.project,
         name=run_name,
-        config={
-            "dataset": dataset_name,
-            "model": "CSPN",
-            "model_type": "Einet",
-            "epochs": training_cfg.epochs,
-            # "latent_dim": ae.get_latent_dim(), # commented out because it is not known and only used for logging
-            "learning_rate": training_cfg.learning_rate,
-            "seed": seed,
-            # "num_leaves": cspn_cfg.num_leaves,
-            "num_sums": cspn_cfg.num_sums,
-            # "depth": cspn_cfg.depth,
-            "num_repetitions": cspn_cfg.num_repetitions,
-        },
+        config=cfg.model_dump(),
         mode=wandb_cfg.mode,
     )
 

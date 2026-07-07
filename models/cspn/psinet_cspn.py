@@ -2,7 +2,7 @@ import math
 
 import torch
 
-from models.cspn import AbstractCSPN
+from models.cspn.abstract_cspn import AbstractCSPN
 from models.cspn.psinet.conditioning_nn import build_conditioning_mlp_for
 from models.cspn.psinet.einsum_network import Args, EinsumNetwork
 from models.cspn.psinet.exponential_family_array import NormalArray

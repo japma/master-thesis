@@ -6,7 +6,7 @@ from rtpt import RTPT
 
 import wandb
 from models.autoencoder import AbstractAutoencoder
-from models.cspn import AbstractCSPN
+from models.cspn.abstract_cspn import AbstractCSPN
 from training.early_stopping import EarlyStopping
 from training.losses import negative_log_likelihood_loss
 from utils.config import CSPNRunConfig

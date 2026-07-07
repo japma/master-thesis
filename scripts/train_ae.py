@@ -35,18 +35,7 @@ def main() -> None:
         entity=wandb_cfg.entity,
         project=wandb_cfg.project,
         name=run_name,
-        config={
-            "dataset": dataset_name,
-            "model": "Autoencoder",
-            "model_type": "VariationalAutoencoder",
-            "epochs": training_cfg.epochs,
-            "latent_dim": autoencoder_cfg.latent_dim,
-            "learning_rate": training_cfg.learning_rate,
-            "beta": beta,
-            "seed": seed,
-            "num_blocks": autoencoder_cfg.num_blocks,
-            "lambda_perceptual": training_cfg.lambda_perceptual,
-        },
+        config=cfg.model_dump(),
         mode=wandb_cfg.mode,
     )
 
