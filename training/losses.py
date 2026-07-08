@@ -196,6 +196,7 @@ class BetaTCVAELoss(nn.Module):
             dim=1
         )
 
+        # TODO maybe those means here are the problem
         mutual_info = (log_qz_given_x - log_qz).mean()
         total_correlation = (log_qz - log_qz_product).mean()
         dimension_wise_kl = (log_qz_product - log_pz).clamp(min=self.free_bits).mean()

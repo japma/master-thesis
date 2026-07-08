@@ -21,13 +21,14 @@ def load_from_wandb(
     tag: str = "latest",
 ) -> Path:
     """Load a checkpoint from wandb artifacts. Uses the most recent checkpoint unless tag is provided."""
+    print(f"Loading checkpoint {ckpt_name}:{tag} from Weights & Biases artifacts...")
     entity = "jmartini-tu-darmstadt"
     project = "master-thesis"
     name = f"{entity}/{project}/{ckpt_name}:{tag}"
     api = wandb.Api()
     artifact = api.artifact(name)
     file = artifact.file(str(ARTIFACTS_DIR))
-    print(f"Loading {file} from Weights & Biases artifact {name}")
+    print(f"Loaded {file} from Weights & Biases artifact {name}")
     return Path(file)
 
 

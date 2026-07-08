@@ -174,7 +174,7 @@ def _load_celeba_single_attribute(train=True, size: tuple[int, int] = (64, 64)):
             transforms.ToTensor(),
         ]
     )
-    attribute = "Black_Hair"
+    attribute = "Male"
     return SingleAttributeCelebA(
         attribute=attribute,
         root=DATA_DIR,
