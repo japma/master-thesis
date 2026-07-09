@@ -5,7 +5,7 @@ import tqdm
 
 import wandb
 from models.autoencoder import AbstractAutoencoder
-from training.losses import BetaTCVAELoss, VAELoss, kl_per_dim, BetaVAELoss
+from training.losses import BetaTCVAELoss, BetaVAELoss, VAELoss, kl_per_dim
 from utils.config import AERunConfig
 
 
