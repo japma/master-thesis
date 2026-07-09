@@ -5,7 +5,7 @@ import tqdm
 
 import wandb
 from models.autoencoder import AbstractAutoencoder
-from training.losses import BetaTCVAELoss, VAELoss, kl_per_dim, BetaVAELoss
+from training.losses import VAELoss, kl_per_dim
 from utils.config import AERunConfig
 
 
@@ -13,7 +13,7 @@ def _train_epoch(
     model: AbstractAutoencoder,
     loader: torch.utils.data.DataLoader,
     optimizer: torch.optim.Optimizer,
-    loss_fn: BetaTCVAELoss,
+    loss_fn: VAELoss,
     device: torch.device,
     epoch: int,
     epochs: int,
@@ -37,11 +37,10 @@ def _train_epoch(
         logits, mu, logvar, z = model(images)
         out = loss_fn(
             images=images,
-            recon=logits,
+            logits=logits,
             mu=mu,
             logvar=logvar,
             beta=annealed_beta,
-            z=z,
         )
 
         optimizer.zero_grad()
@@ -66,7 +65,7 @@ def _train_epoch(
 def _val_epoch(
     model: AbstractAutoencoder,
     loader: torch.utils.data.DataLoader,
-    loss_fn: BetaVAELoss,
+    loss_fn: VAELoss,
     device: torch.device,
     epoch: int,
     epochs: int,
@@ -89,7 +88,7 @@ def _val_epoch(
             B = images.size(0)
 
             logits, mu, logvar, z = model(images)
-            total, recon_loss, kl_loss = loss_fn(
+            total, recon_loss, kl_loss = loss_fn.beta_vae(
                 images=images, recon=logits, mu=mu, logvar=logvar
             )
 
@@ -153,7 +152,7 @@ def train_autoencoder(
     test_loader: torch.utils.data.DataLoader,
     optimizer: torch.optim.Optimizer,
     scheduler: torch.optim.lr_scheduler.LRScheduler,
-    loss_fn: BetaTCVAELoss,
+    loss_fn: VAELoss,
     rtpt,
 ) -> None:
     model.to(device)
@@ -174,7 +173,6 @@ def train_autoencoder(
         {"samples/input": [wandb.Image(img) for img in sample_images_u8]},
         step=0,
     )
-    val_loss_fn = BetaVAELoss(1.0, 0.5)
 
     for epoch in range(epochs):
         annealed_beta = min(1.0, epoch / max(warmup_epochs, 1))
@@ -191,7 +189,7 @@ def train_autoencoder(
         )
 
         val_loss, val_recon, val_kl, kl_dims = _val_epoch(
-            model, test_loader, val_loss_fn, device, epoch, epochs
+            model, test_loader, loss_fn, device, epoch, epochs
         )
 
         scheduler.step()

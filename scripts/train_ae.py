@@ -54,18 +54,18 @@ def main() -> None:
         optimizer, T_max=training_cfg.epochs
     )
 
-    # loss_fn = VAELoss(
-    #    beta_vae_loss=BetaVAELoss(beta=beta, free_bits=training_cfg.free_bits),
-    #    lambda_perceptual=training_cfg.lambda_perceptual,
-    # )
-
-    loss_fn = BetaTCVAELoss(
-        dataset_size=len(train_loader),
-        alpha=1.0,
-        beta=1.0,
-        gamma=1.0,
-        free_bits=training_cfg.free_bits,
+    loss_fn = VAELoss(
+        beta_vae_loss=BetaVAELoss(beta=beta, free_bits=training_cfg.free_bits),
+        lambda_perceptual=training_cfg.lambda_perceptual,
     )
+
+    # loss_fn = BetaTCVAELoss(
+    #    dataset_size=len(train_loader),
+    #    alpha=1.0,
+    #    beta=1.0,
+    #    gamma=1.0,
+    #    free_bits=training_cfg.free_bits,
+    # )
 
     rtpt = RTPT(
         name_initials="JM",
