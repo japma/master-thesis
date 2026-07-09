@@ -5,22 +5,29 @@ from utils.config import AutoencoderConfig
 
 from .abstract_autoencoder import AbstractAutoencoder, AutoencoderForwardOutput
 
+LOG_VAR_MIN: float = -10.0
+LOG_VAR_MAX: float = 10.0
+
 
 def reparameterize(mu: torch.Tensor, log_var: torch.Tensor) -> torch.Tensor:
-    log_var = log_var.clamp(-30.0, 20.0)
     std = torch.exp(0.5 * log_var)
     eps = torch.randn_like(std)
     return mu + eps * std
+
+
+def make_norm(channels: int, max_groups: int = 8) -> nn.GroupNorm:
+    num_groups = max(g for g in range(1, max_groups + 1) if channels % g == 0)
+    return nn.GroupNorm(num_groups, channels)
 
 
 class ResBlock(nn.Module):
     def __init__(self, channels: int) -> None:
         super().__init__()
         self.block = nn.Sequential(
-            nn.BatchNorm2d(channels),
+            make_norm(channels),
             nn.ReLU(inplace=True),
             nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(channels),
+            make_norm(channels),
             nn.ReLU(inplace=True),
             nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=False),
         )
@@ -30,10 +37,15 @@ class ResBlock(nn.Module):
 
 
 class SelfAttention2d(nn.Module):
-    def __init__(self, channels: int, num_heads: int = 1) -> None:
+    """Spatial self-attention with a learnable per-channel gate."""
+
+    def __init__(
+        self, channels: int, num_heads: int = 1, init_gate: float = 1e-4
+    ) -> None:
         super().__init__()
-        self.norm = nn.GroupNorm(1, channels)  # LayerNorm equivalent for 2-D
+        self.norm = make_norm(channels)
         self.attn = nn.MultiheadAttention(channels, num_heads, batch_first=True)
+        self.gate = nn.Parameter(torch.full((channels,), init_gate))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         batch_size, channels, height, width = x.shape
@@ -42,7 +54,7 @@ class SelfAttention2d(nn.Module):
         h = h.view(batch_size, channels, height * width).permute(0, 2, 1)
         h, _ = self.attn(h, h, h, need_weights=False)
         h = h.permute(0, 2, 1).view(batch_size, channels, height, width)
-        return x + h
+        return x + self.gate.view(1, channels, 1, 1) * h
 
 
 class EncoderBlock(nn.Module):
@@ -61,7 +73,7 @@ class EncoderBlock(nn.Module):
                 stride=2,
                 bias=False,
             ),
-            nn.BatchNorm2d(out_channels),
+            make_norm(out_channels),
             nn.ReLU(inplace=True),
         )
         self.res = nn.Sequential(
@@ -82,7 +94,7 @@ class DecoderBlock(nn.Module):
         self.up = nn.Sequential(
             nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False),
             nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(out_channels),
+            make_norm(out_channels),
             nn.ReLU(inplace=True),
         )
         self.res = nn.Sequential(
@@ -98,18 +110,18 @@ class VariationalAutoencoder(AbstractAutoencoder):
         super().__init__()
         self.config = config
 
-        num_encoder_resblocks = config.num_encoder_resblocks
-        num_decoder_resblocks = config.num_decoder_resblocks
+        num_encoder_resblocks: int = config.num_encoder_resblocks
+        num_decoder_resblocks: int = config.num_decoder_resblocks
 
         self.input_proj = nn.Sequential(
             nn.Conv2d(3, config.base_channels, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(config.base_channels),
+            make_norm(config.base_channels),
             nn.ReLU(inplace=True),
         )
 
         # --- Encoder ---
         encoder_blocks: list[nn.Module] = []
-        current_channels = config.base_channels
+        current_channels: int = config.base_channels
         for _ in range(config.num_blocks):
             out_channels = current_channels * 2
             encoder_blocks.append(
@@ -125,9 +137,9 @@ class VariationalAutoencoder(AbstractAutoencoder):
 
         self.bottleneck_attn = SelfAttention2d(current_channels)
 
-        self.encoded_size = config.image_size // (2**config.num_blocks)
-        flat_dim = current_channels * self.encoded_size * self.encoded_size
-        self.bottleneck_channels = current_channels
+        self.encoded_size: int = config.image_size // (2**config.num_blocks)
+        flat_dim: int = current_channels * self.encoded_size * self.encoded_size
+        self.bottleneck_channels: int = current_channels
 
         self.mu_head = nn.Linear(flat_dim, config.latent_dim)
         self.log_var_head = nn.Linear(flat_dim, config.latent_dim)
@@ -170,7 +182,7 @@ class VariationalAutoencoder(AbstractAutoencoder):
                 nn.init.xavier_normal_(m.weight)
                 if m.bias is not None:
                     nn.init.zeros_(m.bias)
-            elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
+            elif isinstance(m, (nn.GroupNorm,)):
                 nn.init.ones_(m.weight)
                 nn.init.zeros_(m.bias)
 
@@ -189,7 +201,7 @@ class VariationalAutoencoder(AbstractAutoencoder):
         h = self.bottleneck_attn(h)
         flat = h.flatten(start_dim=1)
         mu = self.mu_head(flat)
-        log_var = self.log_var_head(flat)
+        log_var = torch.clamp(self.log_var_head(flat), min=LOG_VAR_MIN, max=LOG_VAR_MAX)
         return mu, log_var
 
     def encode(self, x: torch.Tensor) -> torch.Tensor:
