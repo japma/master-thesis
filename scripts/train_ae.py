@@ -11,6 +11,7 @@ from dataset_loaders import build_data_loaders
 from models import VariationalAutoencoder
 from training.ae_trainer import train_autoencoder
 from training.losses import BetaTCVAELoss, BetaVAELoss, VAELoss
+from training.objectives.beta_vae import BetaVAEObjective
 from utils.checkpoints import save_autoencoder
 from utils.config import AERunConfig, load_config
 from utils.reproducibility import resolve_device, seed_everything
@@ -57,7 +58,7 @@ def main() -> None:
     loss_fn = VAELoss(
         beta_vae_loss=BetaVAELoss(beta=beta, free_bits=training_cfg.free_bits),
         lambda_perceptual=training_cfg.lambda_perceptual,
-    )
+    ).to(device)
 
     # loss_fn = BetaTCVAELoss(
     #    dataset_size=len(train_loader),
@@ -74,15 +75,18 @@ def main() -> None:
     )
     rtpt.start()
 
-    train_autoencoder(
+    objective = BetaVAEObjective(
         model=ae,
+        optimizer=optimizer,
+        scheduler=scheduler,
+    )
+
+    train_autoencoder(
+        objective=objective,
         device=device,
         cfg=cfg,
         train_loader=train_loader,
         test_loader=test_loader,
-        optimizer=optimizer,
-        scheduler=scheduler,
-        loss_fn=loss_fn,
         rtpt=rtpt,
     )
 

@@ -8,11 +8,52 @@ Provides:
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import TypedDict, TypeVar
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import models
 from torchvision.models import VGG16_Weights
+
+
+class BetaVAEComponents(TypedDict):
+    recon: torch.Tensor
+    kl: torch.Tensor
+
+
+class VAEComponents(TypedDict):
+    recon: torch.Tensor
+    kl: torch.Tensor
+    perceptual: torch.Tensor
+
+
+class TCVAEComponents(TypedDict):
+    recon: torch.Tensor
+    kl: torch.Tensor
+    mi: torch.Tensor
+    tc: torch.Tensor
+    dwkl: torch.Tensor
+
+
+TComponents = TypeVar("TComponents", bound=dict)
+
+
+@dataclass
+class LossOutput[TComponents: dict]:
+    total: torch.Tensor
+    components: TComponents
+
+    def __getitem__(self, key: str) -> torch.Tensor:
+        if key == "total":
+            return self.total
+        return self.components[key]
+
+    def to_metrics(self) -> dict[str, float]:
+        metrics = {"total": self.total.item()}
+        metrics.update({key: value.item() for key, value in self.components.items()})
+        return metrics
 
 
 class BetaVAELoss(nn.Module):
@@ -28,7 +69,7 @@ class BetaVAELoss(nn.Module):
         mu: torch.Tensor,
         logvar: torch.Tensor,
         beta: float | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> LossOutput:
         recon_loss = F.binary_cross_entropy_with_logits(recon, images, reduction="mean")
 
         logvar = logvar.clamp(-30.0, 20.0)
@@ -36,7 +77,8 @@ class BetaVAELoss(nn.Module):
         kl_loss = kl_per_dim.clamp(min=self.free_bits).mean()
 
         effective_beta = beta if beta is not None else self.beta
-        return recon_loss + effective_beta * kl_loss, recon_loss, kl_loss
+        total = recon_loss + effective_beta * kl_loss
+        return LossOutput(total=total, components={"recon": recon_loss, "kl": kl_loss})
 
 
 class VGGPerceptualLoss(nn.Module):
@@ -81,13 +123,6 @@ class VGGPerceptualLoss(nn.Module):
         ) / len(recon_feats)
 
 
-class VAELossOutput(dict):
-    total: torch.Tensor
-    recon: torch.Tensor  # BCE reconstruction loss
-    kl: torch.Tensor  # KL divergence
-    perceptual: torch.Tensor  # VGG perceptual loss
-
-
 class VAELoss(nn.Module):
     """VAE training loss: recon + KL + perceptual."""
 
@@ -108,29 +143,28 @@ class VAELoss(nn.Module):
         mu: torch.Tensor,
         logvar: torch.Tensor,
         beta: float | None = None,
-    ) -> VAELossOutput:
-        total_beta_vae, recon_loss, kl_loss = self.beta_vae(
-            images, logits, mu, logvar, beta
-        )
+    ) -> LossOutput:
+        beta_vae_out = self.beta_vae(images, logits, mu, logvar, beta)
 
         recon_img = torch.sigmoid(logits)
         p_loss = self.perceptual(recon_img, images)
 
-        total = total_beta_vae + self.lambda_perceptual * p_loss
+        total = beta_vae_out.total + self.lambda_perceptual * p_loss
 
-        return VAELossOutput(
+        return LossOutput(
             total=total,
-            recon=recon_loss,
-            kl=kl_loss,
-            perceptual=p_loss,
+            components=VAEComponents(
+                recon=beta_vae_out.components["recon"],
+                kl=beta_vae_out.components["kl"],
+                perceptual=p_loss,
+            ),
         )
 
 
-def negative_log_likelihood_loss(
-    outputs: torch.Tensor,
-) -> torch.Tensor:
+def negative_log_likelihood_loss(outputs: torch.Tensor) -> LossOutput:
     """Negative log-likelihood loss for SPN outputs."""
-    return -outputs.mean()
+    nll = -outputs.mean()
+    return LossOutput(total=nll)
 
 
 def kl_per_dim(mu: torch.Tensor, logvar: torch.Tensor) -> torch.Tensor:
@@ -211,7 +245,7 @@ class BetaTCVAELoss(nn.Module):
         logvar: torch.Tensor,
         z: torch.Tensor,
         beta: float | None = None,
-    ) -> VAELossOutput:
+    ) -> LossOutput:
         recon_loss = F.binary_cross_entropy_with_logits(recon, images, reduction="mean")
 
         logvar = logvar.clamp(-30.0, 20.0)
@@ -220,9 +254,13 @@ class BetaTCVAELoss(nn.Module):
         effective_beta = beta if beta is not None else self.beta
         kl_loss = self.alpha * mi + effective_beta * tc + self.gamma * dwkl
 
-        return VAELossOutput(
+        return LossOutput(
             total=recon_loss + kl_loss,
-            recon=recon_loss,
-            kl=kl_loss,
-            perceptual=torch.zeros_like(mi),
+            components=TCVAEComponents(
+                recon=recon_loss,
+                kl=kl_loss,
+                mi=mi,
+                tc=tc,
+                dwkl=dwkl,
+            ),
         )

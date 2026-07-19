@@ -21,6 +21,7 @@ def load_from_wandb(
     tag: str = "latest",
 ) -> Path:
     """Load a checkpoint from wandb artifacts. Uses the most recent checkpoint unless tag is provided."""
+    # TODO use use_artifact instead (might solve other inconsistencies as well)
     print(f"Loading checkpoint {ckpt_name}:{tag} from Weights & Biases artifacts...")
     entity = "jmartini-tu-darmstadt"
     project = "master-thesis"
