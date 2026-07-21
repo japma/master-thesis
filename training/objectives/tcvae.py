@@ -38,19 +38,19 @@ class TCVAEObjective(AbstractObjective):
         loss: TCVAELossOutput = self.loss_fn(
             images, outputs, dataset_size=self.train_data_size
         )
-        self.optimizer.zero_grad()
+        self.optimizer.zero_grad(set_to_none=True)
         loss.total.backward()
         self.optimizer.step()
 
         metrics = {
-            "total": loss.total.item(),
-            "recon": loss.recon.item(),
-            "kl": loss.kl.item(),
+            "total": loss.total,
+            "recon": loss.recon,
+            "kl": loss.kl,
             # TODO maybe add the perc loss here as well
-            # "perceptual": loss.perceptual.item(),
-            "mi": loss.mi.item(),
-            "tc": loss.tc.item(),
-            "dwkl": loss.dwkl.item(),
+            # "perceptual": loss.perceptual,
+            "mi": loss.mi,
+            "tc": loss.tc,
+            "dwkl": loss.dwkl,
         }
         return StepOutput(metrics=metrics, batch_size=images.size(0))
 
@@ -64,13 +64,13 @@ class TCVAEObjective(AbstractObjective):
             )
 
         metrics = {
-            "total": loss.total.item(),
-            "recon": loss.recon.item(),
-            "kl": loss.kl.item(),
-            # "perceptual": loss.perceptual.item(),
-            "mi": loss.mi.item(),
-            "tc": loss.tc.item(),
-            "dwkl": loss.dwkl.item(),
+            "total": loss.total,
+            "recon": loss.recon,
+            "kl": loss.kl,
+            # "perceptual": loss.perceptual,
+            "mi": loss.mi,
+            "tc": loss.tc,
+            "dwkl": loss.dwkl,
         }
         return StepOutput(metrics=metrics, batch_size=images.size(0))
 

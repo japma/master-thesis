@@ -34,7 +34,7 @@ class BetaVAEObjective(AbstractObjective):
         self.model.train()
         outputs: VAEForwardOutput = self.model(images)
 
-        current_beta = self.beta_scheduler.beta
+        current_beta: float = self.beta_scheduler.beta
         loss: VAELossOutput = self.loss_fn(images, outputs, beta=current_beta)
         self.optimizer.zero_grad()
         loss.total.backward()
@@ -42,11 +42,11 @@ class BetaVAEObjective(AbstractObjective):
         self.beta_scheduler.step()
 
         metrics = {
-            "total": loss.total.item(),
-            "recon": loss.recon.item(),
-            "kl": loss.kl.item(),
-            "perceptual": loss.perceptual.item(),
-            "beta": current_beta,
+            "total": loss.total,
+            "recon": loss.recon,
+            "kl": loss.kl,
+            "perceptual": loss.perceptual,
+            "beta": torch.tensor(current_beta),
         }
         return StepOutput(metrics=metrics, batch_size=images.size(0))
 
@@ -58,10 +58,10 @@ class BetaVAEObjective(AbstractObjective):
             loss: VAELossOutput = self.loss_fn(images, outputs)
 
         metrics = {
-            "total": loss.total.item(),
-            "recon": loss.recon.item(),
-            "kl": loss.kl.item(),
-            "perceptual": loss.perceptual.item(),
+            "total": loss.total,
+            "recon": loss.recon,
+            "kl": loss.kl,
+            "perceptual": loss.perceptual,
         }
         return StepOutput(metrics=metrics, batch_size=images.size(0))
 

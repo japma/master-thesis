@@ -6,7 +6,7 @@ import torch
 
 @dataclass
 class StepOutput:
-    metrics: dict[str, float]
+    metrics: dict[str, torch.Tensor]
     batch_size: int
 
 

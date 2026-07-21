@@ -1,3 +1,4 @@
+import math
 from dataclasses import dataclass
 
 import torch
@@ -6,6 +7,8 @@ from torch import nn
 
 from models.autoencoder.variational_autoencoder import VAEForwardOutput
 from training.losses.base import LossOutput
+
+LOG_2PI = math.log(2.0 * math.pi)
 
 
 def kl_per_dim(mu: torch.Tensor, logvar: torch.Tensor) -> torch.Tensor:
@@ -16,8 +19,7 @@ def log_density_gaussian(
     z: torch.Tensor, mu: torch.Tensor, logvar: torch.Tensor
 ) -> torch.Tensor:
     """Elementwise log density of a diagonal Gaussian N(mu, exp(logvar))."""
-    std = torch.exp(0.5 * logvar)
-    return torch.distributions.Normal(mu, std).log_prob(z)
+    return -0.5 * (LOG_2PI + logvar + (z - mu).pow(2) / torch.exp(logvar))
 
 
 @dataclass
