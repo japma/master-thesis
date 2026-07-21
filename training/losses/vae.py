@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from models.autoencoder.variational_autoencoder import VAEForwardOutput
-from training.losses.base import LossOutput, kl_loss
+from training.losses.base import LossOutput, kl_loss_fn
 from training.losses.perceptual import VGGPerceptualLoss
 
 
@@ -39,23 +39,27 @@ class VAELoss(nn.Module):
         beta: float | None = None,
     ) -> VAELossOutput:
 
-        recon = F.binary_cross_entropy_with_logits(
+        recon_loss = F.binary_cross_entropy_with_logits(
             model_outputs.reconstructed, images, reduction="mean"
         )
 
-        kl = kl_loss(model_outputs.mu, model_outputs.log_var)
+        kl_loss = kl_loss_fn(
+            model_outputs.mu, model_outputs.log_var, free_bits=self.free_bits
+        )
 
         recon_img = torch.sigmoid(model_outputs.reconstructed)
         if self.perceptual is not None:
-            perc = self.perceptual(images, recon_img)
+            perc = self.perceptual(recon=recon_img, target=images)
         else:
             perc = torch.tensor(0.0, device=images.device)
 
         effective_beta = beta if beta is not None else self.beta
-        total = recon + effective_beta * kl + self.lambda_perceptual * perc
+        total_loss = (
+            recon_loss + effective_beta * kl_loss + self.lambda_perceptual * perc
+        )
         return VAELossOutput(
-            total=total,
-            recon=recon,
-            kl=kl,
+            total=total_loss,
+            recon=recon_loss,
+            kl=kl_loss,
             perceptual=perc,
         )

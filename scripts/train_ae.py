@@ -12,6 +12,7 @@ from models import VariationalAutoencoder
 from training.ae_trainer import train_autoencoder
 from training.losses.vae import VAELoss
 from training.objectives.beta_vae import BetaVAEObjective
+from training.schedulers import BetaAnnealingScheduler
 from utils.checkpoints import save_autoencoder
 from utils.config import AERunConfig, load_config
 from utils.reproducibility import resolve_device, seed_everything
@@ -51,8 +52,13 @@ def main() -> None:
     )
 
     optimizer = torch.optim.Adam(ae.parameters(), lr=training_cfg.learning_rate)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+    lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer, T_max=training_cfg.epochs
+    )
+    beta_scheduler = BetaAnnealingScheduler(
+        beta_start=cfg.training.beta_start,
+        beta_end=cfg.training.beta_end,
+        num_steps=len(train_loader) * training_cfg.kl_warmup_epochs,
     )
 
     loss_fn = VAELoss(beta=beta, free_bits=training_cfg.free_bits).to(device)
@@ -67,8 +73,9 @@ def main() -> None:
     objective = BetaVAEObjective(
         model=ae,
         optimizer=optimizer,
-        scheduler=scheduler,
+        lr_scheduler=lr_scheduler,
         loss_fn=loss_fn,
+        beta_scheduler=beta_scheduler,
     )
 
     train_autoencoder(

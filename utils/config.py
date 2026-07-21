@@ -92,6 +92,8 @@ class AutoencoderTrainingConfig(BaseTrainingConfig):
     kl_warmup_epochs: int
     # TODO move into config files if needed
     free_bits: float = 0.5
+    beta_start: float = 0.0
+    beta_end: float = 1.0
     lambda_perceptual: float = 1.0
     lambda_adversarial: float = 0.1
     adversarial_warmup_steps: int = 1000
