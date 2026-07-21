@@ -3,11 +3,11 @@ from tqdm import tqdm
 
 
 class LatentNormalizer:
-    def __init__(self):
+    def __init__(self) -> None:
         self.mean = None
         self.std = None
 
-    def fit(self, autoencoder, dataloader, device):
+    def fit(self, autoencoder, dataloader, device) -> None:
         latents = []
         with torch.no_grad():
             for images, _ in tqdm(dataloader, desc="Fitting normalizer"):

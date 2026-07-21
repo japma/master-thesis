@@ -35,7 +35,7 @@ def derive_head_shapes(einet_layers) -> list[tuple]:
 
 
 class ConditioningMLP(nn.Module):
-    def __init__(self, num_classes: int, einet_layers, h_dims: list[int]):
+    def __init__(self, num_classes: int, einet_layers, h_dims: list[int]) -> None:
         super().__init__()
         self.num_classes = num_classes
 

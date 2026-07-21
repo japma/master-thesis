@@ -1,3 +1,6 @@
+from numpy import ndarray
+from numpy import generic
+from numpy import dtype
 import numpy as np
 import torch
 from scipy.special import logsumexp
@@ -8,7 +11,7 @@ from models.cspn.psinet.einsum_network import log_likelihoods
 class EinetMixture:
     """A simple class for mixtures of Einets, implemented in numpy."""
 
-    def __init__(self, p, einets):
+    def __init__(self, p, einets) -> None:
 
         if len(p) != len(einets):
             raise AssertionError("p and einets must have the same length.")
@@ -28,7 +31,7 @@ class EinetMixture:
             raise AssertionError("all EiNet components must have the same num_dims.")
         self.num_dims = next(iter(num_dims))
 
-    def sample(self, N, **kwargs):
+    def sample(self, N, **kwargs) -> ndarray:
         samples = np.zeros((N, self.num_var, self.num_dims))
         for k in range(N):
             rand_idx = np.sum(np.random.rand() > np.cumsum(self.p[0:-1]))
@@ -42,7 +45,7 @@ class EinetMixture:
             samples[k, ...] = s
         return samples
 
-    def conditional_sample(self, x, marginalize_idx, **kwargs):
+    def conditional_sample(self, x, marginalize_idx, **kwargs) -> ndarray:
         marginalization_backup = []
         component_posterior = np.zeros((self.num_components, x.shape[0]))
         for einet_counter, einet in enumerate(self.einets):
@@ -73,7 +76,7 @@ class EinetMixture:
 
         return samples
 
-    def log_likelihood(self, x, labels=None, batch_size=100):
+    def log_likelihood(self, x, labels=None, batch_size: int=100) -> float:
         with torch.no_grad():
             idx_batches = torch.arange(
                 0, x.shape[0], dtype=torch.int64, device=x.device

@@ -10,7 +10,7 @@ from torch.utils.data import Dataset
 
 
 class CocoDataset(Dataset):
-    def __init__(self, root: Path, split: str, transform: Callable | None = None):
+    def __init__(self, root: Path, split: str, transform: Callable | None = None) -> None:
         self.root = Path(root)
         self.transform = transform
         self.coco = COCO(ann_file)
@@ -25,7 +25,7 @@ class CocoDataset(Dataset):
         ]
 
     @property
-    def num_classes(self):
+    def num_classes(self) -> int:
         return len(self.cat_ids)
 
     def _primary_label(self, img_id: int) -> int:
@@ -37,7 +37,7 @@ class CocoDataset(Dataset):
         most_common_cat_id = counts.most_common(1)[0][0]
         return self.cat_id_to_idx[most_common_cat_id]
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.img_ids)
 
     def __getitem__(self, index):
@@ -51,7 +51,7 @@ class CocoDataset(Dataset):
 
 
 class CocoCachedDataset(Dataset):
-    def __init__(self, root, split="train", transform=None):
+    def __init__(self, root, split: str="train", transform=None) -> None:
         self.root = Path(root)
         self.split = split
         self.transform = transform
@@ -68,10 +68,10 @@ class CocoCachedDataset(Dataset):
         ]
 
     @property
-    def num_classes(self):
+    def num_classes(self) -> int:
         return 80
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.samples)
 
     def __getitem__(self, index):

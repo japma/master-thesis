@@ -14,7 +14,7 @@ model:
   base_channels: 32
 
 training:
-  vae_type: beta
+  vae_type: tcvae
   epochs: 50
   learning_rate: 0.0005
   batch_size: 128

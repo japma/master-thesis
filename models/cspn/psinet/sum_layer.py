@@ -1,3 +1,5 @@
+from torch.nn.modules.module import Module
+from torch._tensor import Tensor
 from itertools import count
 
 import torch
@@ -15,7 +17,7 @@ class SumLayer(Layer):
     EinsumLayer and MixingLayer are derived from SumLayer.
     """
 
-    def __init__(self, params_shape, normalization_dims, use_em, params_mask=None):
+    def __init__(self, params_shape, normalization_dims, use_em, params_mask=None) -> None:
         """
         :param params_shape: shape of tensor containing all sum weights (tuple of ints).
         :param normalization_dims: the dimensions (axes) of the sum-weights which shall be normalized
@@ -62,7 +64,7 @@ class SumLayer(Layer):
         sample_idx,
         params,
         use_evidence=False,
-        mode="sample",
+        mode: str="sample",
         **kwargs,
     ):
         """
@@ -85,7 +87,7 @@ class SumLayer(Layer):
 
     # --------------------------------------------------------------------------------
 
-    def default_initializer(self):
+    def default_initializer(self) -> Tensor:
         """
         A simple initializer for normalized sum-weights.
         :return: initial parameters
@@ -99,7 +101,7 @@ class SumLayer(Layer):
             )
         return params
 
-    def initialize(self, initializer="default"):
+    def initialize(self, initializer: str="default") -> None:
         """
         Initialize the parameters for this SumLayer.
 
@@ -142,8 +144,8 @@ class SumLayer(Layer):
         dist_idx,
         node_idx,
         sample_idx,
-        use_evidence=False,
-        mode="sample",
+        use_evidence: bool=False,
+        mode: str="sample",
         **kwargs,
     ):
         """
@@ -161,12 +163,12 @@ class SumLayer(Layer):
             dist_idx, node_idx, sample_idx, params, use_evidence, mode, **kwargs
         )
 
-    def em_purge(self):
+    def em_purge(self) -> None:
         """Discard em statistics."""
         if self.params is not None:
             self.params.grad = None
 
-    def em_process_batch(self):
+    def em_process_batch(self) -> None:
         """
         Accumulate EM statistics of current batch. This should be called after call to backwards() on the output of
         the EiNet.
@@ -182,7 +184,7 @@ class SumLayer(Layer):
                 self.em_update(True)
                 self._online_em_counter = 0
 
-    def em_update(self, _triggered=False):
+    def em_update(self, _triggered: bool=False) -> None:
         """
         Do an EM update. If the setting is online EM (online_em_stepsize is not None), then this function does nothing,
         since updates are triggered automatically. Thus, leave the private parameter _triggered alone.
@@ -223,7 +225,7 @@ class SumLayer(Layer):
         (non-negative, normalized). Handles a leading batch dimension in params_in.
         """
 
-        def reparam(params_in):
+        def reparam(params_in) -> Tensor:
             # params_in: (batch, *params_shape)
             # self.normalization_dims indexes into params_shape (without the batch dim).
             # Shift them up by 1 to account for the leading batch dim.
@@ -326,7 +328,7 @@ class EinsumLayer(SumLayer):
     as there are *product nodes*. Thus, an argument to the constructor is the list of product nodes in this layer.
     """
 
-    def __init__(self, graph, products, layers, use_em=True):
+    def __init__(self, graph, products, layers, use_em: bool=True) -> None:
 
         self.products = products
 
@@ -379,7 +381,7 @@ class EinsumLayer(SumLayer):
         # Furthermore, the following code also generates self.permutation_child_0 and self.permutation_child_1,
         # which are permutations of the left and right input nodes. We need this to get them in the same order as
         # assumed in self.products.
-        def do_input_bookkeeping(layers, child_num):
+        def do_input_bookkeeping(layers, child_num: int) -> None:
             permutation = [None] * len(self.inputs)
             permutation_counter = count(0)
             for layer_counter, layer in enumerate(layers):
@@ -426,12 +428,12 @@ class EinsumLayer(SumLayer):
                 self.mixing_component_idx[node].append(c)
                 self.dummy_idx = len(self.products)
 
-    def _forward(self, params):
+    def _forward(self, params) -> None:
         """
         EinsumLayer forward pass.
         """
 
-        def cidx(layer_counter, child_num):
+        def cidx(layer_counter: int, child_num: int) -> Module | Tensor:
             return self.__getattr__(f"idx_layer_{layer_counter}_child_{child_num}")
 
         self._last_params = params
@@ -477,8 +479,8 @@ class EinsumLayer(SumLayer):
         node_idx,
         sample_idx,
         params,
-        use_evidence=False,
-        mode="sample",
+        use_evidence: bool=False,
+        mode: str="sample",
         **kwargs,
     ):
         """
@@ -590,7 +592,7 @@ class EinsumMixingLayer(SumLayer):
     excerpt.
     """
 
-    def __init__(self, graph, nodes, einsum_layer, use_em):
+    def __init__(self, graph, nodes, einsum_layer, use_em) -> None:
         """
         :param graph: the PC graph (see Graph.py)
         :param nodes: the nodes of the current layer (see constructor of EinsumNetwork), which have multiple children
@@ -640,7 +642,7 @@ class EinsumMixingLayer(SumLayer):
 
         self.register_buffer("padded_idx", torch.tensor(padded_idx))
 
-    def _forward(self, params):
+    def _forward(self, params) -> None:
         self._last_params = params
 
         self.child_log_prob = self.layers[0].prob[:, :, self.padded_idx]
@@ -666,8 +668,8 @@ class EinsumMixingLayer(SumLayer):
         node_idx,
         sample_idx,
         params,
-        use_evidence=False,
-        mode="sample",
+        use_evidence: bool=False,
+        mode: str="sample",
         **kwargs,
     ):
         """Helper routine for backtracking in EiNets."""

@@ -5,7 +5,7 @@ from torch.utils.data import Dataset
 
 
 class TinyImageNetDataset(Dataset):
-    def __init__(self, root, split, transform=None):
+    def __init__(self, root, split, transform=None) -> None:
         self.root = Path(root)
         self.split = split
         self.transform = transform
@@ -37,7 +37,7 @@ class TinyImageNetDataset(Dataset):
                 f"No samples found for Tiny ImageNet split '{split}' in {self.root}."
             )
 
-    def _load_class_names(self):
+    def _load_class_names(self) -> list[str]:
         """Load human-readable class labels aligned with self.classes."""
         words_path = self.root / "words.txt"
         if not words_path.exists():
@@ -56,7 +56,7 @@ class TinyImageNetDataset(Dataset):
 
         return [wnid_to_name.get(wnid, wnid) for wnid in self.classes]
 
-    def _load_train_samples(self):
+    def _load_train_samples(self) -> None:
         train_dir = self.root / "train"
         for class_name in self.classes:
             image_dir = train_dir / class_name / "images"
@@ -66,7 +66,7 @@ class TinyImageNetDataset(Dataset):
                 if image_path.suffix.upper() == ".JPEG":
                     self.samples.append((image_path, self.class_to_idx[class_name]))
 
-    def _load_val_samples(self):
+    def _load_val_samples(self) -> None:
         val_dir = self.root / "val"
         annotations_path = val_dir / "val_annotations.txt"
         images_dir = val_dir / "images"
@@ -88,7 +88,7 @@ class TinyImageNetDataset(Dataset):
                 if image_path.exists():
                     self.samples.append((image_path, self.class_to_idx[class_name]))
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.samples)
 
     def __getitem__(self, index):

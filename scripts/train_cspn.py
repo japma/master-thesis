@@ -16,7 +16,7 @@ from utils.config import CSPNRunConfig, CSPNType, load_config
 from utils.reproducibility import resolve_device, seed_everything
 
 
-def main():
+def main() -> None:
     cfg, cfg_seed = load_config()
     assert isinstance(cfg, CSPNRunConfig)
     dataset_cfg = cfg.dataset

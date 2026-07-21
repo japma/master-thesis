@@ -1,7 +1,7 @@
 from utils.config import load_config
 
 
-def main():
+def main() -> None:
     cfg = load_config()
     print(cfg)
 

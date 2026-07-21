@@ -1,3 +1,6 @@
+from typing import Mapping
+from typing import Hashable
+from networkx.classes.digraph import DiGraph
 from itertools import count
 
 import networkx as nx
@@ -16,7 +19,7 @@ class EiNetAddress:
     EiNetAddress stores the "address" of the implementation in the EinsumNetwork.
     """
 
-    def __init__(self, layer=None, idx=None, replica_idx=None):
+    def __init__(self, layer=None, idx=None, replica_idx=None) -> None:
         """
         :param layer: which layer implements this node?
         :param idx: which index does the node have in the the layers log-density tensor?
@@ -41,7 +44,7 @@ class DistributionVector:
     # we assign each object a unique id.
     _id_counter = count(0)
 
-    def __init__(self, scope):
+    def __init__(self, scope) -> None:
         """
         :param scope: the scope of this node
         """
@@ -50,7 +53,7 @@ class DistributionVector:
         self.einet_address = EiNetAddress()
         self.id = next(self._id_counter)
 
-    def __lt__(self, other):
+    def __lt__(self, other) -> bool:
         if isinstance(other, Product):
             return True
         else:
@@ -67,18 +70,18 @@ class Product:
     # we assign each object a unique id.
     _id_counter = count(0)
 
-    def __init__(self, scope):
+    def __init__(self, scope) -> None:
         self.scope = tuple(sorted(scope))
         self.id = next(self._id_counter)
 
-    def __lt__(self, other):
+    def __lt__(self, other) -> bool:
         if isinstance(other, DistributionVector):
             return False
         else:
             return (self.scope, self.id) < (other.scope, other.id)
 
 
-def check_if_is_partition(X, P):
+def check_if_is_partition(X, P) -> bool:
     """
     Checks if P represents a partition of X.
 
@@ -94,7 +97,7 @@ def check_if_is_partition(X, P):
     return set(X) == union and non_overlapping
 
 
-def check_graph(graph):
+def check_graph(graph: DiGraph[DistributionVector]) -> tuple[bool, LiteralString]:
     """
     Check if a graph satisfies our requirements for PC graphs.
 
@@ -170,13 +173,13 @@ def get_roots(graph):
     return [n for n, d in graph.in_degree() if d == 0]
 
 
-def get_sums(graph):
+def get_sums(graph) -> list[DistributionVector]:
     return [
         n for n, d in graph.out_degree() if d > 0 and isinstance(n, DistributionVector)
     ]
 
 
-def get_products(graph):
+def get_products(graph) -> list[Product]:
     return [n for n in graph.nodes() if isinstance(n, Product)]
 
 
@@ -184,14 +187,14 @@ def get_leaves(graph):
     return [n for n, d in graph.out_degree() if d == 0]
 
 
-def get_distribution_nodes_by_scope(graph, scope):
+def get_distribution_nodes_by_scope(graph: DiGraph[DistributionVector], scope) -> list[DistributionVector]:
     scope = tuple(sorted(scope))
     return [
         n for n in graph.nodes if isinstance(n, DistributionVector) and n.scope == scope
     ]
 
 
-def partition_on_node(graph, node, scope_partition):
+def partition_on_node(graph, node, scope_partition) -> tuple[Product, list[DistributionVector]]:
     """
     Helper routine to extend the graph.
 
@@ -218,8 +221,8 @@ def partition_on_node(graph, node, scope_partition):
 
 
 def randomly_partition_on_node(
-    graph, node, num_parts=2, proportions=None, rand_state=None
-):
+    graph: DiGraph[DistributionVector], node, num_parts: int=2, proportions=None, rand_state=None
+) -> tuple[Product, list[DistributionVector]]:
     """
     Calls partition_on_node with a random partition -- used for random binary trees (RAT-SPNs).
 
@@ -263,7 +266,7 @@ def randomly_partition_on_node(
     return partition_on_node(graph, node, child_indices)
 
 
-def random_binary_trees(num_var, depth, num_repetitions):
+def random_binary_trees(num_var: int, depth: int, num_repetitions: int) -> DiGraph[DistributionVector]:
     """
     Generate a PC graph via several random binary trees -- RAT-SPNs.
 
@@ -296,7 +299,7 @@ def random_binary_trees(num_var, depth, num_repetitions):
     return graph
 
 
-def cut_hypercube(hypercube, axis, pos):
+def cut_hypercube(hypercube, axis: int, pos: int):
     """
     Helper routine for Poon-Domingos (PD) structure. Cuts a discrete hypercube into two sub-hypercubes.
 
@@ -346,7 +349,7 @@ class HypercubeToScopeCache:
     This class just represents a cached mapping from hypercubes to their scopes.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._hyper_cube_to_scope = {}
 
     def __call__(self, hypercube, shape):
@@ -374,7 +377,7 @@ class HypercubeToScopeCache:
         return scope
 
 
-def poon_domingos_structure(shape, delta, axes=None, max_split_depth=None):
+def poon_domingos_structure(shape: tuple[int, int], delta, axes=None, max_split_depth=None) -> DiGraph[DistributionVector]:
     """
     The PD structure was proposed in
         Sum-Product Networks: A New Deep Architecture
@@ -586,7 +589,7 @@ def binary_tree_spn(shape):
     root = DistributionVector(hypercube_scope)
     graph.add_node(root)
 
-    def build_tree(graph, hypercubes, depth, axis):
+    def build_tree(graph: DiGraph[DistributionVector], hypercubes, depth: int, axis: int):
         """
         Build a binary tree SPN which has all leaf nodes in same layer.
         This is currently required as the Einsum-network does not support sum/leaf nodes
@@ -652,7 +655,7 @@ def binary_tree_spn(shape):
     return graph
 
 
-def topological_layers(graph):
+def topological_layers(graph) -> list[list[DistributionVector]]:
     """
     Arranging the PC graph in topological layers -- see Algorithm 1 in the paper.
 
@@ -693,7 +696,7 @@ def topological_layers(graph):
     return layers
 
 
-def plot_graph(graph):
+def plot_graph(graph: DiGraph[DistributionVector]) -> None:
     """
     Plots the PC graph.
 

@@ -1,3 +1,4 @@
+from torch._tensor import Tensor
 import torch
 
 from models.cspn.psinet.exponential_family_array import NormalArray
@@ -37,12 +38,12 @@ class Args:
         num_input_distributions: int = 10,
         num_sums: int = 10,
         num_classes: int = 1,
-        exponential_family=NormalArray,
+        exponential_family: type[NormalArray]=NormalArray,
         exponential_family_args=None,
         use_em: bool = True,
         online_em_frequency: int = 1,
         online_em_stepsize: float = 0.05,
-    ):
+    ) -> None:
         self.num_var = num_var
         self.num_dims = num_dims
         self.num_input_distributions = num_input_distributions
@@ -78,7 +79,7 @@ class EinsumNetwork(torch.nn.Module):
     The class EinsumNetork mainly governs the layer-wise layout, initialization, forward() calls, EM learning, etc.
     """
 
-    def __init__(self, graph, param_nn=None, args=None):
+    def __init__(self, graph, param_nn=None, args=None) -> None:
         """Make an EinsumNetwork."""
         super().__init__()
 
@@ -147,7 +148,7 @@ class EinsumNetwork(torch.nn.Module):
             self.args.online_em_frequency, self.args.online_em_stepsize
         )
 
-    def initialize(self, init_dict=None):
+    def initialize(self, init_dict=None) -> None:
         """
         Initialize layers.
 
@@ -164,7 +165,7 @@ class EinsumNetwork(torch.nn.Module):
         for layer in self.einet_layers:
             layer.initialize(init_dict.get(layer, "default"))
 
-    def set_marginalization_idx(self, idx):
+    def set_marginalization_idx(self, idx) -> None:
         """Set indices of marginalized variables."""
         self.einet_layers[0].set_marginalization_idx(idx)
 
@@ -172,7 +173,7 @@ class EinsumNetwork(torch.nn.Module):
         """Get indices of marginalized variables."""
         return self.einet_layers[0].get_marginalization_idx()
 
-    def forward(self, x, y):
+    def forward(self, x: Tensor, y):
         """Evaluate the EinsumNetwork feed forward.
         x: x for p(x|y) (target variable), shape=[B, N]
         y: evidence for p(x|y) (conditional variable) shape=[B, M]
@@ -205,7 +206,7 @@ class EinsumNetwork(torch.nn.Module):
 
     def backtrack(
         self, y, num_samples=1, class_idx=0, x=None, mode="sampling", **kwargs
-    ):
+    ) -> Tensor | None:
         """
         Perform backtracking; for sampling or MPE approximation.
         """
@@ -334,7 +335,7 @@ class EinsumNetwork(torch.nn.Module):
                 return samples
         return None
 
-    def sample(self, y, num_samples=1, class_idx=0, x=None, **kwargs):
+    def sample(self, y, num_samples: int=1, class_idx: int=0, x=None, **kwargs) -> Tensor | None:
         return self.backtrack(
             y,
             num_samples=num_samples,
@@ -344,7 +345,7 @@ class EinsumNetwork(torch.nn.Module):
             **kwargs,
         )
 
-    def mpe(self, y, num_samples=1, class_idx=0, x=None, **kwargs):
+    def mpe(self, y, num_samples: int=1, class_idx: int=0, x=None, **kwargs) -> Tensor | None:
         return self.backtrack(
             y,
             num_samples=num_samples,
@@ -354,15 +355,15 @@ class EinsumNetwork(torch.nn.Module):
             **kwargs,
         )
 
-    def em_set_hyperparams(self, online_em_frequency, online_em_stepsize, purge=True):
+    def em_set_hyperparams(self, online_em_frequency, online_em_stepsize, purge=True) -> None:
         for l in self.einet_layers:
             l.em_set_hyperparams(online_em_frequency, online_em_stepsize, purge)
 
-    def em_process_batch(self):
+    def em_process_batch(self) -> None:
         for l in self.einet_layers:
             l.em_process_batch()
 
-    def em_update(self):
+    def em_update(self) -> None:
         for l in self.einet_layers:
             l.em_update()
 
@@ -397,7 +398,7 @@ def eval_accuracy_batched(einet, x, labels, batch_size):
         return (n_correct.float() / x.shape[0]).item()
 
 
-def eval_loglikelihood_batched(einet, x, labels=None, batch_size=100):
+def eval_loglikelihood_batched(einet, x, labels=None, batch_size: int=100):
     """Computes log-likelihood in batched way."""
     with torch.no_grad():
         idx_batches = torch.arange(

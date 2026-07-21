@@ -14,7 +14,7 @@ class SingleAttributeCelebA(Dataset):
         split: str,
         download: bool = True,
         transform: Callable | None = None,
-    ):
+    ) -> None:
         self.dataset = datasets.CelebA(
             root=root, split=split, download=download, transform=transform
         )

@@ -1,3 +1,4 @@
+from torch._tensor import Tensor
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -7,7 +8,7 @@ from matplotlib.colors import Colormap
 from numpy.typing import NDArray
 
 
-def show(tensor, title=None, width=8):
+def show(tensor: list[Tensor], title=None, width=8) -> None:
     grid = vutils.make_grid(tensor.cpu(), nrow=width, normalize=True)
     plt.figure(figsize=(16, 4), dpi=300)
     plt.imshow(grid.permute(1, 2, 0))
@@ -17,7 +18,7 @@ def show(tensor, title=None, width=8):
     plt.show()
 
 
-def show_comparison(originals, reconstructions, title=None, dpi=150):
+def show_comparison(originals, reconstructions, title=None, dpi: int=150) -> None:
     assert originals.shape == reconstructions.shape, (
         "originals and reconstructions must have the same shape"
     )
@@ -232,7 +233,7 @@ def plot_latent_comparison_multiclass(
     name_reference: str = "Ground truth",
     title: str = "Latent space comparison",
     class_names: list[str] | None = None,
-):
+) -> None:
     a = latents_a.detach().cpu().numpy()
     b = latents_b.detach().cpu().numpy()
 

@@ -17,7 +17,7 @@ class SingleClassSampler(Sampler):
         batch_size: number of samples per batch
     """
 
-    def __init__(self, dataset: Dataset, batch_size: int):
+    def __init__(self, dataset: Dataset, batch_size: int) -> None:
         self.dataset = dataset
         self.batch_size = batch_size
 
@@ -42,5 +42,5 @@ class SingleClassSampler(Sampler):
 
         return iter(idx for batch in batches for idx in batch)
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.dataset)

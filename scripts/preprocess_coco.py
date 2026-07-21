@@ -50,7 +50,7 @@ def _process_image(args):
         return None
 
 
-def load_annotations_and_build_label_map():
+def load_annotations_and_build_label_map() -> dict[int, int]:
     print("Loading COCO annotations...")
 
     image_to_label = {}
@@ -102,7 +102,7 @@ def load_annotations_and_build_label_map():
     return image_to_label
 
 
-def get_all_images():
+def get_all_images() -> list[tuple[int, str, str]]:
     images = []
 
     # training images
@@ -130,7 +130,7 @@ def get_all_images():
     return images
 
 
-def main():
+def main() -> None:
     rtpt = RTPT(
         name_initials="JM",
         experiment_name="COCO Preprocessing",

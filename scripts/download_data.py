@@ -1,7 +1,7 @@
 from dataset_loaders.helpers import download_datasets
 
 
-def main():
+def main() -> None:
     print("Downloading datasets")
     download_datasets()
     print("Done")

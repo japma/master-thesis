@@ -4,6 +4,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from models.autoencoder.variational_autoencoder import VAEForwardOutput
 from training.losses.base import LossOutput
 
 
@@ -41,67 +42,87 @@ class BetaTCVAELoss(nn.Module):
 
     def __init__(
         self,
-        dataset_size: int,
         alpha: float = 1.0,
         beta: float = 6.0,
         gamma: float = 1.0,
         free_bits: float = 0.5,
     ) -> None:
         super().__init__()
-        self.dataset_size = dataset_size
         self.alpha = alpha
         self.beta = beta
         self.gamma = gamma
         self.free_bits = free_bits
 
     def _decompose_kl(
-        self, z: torch.Tensor, mu: torch.Tensor, logvar: torch.Tensor
+        self,
+        z: torch.Tensor,
+        mu: torch.Tensor,
+        log_var: torch.Tensor,
+        dataset_size: int,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         batch_size = z.shape[0]
 
-        log_qz_given_x = log_density_gaussian(z, mu, logvar).sum(dim=1)
+        log_qz_given_x = log_density_gaussian(z, mu, log_var).sum(dim=1)
 
         mu_expanded = mu.unsqueeze(0)
-        logvar_expanded = logvar.unsqueeze(0)
+        log_var_expanded = log_var.unsqueeze(0)
         z_expanded = z.unsqueeze(1)
-        log_qz_matrix = log_density_gaussian(z_expanded, mu_expanded, logvar_expanded)
+
+        log_qz_matrix = log_density_gaussian(z_expanded, mu_expanded, log_var_expanded)
 
         log_norm = torch.log(
             torch.tensor(
-                batch_size * self.dataset_size, dtype=torch.float32, device=z.device
+                batch_size * dataset_size, dtype=torch.float32, device=z.device
             )
         )
 
-        log_qz = torch.logsumexp(log_qz_matrix.sum(dim=2), dim=1) - log_norm
-        log_qz_product = (torch.logsumexp(log_qz_matrix, dim=1) - log_norm).sum(dim=1)
+        log_qz_joint = log_qz_matrix.sum(dim=2)
+        log_qz = torch.logsumexp(log_qz_joint, dim=1) - log_norm
 
-        log_pz = log_density_gaussian(z, torch.zeros_like(z), torch.zeros_like(z)).sum(
-            dim=1
+        log_qz_marginals = torch.logsumexp(log_qz_matrix, dim=1) - log_norm
+        log_qz_product = log_qz_marginals.sum(dim=1)
+
+        log_pz_per_dim = log_density_gaussian(
+            z,
+            torch.zeros_like(z),
+            torch.zeros_like(z),
         )
+        log_pz = log_pz_per_dim.sum(dim=1)
 
-        # TODO maybe those means here are the problem
         mutual_info = (log_qz_given_x - log_qz).mean()
         total_correlation = (log_qz - log_qz_product).mean()
-        dimension_wise_kl = (log_qz_product - log_pz).clamp(min=self.free_bits).mean()
+        dwkl_per_dim = log_qz_marginals - log_pz_per_dim
+
+        if self.free_bits > 0:
+            dwkl_per_dim = dwkl_per_dim.clamp(min=self.free_bits)
+
+        dimension_wise_kl = dwkl_per_dim.sum(dim=1).mean()
 
         return mutual_info, total_correlation, dimension_wise_kl
 
     def forward(
         self,
-        images: torch.Tensor,
-        recon: torch.Tensor,
-        mu: torch.Tensor,
-        logvar: torch.Tensor,
-        z: torch.Tensor,
-        beta: float | None = None,
+        target: torch.Tensor,
+        model_output: VAEForwardOutput,
+        dataset_size: int,
     ) -> TCVAELossOutput:
-        recon_loss = F.binary_cross_entropy_with_logits(recon, images, reduction="mean")
+        recon_loss = (
+            F.binary_cross_entropy_with_logits(
+                model_output.reconstructed,
+                target,
+                reduction="none",
+            )
+            .flatten(1)
+            .sum(dim=1)
+            .mean()
+        )
 
-        logvar = logvar.clamp(-30.0, 20.0)
-        mi, tc, dwkl = self._decompose_kl(z, mu, logvar)
+        log_var = model_output.log_var.clamp(-30.0, 20.0)
+        mi, tc, dwkl = self._decompose_kl(
+            model_output.latent, model_output.mu, log_var, dataset_size=dataset_size
+        )
 
-        effective_beta = beta if beta is not None else self.beta
-        kl_loss = self.alpha * mi + effective_beta * tc + self.gamma * dwkl
+        kl_loss = self.alpha * mi + self.beta * tc + self.gamma * dwkl
 
         return TCVAELossOutput(
             total=recon_loss + kl_loss,

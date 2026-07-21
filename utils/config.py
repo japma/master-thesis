@@ -1,3 +1,4 @@
+from typing import Self
 import argparse
 from enum import StrEnum
 from pathlib import Path
@@ -6,12 +7,17 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, model_validator
 
-_RUNS_DIR = Path(__file__).parent.parent / "configv2" / "runs"
-
 
 class AutoencoderType(StrEnum):
     VARIATIONAL = "variational"
     OTHER = "other"
+
+
+class VAETrainingType(StrEnum):
+    VANILLA = "vanilla"
+    BETA = "beta"
+    FACTOR = "factor"
+    TCVAE = "tcvae"
 
 
 class CSPNType(StrEnum):
@@ -32,7 +38,7 @@ class DatasetConfig(BaseModel):
     num_classes: int
 
     @model_validator(mode="after")
-    def is_square(self):
+    def is_square(self) -> Self:
         assert self.height == self.width
         return self
 
@@ -71,7 +77,7 @@ class CSPNConfig(BaseModel):
     num_classes: int = 0
 
     @model_validator(mode="after")
-    def valid_var_range(self):
+    def valid_var_range(self) -> Self:
         if self.min_var >= self.max_var:
             raise ValueError(
                 f"min_var ({self.min_var}) must be less than max_var ({self.max_var})"
@@ -89,14 +95,23 @@ class BaseTrainingConfig(BaseModel):
 
 class AutoencoderTrainingConfig(BaseTrainingConfig):
     beta: float
+    beta_start: float
+    beta_end: float
     kl_warmup_epochs: int
+    vae_type: VAETrainingType
+
     # TODO move into config files if needed
     free_bits: float = 0.5
-    beta_start: float = 0.0
-    beta_end: float = 1.0
     lambda_perceptual: float = 1.0
     lambda_adversarial: float = 0.1
     adversarial_warmup_steps: int = 1000
+
+    @model_validator(mode="after")
+    def validate_beta(self) -> Self:
+        assert self.beta >= 0
+        assert self.beta_start <= self.beta_end
+        assert self.beta == self.beta_end
+        return self
 
 
 class CSPNTrainingConfig(BaseTrainingConfig):
@@ -122,7 +137,7 @@ class AERunConfig(BaseModel):
     wandb: WandbConfig
 
     @model_validator(mode="after")
-    def inject_image_size(self):
+    def inject_image_size(self) -> Self:
         self.model.image_size = self.dataset.height
         return self
 
@@ -138,12 +153,12 @@ class CSPNRunConfig(BaseModel):
     wandb: WandbConfig
 
     @model_validator(mode="after")
-    def inject_num_classes(self):
+    def inject_num_classes(self) -> Self:
         self.model.num_classes = self.dataset.num_classes
         return self
 
     @model_validator(mode="after")
-    def inject_num_vars(self):
+    def inject_num_vars(self) -> Self:
         self.model.num_vars = self.autoencoder.latent_dim
         return self
 
@@ -156,7 +171,6 @@ def load_config() -> tuple[AERunConfig | CSPNRunConfig, int | None]:
 
     seed = args.seed
 
-    # path = _RUNS_DIR / args.config_file
     path = args.config_file
     if not path.exists():
         raise FileNotFoundError(f"No config found at {path}")

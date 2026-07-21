@@ -1,3 +1,8 @@
+from torchvision.datasets.mnist import MNIST
+from torchvision.datasets.mnist import FashionMNIST
+from torchvision.datasets.flowers102 import Flowers102
+from torchvision.datasets.cifar import CIFAR10
+from torchvision.datasets.celeba import CelebA
 import os
 from pathlib import Path
 
@@ -20,7 +25,7 @@ def _grayscale_to_rgb(x: torch.Tensor) -> torch.Tensor:
     return x.repeat(3, 1, 1)
 
 
-def _load_mnist(train=True, size: tuple[int, int] = (28, 28)):
+def _load_mnist(train: bool=True, size: tuple[int, int] = (28, 28)) -> MNIST:
     return datasets.MNIST(
         root=DATA_DIR,
         train=train,
@@ -34,7 +39,7 @@ def _load_mnist(train=True, size: tuple[int, int] = (28, 28)):
     )
 
 
-def _load_binary_mnist(train=True, size: tuple[int, int] = (28, 28)):
+def _load_binary_mnist(train: bool=True, size: tuple[int, int] = (28, 28)) -> BinaryMNISTDataset:
     return BinaryMNISTDataset(
         root=DATA_DIR,
         train=train,
@@ -48,7 +53,7 @@ def _load_binary_mnist(train=True, size: tuple[int, int] = (28, 28)):
     )
 
 
-def _load_cifar10(train=True, size: tuple[int, int] = (128, 128)):
+def _load_cifar10(train: bool=True, size: tuple[int, int] = (128, 128)) -> CIFAR10:
     return datasets.CIFAR10(
         root=DATA_DIR,
         train=train,
@@ -61,7 +66,7 @@ def _load_cifar10(train=True, size: tuple[int, int] = (128, 128)):
     )
 
 
-def _load_fashion_mnist(train=True, size: tuple[int, int] = (128, 128)):
+def _load_fashion_mnist(train: bool=True, size: tuple[int, int] = (128, 128)) -> FashionMNIST:
     return datasets.FashionMNIST(
         root=DATA_DIR,
         train=train,
@@ -76,7 +81,7 @@ def _load_fashion_mnist(train=True, size: tuple[int, int] = (128, 128)):
 
 
 # TODO fix the path here
-def _load_tinyimagenet(train=True, size: tuple[int, int] = (128, 128)):
+def _load_tinyimagenet(train: bool=True, size: tuple[int, int] = (128, 128)) -> TinyImageNetDataset:
     split = "train" if train else "val"
     return TinyImageNetDataset(
         root="./data/tiny-imagenet-200",
@@ -90,7 +95,7 @@ def _load_tinyimagenet(train=True, size: tuple[int, int] = (128, 128)):
 
 
 # TODO fix this, this is a not good
-def _load_coco(train=True, size: tuple[int, int] = (128, 128)):
+def _load_coco(train: bool=True, size: tuple[int, int] = (128, 128)) -> CocoDataset:
     root = f"./data/coco-2017/{'train' if train else 'val'}/"
     ann_file = (
         f"./data/coco-2017/annotations/instances_{'train' if train else 'val'}2017.json"
@@ -107,7 +112,7 @@ def _load_coco(train=True, size: tuple[int, int] = (128, 128)):
     )
 
 
-def _load_flowers102(train=True, size: tuple[int, int] = (128, 128)):
+def _load_flowers102(train: bool=True, size: tuple[int, int] = (128, 128)) -> Flowers102:
     train_transform = transforms.Compose(
         [
             transforms.RandomRotation(10, expand=True),
@@ -130,7 +135,7 @@ def _load_flowers102(train=True, size: tuple[int, int] = (128, 128)):
     )
 
 
-def _load_cub200(train=True, size: tuple[int, int] = (128, 128)):
+def _load_cub200(train: bool=True, size: tuple[int, int] = (128, 128)) -> Cub200Dataset:
     train_transform = transforms.Compose(
         [
             transforms.RandomHorizontalFlip(),
@@ -153,7 +158,7 @@ def _load_cub200(train=True, size: tuple[int, int] = (128, 128)):
     )
 
 
-def _load_celeba(train=True, size: tuple[int, int] = (64, 64)):
+def _load_celeba(train: bool=True, size: tuple[int, int] = (64, 64)) -> CelebA:
     return datasets.CelebA(
         root=DATA_DIR,
         split="train" if train else "test",
@@ -167,7 +172,7 @@ def _load_celeba(train=True, size: tuple[int, int] = (64, 64)):
     )
 
 
-def _load_celeba_single_attribute(train=True, size: tuple[int, int] = (64, 64)):
+def _load_celeba_single_attribute(train: bool=True, size: tuple[int, int] = (64, 64)) -> SingleAttributeCelebA:
     transform = transforms.Compose(
         [
             transforms.Resize(size),
@@ -237,7 +242,7 @@ def build_data_loaders(
     return train_loader, test_loader
 
 
-def download_datasets():
+def download_datasets() -> None:
     """Download all available datasets by instantiating all of them"""
     for name in _DATASETS:
         ds_fn = _DATASETS[name]

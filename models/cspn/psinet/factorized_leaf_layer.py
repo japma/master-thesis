@@ -1,3 +1,4 @@
+from torch._tensor import Tensor
 import torch
 
 from models.cspn.psinet.layer import Layer
@@ -22,8 +23,8 @@ class FactorizedLeafLayer(Layer):
     """
 
     def __init__(
-        self, leaves, num_var, num_dims, exponential_family, ef_args, use_em=True
-    ):
+        self, leaves, num_var, num_dims, exponential_family, ef_args, use_em: bool=True
+    ) -> None:
         """
         :param leaves: list of PC leaves (DistributionVector, see Graph.py)
         :param num_var: number of random variables (int)
@@ -75,10 +76,10 @@ class FactorizedLeafLayer(Layer):
     def default_initializer(self):
         return self.ef_array.default_initializer()
 
-    def initialize(self, initializer=None):
+    def initialize(self, initializer=None) -> None:
         self.ef_array.initialize(initializer)
 
-    def forward(self, x=None, params=None):
+    def forward(self, x=None, params=None) -> None:
         """
         Compute the factorized leaf densities. We are doing the computation in the log-domain, so this is actually
         computing sums over densities.
@@ -103,7 +104,7 @@ class FactorizedLeafLayer(Layer):
             "bxir,xro->bio", self.ef_array(x, params), self.scope_tensor
         )
 
-    def bounded_integral(self, x_lower=None, x_upper=None, params=None):
+    def bounded_integral(self, x_lower=None, x_upper=None, params=None) -> None:
         """
         Compute the factorized leaf densities. We are doing the computation in the log-domain, so this is actually
         computing sums over densities. This is the same as forward but using bounded integrals.
@@ -129,7 +130,7 @@ class FactorizedLeafLayer(Layer):
             self.scope_tensor,
         )
 
-    def backtrack(self, params, dist_idx, node_idx, mode="sample", **kwargs):
+    def backtrack(self, params, dist_idx, node_idx, mode: str="sample", **kwargs) -> Tensor:
         """
         Backtrackng mechanism for EiNets.
 
@@ -196,19 +197,19 @@ class FactorizedLeafLayer(Layer):
 
             return values
 
-    def em_set_hyperparams(self, online_em_frequency, online_em_stepsize, purge=True):
+    def em_set_hyperparams(self, online_em_frequency, online_em_stepsize, purge: bool=True) -> None:
         self.ef_array.em_set_hyperparams(online_em_frequency, online_em_stepsize, purge)
 
-    def em_purge(self):
+    def em_purge(self) -> None:
         self.ef_array.em_purge()
 
-    def em_process_batch(self):
+    def em_process_batch(self) -> None:
         self.ef_array.em_process_batch()
 
-    def em_update(self):
+    def em_update(self) -> None:
         self.ef_array.em_update()
 
-    def project_params(self, params):
+    def project_params(self, params) -> None:
         self.ef_array.project_params(params)
 
     def reparam_function(self):
@@ -216,7 +217,7 @@ class FactorizedLeafLayer(Layer):
 
     # --------------------------------------------------------------------------------
 
-    def set_marginalization_idx(self, idx):
+    def set_marginalization_idx(self, idx) -> None:
         """Set indicices of marginalized variables."""
         self.ef_array.set_marginalization_idx(idx)
 

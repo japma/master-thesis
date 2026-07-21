@@ -1,9 +1,11 @@
+from torch._tensor import Tensor
+from torch._C import dtype
 import numpy as np
 import torch
 from PIL import Image
 
 
-def one_hot(x, K, dtype=torch.float):
+def one_hot(x, K, dtype: dtype=torch.float) -> Tensor:
     """One hot encoding"""
     with torch.no_grad():
         ind = torch.zeros((*x.shape, K), dtype=dtype, device=x.device)
@@ -16,11 +18,11 @@ def save_image_stack(
     num_rows,
     num_columns,
     filename,
-    margin=5,
-    margin_gray_val=1.0,
-    frame=0,
-    frame_gray_val=0.0,
-):
+    margin: int=5,
+    margin_gray_val: float=1.0,
+    frame: int=0,
+    frame_gray_val: float=0.0,
+) -> None:
     """Save image stack in a tiled image"""
 
     # for gray scale, convert to rgb
@@ -58,7 +60,7 @@ def save_image_stack(
     img.save(filename)
 
 
-def sample_matrix_categorical(p):
+def sample_matrix_categorical(p) -> Tensor:
     """Sample many Categorical distributions represented as rows in a matrix."""
     with torch.no_grad():
         cp = torch.cumsum(p[:, 0:-1], -1)

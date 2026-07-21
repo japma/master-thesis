@@ -6,7 +6,7 @@ class Layer(torch.nn.Module):
     Abstract layer class. Specifies functionality every layer in an EiNet should implement.
     """
 
-    def __init__(self, use_em=True):
+    def __init__(self, use_em: bool=True) -> None:
         super().__init__()
         self._use_em = use_em
         self.prob = None
@@ -54,7 +54,7 @@ class Layer(torch.nn.Module):
         """
         raise NotImplementedError
 
-    def em_set_hyperparams(self, online_em_frequency, online_em_stepsize, purge=True):
+    def em_set_hyperparams(self, online_em_frequency, online_em_stepsize, purge: bool=True) -> None:
         """
         Set new setting for online EM.
 
@@ -70,7 +70,7 @@ class Layer(torch.nn.Module):
         self.online_em_frequency = online_em_frequency
         self.online_em_stepsize = online_em_stepsize
 
-    def em_set_batch(self):
+    def em_set_batch(self) -> None:
         """Set batch mode EM."""
         self.em_set_params(None, None)
 

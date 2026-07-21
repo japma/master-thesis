@@ -10,7 +10,7 @@ class EarlyStopping:
         self,
         patience: int = 10,
         min_delta: float = 0.0,
-    ):
+    ) -> None:
         self.patience = patience
         self.min_delta = min_delta
 

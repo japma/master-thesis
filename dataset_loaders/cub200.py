@@ -9,7 +9,7 @@ from torch.utils.data import Dataset
 class Cub200Dataset(Dataset):
     def __init__(
         self, root: str | Path, train: bool = True, transform: Callable | None = None
-    ):
+    ) -> None:
         self.root = Path(root)
         self.train = train
         self.transform = transform

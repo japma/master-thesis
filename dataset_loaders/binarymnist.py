@@ -5,7 +5,7 @@ from torchvision import datasets
 class BinaryMNISTDataset(Dataset):
     classes = ("even", "odd")
 
-    def __init__(self, root, train=True, download=True, transform=None):
+    def __init__(self, root, train: bool=True, download: bool=True, transform=None) -> None:
         self.classes = list(self.classes)
         self.class_names = list(self.classes)
         self.class_to_idx = {name: idx for idx, name in enumerate(self.classes)}
@@ -20,7 +20,7 @@ class BinaryMNISTDataset(Dataset):
             transform=transform,
         )
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.dataset)
 
     def __getitem__(self, index):

@@ -6,7 +6,7 @@ from utils import resolve_device
 from utils.config import load_config
 
 
-def main():
+def main() -> None:
     ae = TinyAutoencoderWrapper()
 
     cfg, _ = load_config()
