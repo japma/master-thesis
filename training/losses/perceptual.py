@@ -41,7 +41,7 @@ class VGGPerceptualLoss(nn.Module):
         recon_feats = self._features(recon)
         with torch.no_grad():
             target_feats = self._features(target)
-        # pyrefly: ignore [bad-return]
-        return sum(
-            F.l1_loss(r, t) for r, t in zip(recon_feats, target_feats, strict=False)
-        ) / len(recon_feats)
+        losses = torch.stack(
+            [F.l1_loss(r, t) for r, t in zip(recon_feats, target_feats, strict=False)]
+        )
+        return losses.mean()

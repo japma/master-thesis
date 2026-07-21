@@ -11,14 +11,18 @@ model:
   model_type: variational
   latent_dim: 16
   num_blocks: 2
+  base_channels: 32
 
 training:
-  epochs: 50
+  epochs: 1
   learning_rate: 0.0005
-  batch_size: 256
+  batch_size: 128
   beta: 8.0
+  beta_start: 0.0
+  beta_end: 8.0
+  kl_warmup_epochs: 10
 
 wandb:
-  mode: online
+  mode: disabled
   project: master-thesis
   entity: jmartini-tu-darmstadt

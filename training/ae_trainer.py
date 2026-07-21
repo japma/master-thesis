@@ -1,5 +1,7 @@
 """Autoencoder training loop."""
 
+from collections.abc import Sized
+
 import torch
 import tqdm
 from rtpt import RTPT
@@ -19,11 +21,16 @@ def train_autoencoder(
     rtpt: RTPT,
 ) -> None:
     epochs = cfg.training.epochs
-    warmup_epochs = cfg.training.kl_warmup_epochs
     log_sample_every = 10
 
-    # pyrefly: ignore [bad-argument-type]
-    sample_indices = torch.randperm(len(test_loader.dataset))[:16]
+    dataset = test_loader.dataset
+
+    if not isinstance(dataset, Sized):
+        raise TypeError("Test dataset must be sized")
+
+    dataset_len = len(dataset)
+
+    sample_indices = torch.randperm(dataset_len)[: min(10, dataset_len)]
     sample_images = torch.stack([test_loader.dataset[i][0] for i in sample_indices]).to(
         device
     )

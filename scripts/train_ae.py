@@ -61,7 +61,11 @@ def main() -> None:
         num_steps=len(train_loader) * training_cfg.kl_warmup_epochs,
     )
 
-    loss_fn = VAELoss(beta=beta, free_bits=training_cfg.free_bits).to(device)
+    loss_fn = VAELoss(
+        beta=beta,
+        free_bits=training_cfg.free_bits,
+        lambda_perceptual=training_cfg.lambda_perceptual,
+    ).to(device)
 
     rtpt = RTPT(
         name_initials="JM",
