@@ -1,13 +1,16 @@
 """Abstract autoencoder base module."""
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
 
-type AutoencoderForwardOutput = (
-    torch.Tensor | tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
-)
+
+@dataclass
+class AutoencoderForwardOutput:
+    reconstructed: torch.Tensor
+    latent: torch.Tensor
 
 
 class AbstractAutoencoder(nn.Module, ABC):
@@ -22,7 +25,10 @@ class AbstractAutoencoder(nn.Module, ABC):
     def forward(self, x: torch.Tensor) -> AutoencoderForwardOutput:
         latent = self.encode(x)
         reconstructed = self.decode(latent)
-        return reconstructed
+        return AutoencoderForwardOutput(
+            reconstructed=reconstructed,
+            latent=latent,
+        )
 
     @abstractmethod
     def get_config(self) -> dict:

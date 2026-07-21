@@ -1,10 +1,12 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 
 import torch
 
 
+@dataclass
 class StepOutput:
-    metrics: dict
+    metrics: dict[str, float]
     batch_size: int
 
 
@@ -20,3 +22,7 @@ class AbstractObjective(ABC):
     @abstractmethod
     def on_epoch_end(self) -> None:
         pass
+
+    @abstractmethod
+    def sample(self, samples: torch.Tensor) -> torch.Tensor:
+        raise NotImplementedError

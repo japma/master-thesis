@@ -5,9 +5,7 @@ import tqdm
 from rtpt import RTPT
 
 import wandb
-from models.autoencoder import AbstractAutoencoder
-from training.logging import log_generations, log_reconstructions
-from training.losses import VAELoss, kl_per_dim
+from training.metrics import MetricsCollector
 from training.objectives.base import AbstractObjective
 from utils.config import AERunConfig
 
@@ -36,35 +34,56 @@ def train_autoencoder(
         step=0,
     )
 
+    train_metrics = MetricsCollector()
+    val_metrics = MetricsCollector()
+
     for epoch in range(epochs):
-        annealed_beta = min(1.0, epoch / max(warmup_epochs, 1))
-
-        train_losses = []
-        val_losses = []
-
         # Train step
         for images, _ in tqdm.tqdm(train_loader, desc=f"Train {epoch + 1}/{epochs}"):
             images = images.to(device, non_blocking=True)
             loss = objective.train_step(images)
-            train_losses.append(loss)
+            train_metrics.update(loss)
+
+        avg_train_loss = train_metrics.compute_average_metrics()
+        print(f"Loss: {avg_train_loss}")
 
         # Val step
         for images, _ in tqdm.tqdm(test_loader, desc=f"Test {epoch + 1}/{epochs}"):
             images = images.to(device, non_blocking=True)
             loss = objective.val_step(images)
-            val_losses.append(loss)
+            val_metrics.update(loss)
 
-        # TODO add the values by fusing the eval and train metrics
+        avg_val_loss = val_metrics.compute_average_metrics()
+        print(f"Loss: {avg_val_loss}")
+
         metrics = {}
+        for key, value in avg_train_loss.items():
+            metrics[f"train/{key}"] = value
+        for key, value in avg_val_loss.items():
+            metrics[f"val/{key}"] = value
 
         wandb.log(
             metrics,
             step=epoch,
         )
 
-        # should_log = epoch % log_sample_every == log_sample_every - 1 or epoch == 0
-        # if should_log:
-        #    log_reconstructions(model, sample_images, epoch)
-        #    log_generations(model, device, epoch)
+        train_metrics.reset()
+        val_metrics.reset()
 
+        should_log = epoch % log_sample_every == log_sample_every - 1 or epoch == 0
+        if should_log:
+            reconstructed_samples = objective.sample(sample_images)
+            reconstructed_samples_u8 = (
+                (reconstructed_samples.clamp(0, 1) * 255).byte().cpu()
+            )
+            wandb.log(
+                {
+                    "samples/reconstructed": [
+                        wandb.Image(img) for img in reconstructed_samples_u8
+                    ]
+                },
+                step=epoch,
+            )
+
+        objective.on_epoch_end()
         rtpt.step(subtitle=f"{epoch + 1}/{epochs}")

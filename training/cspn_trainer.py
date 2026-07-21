@@ -8,7 +8,7 @@ import wandb
 from models.autoencoder import AbstractAutoencoder
 from models.cspn.abstract_cspn import AbstractCSPN
 from training.early_stopping import EarlyStopping
-from training.losses import negative_log_likelihood_loss
+from training.losses.spn import negative_log_likelihood_loss
 from utils.config import CSPNRunConfig
 
 
@@ -33,9 +33,9 @@ def _train_epoch(
 
         loss = negative_log_likelihood_loss(model(latent, labels))
         optimizer.zero_grad()
-        loss.backward()
+        loss.total.backward()
         optimizer.step()
-        total_loss += loss.detach()
+        total_loss += loss.total.detach()
 
     return (total_loss / len(loader)).item()
 
@@ -57,7 +57,7 @@ def _val_epoch(
             labels = labels.to(device, non_blocking=True)
             latent = autoencoder.encode(images)
             loss = negative_log_likelihood_loss(model(latent, labels))
-            total_loss += loss.detach()
+            total_loss += loss.total.detach()
 
     return (total_loss / len(loader)).item()
 

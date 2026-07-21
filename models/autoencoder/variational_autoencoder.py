@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 import torch
 import torch.nn as nn
 
@@ -7,6 +9,12 @@ from .abstract_autoencoder import AbstractAutoencoder, AutoencoderForwardOutput
 
 LOG_VAR_MIN: float = -10.0
 LOG_VAR_MAX: float = 10.0
+
+
+@dataclass
+class VAEForwardOutput(AutoencoderForwardOutput):
+    mu: torch.Tensor
+    log_var: torch.Tensor
 
 
 def reparameterize(mu: torch.Tensor, log_var: torch.Tensor) -> torch.Tensor:
@@ -224,7 +232,12 @@ class VariationalAutoencoder(AbstractAutoencoder):
         mu, log_var = self._encode_distribution(x)
         z = reparameterize(mu, log_var)
         logits = self.decode_logits(z)
-        return logits, mu, log_var, z
+        return VAEForwardOutput(
+            reconstructed=logits,
+            latent=z,
+            mu=mu,
+            log_var=log_var,
+        )
 
     def get_config(self) -> dict[str, object]:
         return self.config.model_dump()

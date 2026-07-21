@@ -7,7 +7,7 @@ class MetricsCollector:
     def __init__(self) -> None:
         self.step_outputs: list[StepOutput] = []
 
-    def collect(self, step_output: StepOutput) -> None:
+    def update(self, step_output: StepOutput) -> None:
         self.step_outputs.append(step_output)
 
     def compute_average_metrics(self) -> dict[str, float]:

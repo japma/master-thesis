@@ -1,17 +1,9 @@
-from typing import TypedDict
-
 import torch
 
 from models import VariationalAutoencoder
-from training.losses import BetaVAELoss, VAELoss
+from models.autoencoder.variational_autoencoder import VAEForwardOutput
+from training.losses.vae import VAELoss, VAELossOutput
 from training.objectives.base import AbstractObjective, StepOutput
-
-
-class BetaVAETrainMetrics(TypedDict):
-    total: float
-    recon: float
-    kl: float
-    perceptual: float
 
 
 class BetaVAEObjective(AbstractObjective):
@@ -24,32 +16,55 @@ class BetaVAEObjective(AbstractObjective):
         model: VariationalAutoencoder,
         optimizer: torch.optim.Optimizer,
         scheduler: torch.optim.lr_scheduler.LRScheduler,
+        loss_fn: VAELoss,
     ) -> None:
         super().__init__()
         self.model = model
         self.optimizer = optimizer
         self.scheduler = scheduler
 
-        device = next(model.parameters()).device
-        self.loss_fn: VAELoss = VAELoss(beta_vae_loss=BetaVAELoss()).to(device)
+        self.loss_fn: VAELoss = loss_fn
 
     def train_step(self, images: torch.Tensor) -> StepOutput:
         """Step function used for training
         :param images
         """
-        logits, mu, log_var, z = self.model(images)
-        loss = self.loss_fn(images, logits, mu, log_var)
+        self.model.train()
+        outputs: VAEForwardOutput = self.model(images)
+        loss: VAELossOutput = self.loss_fn(images, outputs)
         self.optimizer.zero_grad()
-        loss["total"].backward()
+        loss.total.backward()
         self.optimizer.step()
-        return loss
+
+        metrics = {
+            "total": loss.total.item(),
+            "recon": loss.recon.item(),
+            "kl": loss.kl.item(),
+            "perceptual": loss.perceptual.item(),
+        }
+        return StepOutput(metrics=metrics, batch_size=images.size(0))
 
     @torch.no_grad()
     def val_step(self, images: torch.Tensor) -> StepOutput:
-        logits, mu, log_var, z = self.model(images)
-        loss = self.loss_fn(images, logits, mu, log_var)
+        self.model.eval()
+        with torch.no_grad():
+            outputs: VAEForwardOutput = self.model(images)
+            loss: VAELossOutput = self.loss_fn(images, outputs)
 
-        return loss
+        metrics = {
+            "total": loss.total.item(),
+            "recon": loss.recon.item(),
+            "kl": loss.kl.item(),
+            "perceptual": loss.perceptual.item(),
+        }
+        return StepOutput(metrics=metrics, batch_size=images.size(0))
 
     def on_epoch_end(self) -> None:
         self.scheduler.step()
+
+    @torch.no_grad()
+    def sample(self, samples: torch.Tensor) -> torch.Tensor:
+        self.model.eval()
+        with torch.no_grad():
+            outputs: VAEForwardOutput = self.model(samples)
+        return torch.sigmoid(outputs.reconstructed)

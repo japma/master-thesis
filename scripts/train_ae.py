@@ -10,7 +10,7 @@ import wandb
 from dataset_loaders import build_data_loaders
 from models import VariationalAutoencoder
 from training.ae_trainer import train_autoencoder
-from training.losses import BetaTCVAELoss, BetaVAELoss, VAELoss
+from training.losses.vae import VAELoss
 from training.objectives.beta_vae import BetaVAEObjective
 from utils.checkpoints import save_autoencoder
 from utils.config import AERunConfig, load_config
@@ -55,18 +55,7 @@ def main() -> None:
         optimizer, T_max=training_cfg.epochs
     )
 
-    loss_fn = VAELoss(
-        beta_vae_loss=BetaVAELoss(beta=beta, free_bits=training_cfg.free_bits),
-        lambda_perceptual=training_cfg.lambda_perceptual,
-    ).to(device)
-
-    # loss_fn = BetaTCVAELoss(
-    #    dataset_size=len(train_loader),
-    #    alpha=1.0,
-    #    beta=1.0,
-    #    gamma=1.0,
-    #    free_bits=training_cfg.free_bits,
-    # )
+    loss_fn = VAELoss(beta=beta, free_bits=training_cfg.free_bits).to(device)
 
     rtpt = RTPT(
         name_initials="JM",
@@ -79,6 +68,7 @@ def main() -> None:
         model=ae,
         optimizer=optimizer,
         scheduler=scheduler,
+        loss_fn=loss_fn,
     )
 
     train_autoencoder(
