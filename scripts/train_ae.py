@@ -34,7 +34,7 @@ def main() -> None:
     device = resolve_device()
     dataset_name = dataset_cfg.name
     model_name = f"autoencoder_{dataset_name}"
-    run_name = f"{model_name}_beta{beta}"
+    run_name = f"{model_name}_{training_cfg.vae_type}"
 
     wandb.init(
         entity=wandb_cfg.entity,
