@@ -16,8 +16,10 @@ model:
 training:
   epochs: 50
   learning_rate: 0.0005
-  batch_size: 256
+  batch_size: 128
   beta: 1.0
+  beta_start: 0.0
+  beta_end: 1.0
   kl_warmup_epochs: 10
 
 wandb:

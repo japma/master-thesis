@@ -14,7 +14,7 @@ model:
   base_channels: 32
 
 training:
-  epochs: 1
+  epochs: 50
   learning_rate: 0.0005
   batch_size: 128
   beta: 8.0
@@ -23,6 +23,6 @@ training:
   kl_warmup_epochs: 10
 
 wandb:
-  mode: disabled
+  mode: online
   project: master-thesis
   entity: jmartini-tu-darmstadt
