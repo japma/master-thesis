@@ -11,6 +11,7 @@ from dataset_loaders import build_data_loaders
 from models.autoencoder.utils import load_pretrained_autoencoder
 from models.cspn.psinet_cspn import PsiNetCSPN
 from training.cspn_trainer import train_cspn
+from training.objectives.cspn import CSPNObjective
 from utils.checkpoints import load_ae_from_path, load_from_wandb, save_cspn
 from utils.config import CSPNRunConfig, CSPNType, load_config
 from utils.reproducibility import resolve_device, seed_everything
@@ -70,6 +71,13 @@ def main() -> None:
         optimizer, T_max=training_cfg.epochs
     )
 
+    objective = CSPNObjective(
+        model=cspn.to(device),
+        autoencoder=ae.to(device),
+        optimizer=optimizer,
+        lr_scheduler=scheduler,
+    )
+
     rtpt = RTPT(
         name_initials="JM",
         experiment_name=run_name,
@@ -78,14 +86,11 @@ def main() -> None:
     rtpt.start()
 
     train_cspn(
-        model=cspn,
-        autoencoder=ae,
+        objective=objective,
         device=device,
         cfg=cfg,
         train_loader=train_loader,
         test_loader=test_loader,
-        optimizer=optimizer,
-        scheduler=scheduler,
         rtpt=rtpt,
     )
 

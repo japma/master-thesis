@@ -10,7 +10,7 @@ dataset:
 autoencoder:
   name: "autoencoder_mnist"
   external: false
-  latent_dim: 8
+  latent_dim: 16
 
 model:
   model_type: "psinet"

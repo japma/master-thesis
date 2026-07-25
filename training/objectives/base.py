@@ -12,11 +12,19 @@ class StepOutput:
 
 class AbstractObjective(ABC):
     @abstractmethod
-    def train_step(self, images: torch.Tensor) -> StepOutput:
+    def train_step(
+        self,
+        images: torch.Tensor,
+        labels: torch.Tensor | None = None,
+    ) -> StepOutput:
         raise NotImplementedError
 
     @abstractmethod
-    def val_step(self, images: torch.Tensor) -> StepOutput:
+    def val_step(
+        self,
+        images: torch.Tensor,
+        labels: torch.Tensor | None = None,
+    ) -> StepOutput:
         raise NotImplementedError
 
     @abstractmethod

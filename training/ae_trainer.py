@@ -69,16 +69,12 @@ def train_autoencoder(
         for key, value in avg_val_loss.items():
             metrics[f"val/{key}"] = value
 
-        wandb.log(
-            metrics,
-            step=epoch,
-        )
+        wandb.log(metrics, step=epoch)
 
         train_metrics.reset()
         val_metrics.reset()
 
-        should_log = epoch % log_sample_every == log_sample_every - 1 or epoch == 0
-        if should_log:
+        if epoch % log_sample_every == 0:
             reconstructed_samples = objective.sample(sample_images)
             reconstructed_samples_u8 = (
                 (reconstructed_samples.clamp(0, 1) * 255).byte().cpu()
@@ -94,3 +90,17 @@ def train_autoencoder(
 
         objective.on_epoch_end()
         rtpt.step(subtitle=f"{epoch + 1}/{epochs}")
+
+    # Final reconstructions
+    final_reconstructed_samples = objective.sample(sample_images)
+    final_reconstructed_samples_u8 = (
+        (final_reconstructed_samples.clamp(0, 1) * 255).byte().cpu()
+    )
+    wandb.log(
+        {
+            "samples/reconstructed": [
+                wandb.Image(img) for img in final_reconstructed_samples_u8
+            ]
+        },
+        step=epoch,
+    )
