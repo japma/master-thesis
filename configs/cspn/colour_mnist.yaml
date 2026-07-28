@@ -1,0 +1,34 @@
+type: cspn
+
+dataset:
+  name: colour_mnist
+  channels: 3
+  height: 28
+  width: 28
+  num_classes: 10
+
+autoencoder:
+  name: "autoencoder_colour_mnist"
+  external: false
+  latent_dim: 16
+
+model:
+  model_type: "psinet"
+  num_repetitions: 3
+  num_input_distributions: 8
+  num_sums: 8
+  min_var: 0.001
+  max_var: 4.0
+  h_dims: [ 256, 128 ]
+
+training:
+  epochs: 200
+  learning_rate: 0.0003
+  batch_size: 128
+  early_stopping_patience: 10
+  early_stopping_min_delta: 0.01
+
+wandb:
+  mode: online
+  project: master-thesis
+  entity: jmartini-tu-darmstadt
