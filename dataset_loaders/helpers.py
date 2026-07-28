@@ -1,17 +1,18 @@
-from torchvision.datasets.mnist import MNIST
-from torchvision.datasets.mnist import FashionMNIST
-from torchvision.datasets.flowers102 import Flowers102
-from torchvision.datasets.cifar import CIFAR10
-from torchvision.datasets.celeba import CelebA
 import os
 from pathlib import Path
 
 import torch
+from numba.core.ir_utils import transfer_scope
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
+from torchvision.datasets.celeba import CelebA
+from torchvision.datasets.cifar import CIFAR10
+from torchvision.datasets.flowers102 import Flowers102
+from torchvision.datasets.mnist import MNIST, FashionMNIST
 
 from dataset_loaders.binarymnist import BinaryMNISTDataset
 from dataset_loaders.coco import CocoDataset
+from dataset_loaders.colour_mnist import ColourMNIST
 from dataset_loaders.cub200 import Cub200Dataset
 from dataset_loaders.single_attribute_celeba import SingleAttributeCelebA
 from dataset_loaders.tinyimagenet import TinyImageNetDataset
@@ -25,7 +26,7 @@ def _grayscale_to_rgb(x: torch.Tensor) -> torch.Tensor:
     return x.repeat(3, 1, 1)
 
 
-def _load_mnist(train: bool=True, size: tuple[int, int] = (28, 28)) -> MNIST:
+def _load_mnist(train: bool = True, size: tuple[int, int] = (28, 28)) -> MNIST:
     return datasets.MNIST(
         root=DATA_DIR,
         train=train,
@@ -39,7 +40,9 @@ def _load_mnist(train: bool=True, size: tuple[int, int] = (28, 28)) -> MNIST:
     )
 
 
-def _load_binary_mnist(train: bool=True, size: tuple[int, int] = (28, 28)) -> BinaryMNISTDataset:
+def _load_binary_mnist(
+    train: bool = True, size: tuple[int, int] = (28, 28)
+) -> BinaryMNISTDataset:
     return BinaryMNISTDataset(
         root=DATA_DIR,
         train=train,
@@ -53,7 +56,7 @@ def _load_binary_mnist(train: bool=True, size: tuple[int, int] = (28, 28)) -> Bi
     )
 
 
-def _load_cifar10(train: bool=True, size: tuple[int, int] = (128, 128)) -> CIFAR10:
+def _load_cifar10(train: bool = True, size: tuple[int, int] = (128, 128)) -> CIFAR10:
     return datasets.CIFAR10(
         root=DATA_DIR,
         train=train,
@@ -66,7 +69,9 @@ def _load_cifar10(train: bool=True, size: tuple[int, int] = (128, 128)) -> CIFAR
     )
 
 
-def _load_fashion_mnist(train: bool=True, size: tuple[int, int] = (128, 128)) -> FashionMNIST:
+def _load_fashion_mnist(
+    train: bool = True, size: tuple[int, int] = (128, 128)
+) -> FashionMNIST:
     return datasets.FashionMNIST(
         root=DATA_DIR,
         train=train,
@@ -81,7 +86,9 @@ def _load_fashion_mnist(train: bool=True, size: tuple[int, int] = (128, 128)) ->
 
 
 # TODO fix the path here
-def _load_tinyimagenet(train: bool=True, size: tuple[int, int] = (128, 128)) -> TinyImageNetDataset:
+def _load_tinyimagenet(
+    train: bool = True, size: tuple[int, int] = (128, 128)
+) -> TinyImageNetDataset:
     split = "train" if train else "val"
     return TinyImageNetDataset(
         root="./data/tiny-imagenet-200",
@@ -95,7 +102,7 @@ def _load_tinyimagenet(train: bool=True, size: tuple[int, int] = (128, 128)) -> 
 
 
 # TODO fix this, this is a not good
-def _load_coco(train: bool=True, size: tuple[int, int] = (128, 128)) -> CocoDataset:
+def _load_coco(train: bool = True, size: tuple[int, int] = (128, 128)) -> CocoDataset:
     root = f"./data/coco-2017/{'train' if train else 'val'}/"
     ann_file = (
         f"./data/coco-2017/annotations/instances_{'train' if train else 'val'}2017.json"
@@ -112,7 +119,9 @@ def _load_coco(train: bool=True, size: tuple[int, int] = (128, 128)) -> CocoData
     )
 
 
-def _load_flowers102(train: bool=True, size: tuple[int, int] = (128, 128)) -> Flowers102:
+def _load_flowers102(
+    train: bool = True, size: tuple[int, int] = (128, 128)
+) -> Flowers102:
     train_transform = transforms.Compose(
         [
             transforms.RandomRotation(10, expand=True),
@@ -135,7 +144,9 @@ def _load_flowers102(train: bool=True, size: tuple[int, int] = (128, 128)) -> Fl
     )
 
 
-def _load_cub200(train: bool=True, size: tuple[int, int] = (128, 128)) -> Cub200Dataset:
+def _load_cub200(
+    train: bool = True, size: tuple[int, int] = (128, 128)
+) -> Cub200Dataset:
     train_transform = transforms.Compose(
         [
             transforms.RandomHorizontalFlip(),
@@ -158,7 +169,7 @@ def _load_cub200(train: bool=True, size: tuple[int, int] = (128, 128)) -> Cub200
     )
 
 
-def _load_celeba(train: bool=True, size: tuple[int, int] = (64, 64)) -> CelebA:
+def _load_celeba(train: bool = True, size: tuple[int, int] = (64, 64)) -> CelebA:
     return datasets.CelebA(
         root=DATA_DIR,
         split="train" if train else "test",
@@ -172,7 +183,9 @@ def _load_celeba(train: bool=True, size: tuple[int, int] = (64, 64)) -> CelebA:
     )
 
 
-def _load_celeba_single_attribute(train: bool=True, size: tuple[int, int] = (64, 64)) -> SingleAttributeCelebA:
+def _load_celeba_single_attribute(
+    train: bool = True, size: tuple[int, int] = (64, 64)
+) -> SingleAttributeCelebA:
     transform = transforms.Compose(
         [
             transforms.Resize(size),
@@ -189,6 +202,23 @@ def _load_celeba_single_attribute(train: bool=True, size: tuple[int, int] = (64,
     )
 
 
+def _load_colour_mnist(
+    train: bool = True, size: tuple[int, int] = (28, 28)
+) -> ColourMNIST:
+    transform = transforms.Compose(
+        [
+            transforms.Resize(size),
+            transforms.ToTensor(),
+        ]
+    )
+    return ColourMNIST(
+        root=DATA_DIR,
+        train=train,
+        transform=transform,
+        download=True,
+    )
+
+
 _DATASETS = {
     "mnist": _load_mnist,
     "binary_mnist": _load_binary_mnist,
@@ -200,6 +230,7 @@ _DATASETS = {
     "cub200": _load_cub200,
     "celeba": _load_celeba,
     "celeba_single_attribute": _load_celeba_single_attribute,
+    "colour_mnist": _load_colour_mnist,
 }
 
 
@@ -207,7 +238,8 @@ def build_data_loaders(
     cfg: DatasetConfig,
     batch_size: int = 32,
     shuffle_test: bool = False,
-    num_workers: int = 4,
+    num_workers: int = 8,
+    drop_last: bool = True,
 ) -> tuple[DataLoader, DataLoader]:
     loader_fn = _DATASETS.get(cfg.name)
     if loader_fn is None:
@@ -225,7 +257,7 @@ def build_data_loaders(
         pin_memory=torch.cuda.is_available(),
         batch_size=batch_size,
         persistent_workers=num_workers > 0,
-        drop_last=True,
+        drop_last=drop_last,
         shuffle=True,
     )
     test_loader = DataLoader(
@@ -235,7 +267,7 @@ def build_data_loaders(
         pin_memory=torch.cuda.is_available(),
         batch_size=batch_size,
         persistent_workers=num_workers > 0,
-        drop_last=True,
+        drop_last=drop_last,
         shuffle=shuffle_test,
     )
 

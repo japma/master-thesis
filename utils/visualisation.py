@@ -1,4 +1,3 @@
-from torch._tensor import Tensor
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -6,9 +5,10 @@ import torchvision.utils as vutils
 import umap
 from matplotlib.colors import Colormap
 from numpy.typing import NDArray
+from torch._tensor import Tensor
 
 
-def show(tensor: list[Tensor], title=None, width=8) -> None:
+def show(tensor: Tensor, title=None, width=8) -> None:
     grid = vutils.make_grid(tensor.cpu(), nrow=width, normalize=True)
     plt.figure(figsize=(16, 4), dpi=300)
     plt.imshow(grid.permute(1, 2, 0))
@@ -18,7 +18,7 @@ def show(tensor: list[Tensor], title=None, width=8) -> None:
     plt.show()
 
 
-def show_comparison(originals, reconstructions, title=None, dpi: int=150) -> None:
+def show_comparison(originals, reconstructions, title=None, dpi: int = 150) -> None:
     assert originals.shape == reconstructions.shape, (
         "originals and reconstructions must have the same shape"
     )
@@ -76,7 +76,7 @@ def _get_class_colors(
     classes: list[int] = sorted(np.unique(labels.detach().cpu().numpy()).tolist())
     n_classes: int = len(classes)
 
-    cmap: Colormap = plt.get_cmap("tab10" if n_classes <= 10 else "tab20")
+    cmap = plt.get_cmap("tab10" if n_classes <= 10 else "tab20")
     class_to_color: dict[int, tuple[float, float, float, float]] = {
         c: cmap(i / max(n_classes - 1, 1)) for i, c in enumerate(classes)
     }
@@ -89,18 +89,18 @@ def plot_latent_space(
     title: str = "Latent space",
     class_names: list[str] | None = None,
 ) -> None:
-    a: NDArray[np.float32] = latents.detach().cpu().numpy()
-    labels_np: NDArray[np.int64] = labels.detach().cpu().numpy()
+    a = latents.detach().cpu().numpy()
+    labels_np = labels.detach().cpu().numpy()
 
     classes, class_to_color = _get_class_colors(labels)
 
     reducer: umap.UMAP = umap.UMAP(n_components=2)
-    projected: NDArray[np.float32] = reducer.fit_transform(a)
+    projected = reducer.fit_transform(a)
 
-    fig, ax = plt.subplots(figsize=(9, 8))
+    _, ax = plt.subplots(figsize=(9, 8))
 
     for cls in classes:
-        mask: NDArray[np.bool_] = labels_np == cls
+        mask = labels_np == cls
         if not mask.any():
             continue
         label_str: str = class_names[cls] if class_names is not None else str(cls)
@@ -136,32 +136,32 @@ def plot_latent_space_comparison(
     joint_projection: bool = True,
 ) -> None:
     """Compare the latent spaces of two models sharing the same labels."""
-    a_np: NDArray[np.float32] = latents_a.detach().cpu().numpy()
-    b_np: NDArray[np.float32] = latents_b.detach().cpu().numpy()
-    labels_np: NDArray[np.int64] = labels.detach().cpu().numpy()
+    a_np = latents_a.detach().cpu().numpy()
+    b_np = latents_b.detach().cpu().numpy()
+    labels_np = labels.detach().cpu().numpy()
 
     classes, class_to_color = _get_class_colors(labels)
 
     reducer: umap.UMAP = umap.UMAP(n_components=2)
 
-    projected_a: NDArray[np.float32]
-    projected_b: NDArray[np.float32]
+    projected_a: np.ndarray
+    projected_b: np.ndarray
     if joint_projection:
-        combined: NDArray[np.float32] = np.concatenate([a_np, b_np], axis=0)
-        projected: NDArray[np.float32] = reducer.fit_transform(combined)
+        combined = np.concatenate([a_np, b_np], axis=0)
+        projected = reducer.fit_transform(combined)
         n_a: int = a_np.shape[0]
         projected_a, projected_b = projected[:n_a], projected[n_a:]
     else:
         projected_a = reducer.fit_transform(a_np)
         projected_b = umap.UMAP(n_components=2).fit_transform(b_np)
 
-    fig, ax = plt.subplots(figsize=(10, 8))
+    _, ax = plt.subplots(figsize=(10, 8))
 
     for projected, model_name, marker in zip(
         (projected_a, projected_b), model_names, markers, strict=False
     ):
         for cls in classes:
-            mask: NDArray[np.bool_] = labels_np == cls
+            mask = labels_np == cls
             if not mask.any():
                 continue
             class_str: str = class_names[cls] if class_names is not None else str(cls)
@@ -258,7 +258,7 @@ def plot_latent_comparison_multiclass(
     proj_a = projected[:n_a]
     proj_b = projected[n_a : n_a + n_b]
 
-    fig, ax = plt.subplots(figsize=(9, 8))
+    _, ax = plt.subplots(figsize=(9, 8))
 
     sources = [(proj_a, labels, "o", name_a, 60), (proj_b, labels, "x", name_b, 60)]
     if reference is not None:

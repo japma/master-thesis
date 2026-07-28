@@ -1,0 +1,29 @@
+type: ae
+
+dataset:
+  name: colour_mnist
+  channels: 3
+  width: 28
+  height: 28
+  num_classes: 10
+
+model:
+  model_type: variational
+  latent_dim: 16
+  num_blocks: 2
+  base_channels: 32
+
+training:
+  vae_type: beta
+  epochs: 1
+  learning_rate: 0.0005
+  batch_size: 128
+  beta: 1.0
+  beta_start: 0.0
+  beta_end: 1.0
+  kl_warmup_epochs: 10
+
+wandb:
+  mode: disabled
+  project: master-thesis
+  entity: jmartini-tu-darmstadt

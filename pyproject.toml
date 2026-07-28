@@ -46,6 +46,7 @@ dev = [
 train_ae = "scripts.train_ae:main"
 train_cspn = "scripts.train_cspn:main"
 download_data = "scripts.download_data:main"
+generate_colour_mnist = "scripts.generate_colour_mnist:main"
 
 
 [build-system]

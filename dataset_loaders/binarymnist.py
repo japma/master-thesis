@@ -5,8 +5,9 @@ from torchvision import datasets
 class BinaryMNISTDataset(Dataset):
     classes = ("even", "odd")
 
-    def __init__(self, root, train: bool=True, download: bool=True, transform=None) -> None:
-        self.classes = list(self.classes)
+    def __init__(
+        self, root, train: bool = True, download: bool = True, transform=None
+    ) -> None:
         self.class_names = list(self.classes)
         self.class_to_idx = {name: idx for idx, name in enumerate(self.classes)}
         self.root = root

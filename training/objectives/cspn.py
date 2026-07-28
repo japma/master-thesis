@@ -31,7 +31,9 @@ class CSPNObjective(AbstractObjective):
         labels: torch.Tensor | None = None,
     ) -> StepOutput:
         """Step function used for training
-        :param images
+        Args:
+            images: torch.Tensor:
+            labels:
         """
         self.model.train()
         with torch.no_grad():
