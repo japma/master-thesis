@@ -475,14 +475,14 @@ class EinsumLayer(SumLayer):
 
     def _backtrack(
         self,
-        dist_idx,
-        node_idx,
-        sample_idx,
-        params,
+        dist_idx: list[int],
+        node_idx: list[int],
+        sample_idx: list[int],
+        params: Tensor,
         use_evidence: bool=False,
         mode: str="sample",
         **kwargs,
-    ):
+    ) -> tuple[list[int], list[int], list[int], list[int], list[Module], list[Module]]:
         """
         Helper routine for backtracking in EiNets.
 
@@ -495,17 +495,31 @@ class EinsumLayer(SumLayer):
 
         :param dist_idx: list of indices into axis 1 of log-density tensor
         :param node_idx: list of indices into axis 2 of log-density tensor
-        :param sample_idx: global identifier of the sample to be produced
-        :param params: parameters to be used for this layer
+        :param sample_idx: global identifier of the sample to be produced. For batched (non-EM) params, this is
+                            also the correct index into the batch dimension of params -- it must be used directly
+                            rather than reconstructed, since ancestral sampling can route different batch elements
+                            through different layers/nodes and thus permute or subset this list.
+        :param params: parameters to be used for this layer. Either unbatched, shape self.params_shape (EM mode,
+                       self.params is global), or batched, shape (batch, *self.params_shape) (non-EM mode, params
+                       come from param_nn per-sample).
         :param use_evidence: using evidence form bottom-up pass? For conditional sampling.
         :param mode: 'sample' or 'argmax'; for sampling or MPE approximation, respectively.
         :param kwargs: other keyword arguments
         :return: selected layers and indices below
         """
         with torch.no_grad():
+            is_batched = params.dim() == len(self.params_shape) + 1
+
             if use_evidence:
-                log_prior = torch.log(params[:, :, dist_idx, node_idx])
-                log_prior = log_prior.permute(2, 0, 1)
+                if is_batched:
+                    # params: (batch, in0, in1, sums, products) -- index the batch dim with the
+                    # *actual* sample_idx, not node_idx/dist_idx, and not a reconstructed guess.
+                    log_prior = torch.log(
+                        params[sample_idx, :, :, dist_idx, node_idx]
+                    )  # -> (N, in0, in1)
+                else:
+                    log_prior = torch.log(params[:, :, dist_idx, node_idx])
+                    log_prior = log_prior.permute(2, 0, 1)
                 left_log_prob = self.left_child_log_prob[
                     sample_idx, :, node_idx
                 ].unsqueeze(2)
@@ -518,22 +532,16 @@ class EinsumLayer(SumLayer):
                     log_posterior - torch.logsumexp(log_posterior, 1, keepdim=True)
                 )
             else:
-                batch_size: int = params.shape[0]
-                num_dist_idx: int = len(dist_idx)
-                if num_dist_idx % batch_size != 0:
-                    raise AssertionError(
-                        f"len(dist_idx) ({num_dist_idx}) must be an exact multiple of "
-                        f"the params batch size ({batch_size}); got a remainder of "
-                        f"{num_dist_idx % batch_size}. This indicates a mismatch between "
-                        "the number of samples routed to this layer and the conditioning "
-                        "batch size, which would silently misalign param_indices with "
-                        "dist_idx/node_idx and corrupt sampling."
-                    )
-                param_indices: list[int] = list(range(batch_size)) * (
-                    num_dist_idx // batch_size
-                )
-                posterior = params[param_indices, :, :, dist_idx, node_idx]
-                posterior = posterior.reshape(posterior.shape[0], -1)
+                if is_batched:
+                    # Use the real sample_idx to select each active path's own batch element.
+                    # Do NOT reconstruct a round-robin index: once sampling diverges (e.g. via
+                    # an upstream EinsumMixingLayer choice), sample_idx is a non-contiguous
+                    # subset/permutation of range(batch_size), not tidy repeated blocks.
+                    posterior = params[sample_idx, :, :, dist_idx, node_idx]
+                    posterior = posterior.reshape(posterior.shape[0], -1)
+                else:
+                    posterior = params[:, :, dist_idx, node_idx].permute(2, 0, 1)
+                    posterior = posterior.reshape(posterior.shape[0], -1)
 
             if mode == "sample":
                 idx = sample_matrix_categorical(posterior)
@@ -664,18 +672,32 @@ class EinsumMixingLayer(SumLayer):
 
     def _backtrack(
         self,
-        dist_idx,
-        node_idx,
-        sample_idx,
-        params,
+        dist_idx: list[int],
+        node_idx: list[int],
+        sample_idx: list[int],
+        params: Tensor,
         use_evidence: bool=False,
         mode: str="sample",
         **kwargs,
-    ):
-        """Helper routine for backtracking in EiNets."""
+    ) -> tuple[list[int], list[int], list[Module]]:
+        """
+        Helper routine for backtracking in EiNets.
+
+        :param sample_idx: global identifier of the sample to be produced. For batched (non-EM) params, this is
+                            also the correct index into the batch dimension of params -- it must be used directly
+                            rather than reconstructed, since ancestral sampling can route different batch elements
+                            through different layers/nodes and thus permute or subset this list.
+        :param params: parameters to be used for this layer. Either unbatched, shape self.params_shape (EM mode),
+                       or batched, shape (batch, *self.params_shape) (non-EM mode, params come from param_nn).
+        """
         with torch.no_grad():
+            is_batched = params.dim() == len(self.params_shape) + 1
+
             if use_evidence:
-                log_prior = torch.log(params[dist_idx, node_idx, :])
+                if is_batched:
+                    log_prior = torch.log(params[sample_idx, dist_idx, node_idx, :])
+                else:
+                    log_prior = torch.log(params[dist_idx, node_idx, :])
                 log_posterior = (
                     log_prior + self.child_log_prob[sample_idx, dist_idx, node_idx, :]
                 )
@@ -683,21 +705,12 @@ class EinsumMixingLayer(SumLayer):
                     log_posterior - torch.logsumexp(log_posterior, 1, keepdim=True)
                 )
             else:
-                batch_size: int = params.shape[0]
-                num_dist_idx: int = len(dist_idx)
-                if num_dist_idx % batch_size != 0:
-                    raise AssertionError(
-                        f"len(dist_idx) ({num_dist_idx}) must be an exact multiple of "
-                        f"the params batch size ({batch_size}); got a remainder of "
-                        f"{num_dist_idx % batch_size}. This indicates a mismatch between "
-                        "the number of samples routed to this layer and the conditioning "
-                        "batch size, which would silently misalign param_indices with "
-                        "dist_idx/node_idx and corrupt sampling."
-                    )
-                param_indices: list[int] = list(range(batch_size)) * (
-                    num_dist_idx // batch_size
-                )
-                posterior = params[param_indices, dist_idx, node_idx, :]
+                if is_batched:
+                    # Use the real sample_idx, not a reconstructed round-robin guess -- see
+                    # EinsumLayer._backtrack for why the reconstruction is unsafe in general.
+                    posterior = params[sample_idx, dist_idx, node_idx, :]
+                else:
+                    posterior = params[dist_idx, node_idx, :]
 
             if mode == "sample":
                 idx = sample_matrix_categorical(posterior)

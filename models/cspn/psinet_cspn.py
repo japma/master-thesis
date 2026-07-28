@@ -1,6 +1,9 @@
+import copy
 import math
+from typing import Any
 
 import torch
+from networkx import DiGraph
 
 from models.cspn.abstract_cspn import AbstractCSPN
 from models.cspn.psinet.conditioning_nn import build_conditioning_mlp_for
@@ -15,16 +18,26 @@ class PsiNetCSPN(AbstractCSPN):
     def __init__(
         self,
         config: CSPNConfig,
+        graph: DiGraph[Any] | None = None,
     ) -> None:
+        """
+        :param config: model configuration.
+        :param graph: an already-constructed graph"""
         super().__init__()
 
         self.config = config
 
-        depth = math.floor(math.log2(config.num_vars))
+        if graph is not None:
+            self.graph = graph
+        else:
+            depth = math.floor(math.log2(config.num_vars))
+            self.graph = random_binary_trees(
+                num_var=config.num_vars,
+                depth=depth,
+                num_repetitions=config.num_repetitions,
+            )
 
-        self.graph = random_binary_trees(
-            num_var=config.num_vars, depth=depth, num_repetitions=config.num_repetitions
-        )
+        self.topology_graph = copy.deepcopy(self.graph)
 
         self.args = Args(
             num_var=config.num_vars,
@@ -63,3 +76,6 @@ class PsiNetCSPN(AbstractCSPN):
 
     def get_config(self) -> dict:
         return self.config.model_dump()
+
+    def get_graph(self) -> DiGraph:
+        return self.topology_graph

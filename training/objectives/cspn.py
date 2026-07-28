@@ -39,7 +39,7 @@ class CSPNObjective(AbstractObjective):
 
         if labels is None:
             raise ValueError("Labels must be provided for CSPN training")
-        outputs = self.model(latent, labels)
+        outputs = self.model(latent, labels.long())
         loss = negative_log_likelihood_loss(outputs)
 
         self.optimizer.zero_grad()
@@ -62,7 +62,7 @@ class CSPNObjective(AbstractObjective):
             latent: torch.Tensor = self.autoencoder.encode(images)
             if labels is None:
                 raise ValueError("Labels must be provided for CSPN training")
-            outputs = self.model(latent, labels)
+            outputs = self.model(latent, labels.long())
             loss = negative_log_likelihood_loss(outputs)
 
         metrics = {
@@ -77,8 +77,6 @@ class CSPNObjective(AbstractObjective):
     def sample(self, samples: torch.Tensor) -> torch.Tensor:
         self.model.eval()
         with torch.no_grad():
-            sampled_latent: torch.Tensor = self.model.sample(samples)
-            sampled_images_logits: torch.Tensor = self.autoencoder.decode(
-                sampled_latent
-            )
-        return torch.sigmoid(sampled_images_logits)
+            sampled_latent: torch.Tensor = self.model.sample(samples.long())
+            sampled_images: torch.Tensor = self.autoencoder.decode(sampled_latent)
+        return sampled_images

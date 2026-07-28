@@ -1,8 +1,17 @@
+import numpy
+
+from models.cspn.psinet.graph import Product
+from models.cspn.psinet.graph import EiNetAddress
+from models.cspn.psinet.graph import DistributionVector
 from pathlib import Path
 
+import networkx
 import torch
+from networkx.classes import DiGraph
 
 import wandb
+
+import models
 from models.autoencoder import (
     AbstractAutoencoder,
     VariationalAutoencoder,
@@ -62,24 +71,45 @@ def load_ae_from_path(path: Path, device=None) -> AbstractAutoencoder:
 # --- CSPN ---
 def save_cspn(model: AbstractCSPN, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    graph = getattr(model, "graph", None)
+    if graph is None:
+        raise AssertionError("model has no `.graph` attribute")
+
+    if not isinstance(model, PsiNetCSPN):
+        raise AssertionError("model is not a PsiNetCSPN")
+
     torch.save(
         {
             "model_cfg": model.get_config(),
             "model_state": model.state_dict(),
+            "graph": model.get_graph(),
         },
         path,
     )
     print("Saved CSPN checkpoint to", path)
 
 
-def _create_cspn_from_checkpoint(cfg: CSPNConfig) -> AbstractCSPN:
-    return PsiNetCSPN(config=cfg)
+def _create_cspn_from_checkpoint(cfg: CSPNConfig, graph: DiGraph) -> AbstractCSPN:
+    return PsiNetCSPN(config=cfg, graph=graph)
 
 
 def load_cspn_from_path(path: Path, device=None) -> AbstractCSPN:
-    with torch.serialization.safe_globals([CSPNType]):
-        ckpt = torch.load(path, map_location=device, weights_only=True)
+    with (
+        # TODO check this, the whole graph gets saved, maybe there is some better way??
+        torch.serialization.safe_globals([CSPNType]),
+        torch.serialization.safe_globals([networkx.classes.digraph.DiGraph]),
+        torch.serialization.safe_globals([DistributionVector]),
+        torch.serialization.safe_globals([EiNetAddress]),
+        torch.serialization.safe_globals([Product]),
+        torch.serialization.safe_globals([numpy._core.multiarray.scalar]),
+        torch.serialization.safe_globals([numpy.dtype]),
+    ):
+        ckpt = torch.load(path, map_location=device, weights_only=False)
+
+    if "graph" not in ckpt:
+        raise AssertionError(f"Checkpoint at {path} has no saved `graph` entry")
+
     cfg = CSPNConfig.model_validate(ckpt["model_cfg"])
-    model = _create_cspn_from_checkpoint(cfg)
+    model = _create_cspn_from_checkpoint(cfg, graph=ckpt["graph"])
     model.load_state_dict(ckpt["model_state"])
     return model
