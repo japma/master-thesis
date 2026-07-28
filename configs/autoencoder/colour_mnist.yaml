@@ -15,7 +15,7 @@ model:
 
 training:
   vae_type: beta
-  epochs: 1
+  epochs: 50
   learning_rate: 0.0005
   batch_size: 128
   beta: 1.0
@@ -24,6 +24,6 @@ training:
   kl_warmup_epochs: 10
 
 wandb:
-  mode: disabled
+  mode: online
   project: master-thesis
   entity: jmartini-tu-darmstadt
