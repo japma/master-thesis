@@ -31,9 +31,9 @@ def train_autoencoder(
     dataset_len = len(dataset)
 
     sample_indices = torch.randperm(dataset_len)[: min(10, dataset_len)]
-    sample_images = torch.stack([test_loader.dataset[i][0] for i in sample_indices]).to(
-        device
-    )
+    sample_images = torch.stack(
+        [test_loader.dataset[i.item()][0] for i in sample_indices]
+    ).to(device)
 
     sample_images_u8 = (sample_images.clamp(0, 1) * 255).byte().cpu()
     wandb.log(
