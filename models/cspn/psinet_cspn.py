@@ -6,7 +6,7 @@ import torch
 from networkx import DiGraph
 
 from models.cspn.abstract_cspn import AbstractCSPN
-from models.cspn.psinet.conditioning_nn import build_conditioning_mlp_for
+from models.cspn.psinet.conditioning_nn import build_conditioning_mlp_for, LabelSpec
 from models.cspn.psinet.einsum_network import Args, EinsumNetwork
 from models.cspn.psinet.exponential_family_array import NormalArray
 from models.cspn.psinet.graph import random_binary_trees
@@ -60,8 +60,12 @@ class PsiNetCSPN(AbstractCSPN):
         )
         self.einet.initialize()
 
+        self.label_spec = LabelSpec(kind="multi_categorical", cardinalities=[10, 6, 3])
+
         conditioning_network = build_conditioning_mlp_for(
-            self.einet, num_classes=config.num_classes, h_dims=config.h_dims
+            self.einet,
+            h_dims=config.h_dims,
+            label_spec=self.label_spec,
         )
 
         self.einet.param_nn = conditioning_network
