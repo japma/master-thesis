@@ -22,6 +22,21 @@ def train_cspn(
     log_sample_every = 10
     sample_count = max(1, min(16, cfg.dataset.num_classes))
 
+    sample_labels = torch.tensor(
+        [
+            [0, 0, 0],
+            [1, 0, 0],
+            [2, 0, 0],
+            [3, 0, 0],
+            [4, 0, 0],
+            [5, 0, 0],
+            [6, 0, 0],
+            [7, 0, 0],
+            [8, 0, 0],
+            [9, 0, 0],
+        ]
+    ).to(device, non_blocking=True)
+
     train_metrics = MetricsCollector()
     val_metrics = MetricsCollector()
 
@@ -58,7 +73,6 @@ def train_cspn(
         val_metrics.reset()
 
         if epoch % log_sample_every == 0:
-            sample_labels = torch.arange(sample_count, device=device, dtype=torch.long)
             samples = objective.sample(sample_labels)
             samples_u8 = (samples.clamp(0, 1) * 255).byte().cpu()
             wandb.log(
@@ -74,8 +88,7 @@ def train_cspn(
         rtpt.step(subtitle=f"{epoch + 1}/{epochs}")
 
     # Final samples
-    final_sample_labels = torch.arange(sample_count, device=device, dtype=torch.long)
-    final_samples = objective.sample(final_sample_labels)
+    final_samples = objective.sample(sample_labels)
     final_samples_u8 = (final_samples.clamp(0, 1) * 255).byte().cpu()
     wandb.log(
         {
