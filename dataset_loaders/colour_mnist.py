@@ -1,30 +1,28 @@
+import csv
 from collections.abc import Callable
 from pathlib import Path
 
+import pandas as pd
 import torch
 from PIL import Image, ImageOps
 from torch.utils.data import Dataset
 from torchvision import datasets
 
+FG_TO_IDX = {
+    "red": 0,
+    "green": 1,
+    "blue": 2,
+    "white": 3,
+    "orange": 4,
+    "yellow": 5,
+    "pink": 6,
+}
 
-def _tint_image(
-    img: Image.Image,
-    fg_colour: tuple[int, int, int],
-    bg_colour: tuple[int, int, int],
-) -> Image.Image:
-    tinted = ImageOps.colorize(img, black=bg_colour, white=fg_colour)
-    return tinted
-
-
-def _extend_label_with_colours(label: int) -> tuple[int, int, int]:
-    if label == 0:
-        return 0, 0, 0
-    elif label == 1:
-        return 1, 1, 1
-    elif label == 2:
-        return 2, 2, 0
-    else:
-        return label, 0, 1
+BG_TO_IDX = {
+    "white": 0,
+    "black": 1,
+    "grey": 2,
+}
 
 
 class ColourMNIST(Dataset):
@@ -33,45 +31,26 @@ class ColourMNIST(Dataset):
         root: str | Path,
         train: bool = True,
         transform: Callable | None = None,
-        download: bool = True,
     ):
-        self.root = Path(root)
-        self.train = train
-        self.download = download
+        self.root = Path(root) / "colour-mnist"
         self.transform = transform
-        self.dataset = datasets.MNIST(
-            root=self.root,
-            train=train,
-            transform=None,
-            download=download,
-        )
+        self.split = "train" if train else "test"
+        self.csv_path = self.root / self.split / "labels.csv"
 
-        self._FG_COLOURS = [
-            (255, 0, 0),  # Red
-            (0, 255, 0),  # Green
-            (0, 0, 255),  # Blue
-        ]
-
-        self._BG_COLOURS = [
-            (255, 255, 255),  # White
-            (0, 0, 0),  # Black
-        ]
+        self.csv_reader = pd.read_csv(self.csv_path)
 
     def __len__(self) -> int:
-        return len(self.dataset)
+        return len(self.csv_reader)
 
     def __getitem__(self, index: int) -> tuple[Image.Image, torch.Tensor]:
-        img, digit_label = self.dataset[index]
-
-        label = torch.tensor(_extend_label_with_colours(digit_label))
-
-        tinted_img = _tint_image(
-            img,
-            fg_colour=self._FG_COLOURS[label[1]],
-            bg_colour=self._BG_COLOURS[label[2]],
+        row = self.csv_reader.iloc[index]
+        img_path = str(self.root / self.split / "images" / row["filename"])
+        img = Image.open(img_path)
+        target = torch.tensor(
+            [row["label"], FG_TO_IDX[row["fg_colour"]], BG_TO_IDX[row["bg_colour"]]]
         )
 
-        if self.transform is not None:
-            tinted_img = self.transform(tinted_img)
+        if self.transform:
+            img = self.transform(img)
 
-        return tinted_img, digit_label
+        return img, target

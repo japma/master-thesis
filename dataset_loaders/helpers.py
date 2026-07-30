@@ -215,7 +215,6 @@ def _load_colour_mnist(
         root=DATA_DIR,
         train=train,
         transform=transform,
-        download=True,
     )
 
 
