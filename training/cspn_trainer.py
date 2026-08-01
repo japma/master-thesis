@@ -36,6 +36,7 @@ def train_cspn(
             [9, 0, 0],
         ]
     ).to(device, non_blocking=True)
+    sample_labels = torch.arange(10).to(device, non_blocking=True)
 
     train_metrics = MetricsCollector()
     val_metrics = MetricsCollector()

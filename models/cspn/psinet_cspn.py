@@ -60,7 +60,8 @@ class PsiNetCSPN(AbstractCSPN):
         )
         self.einet.initialize()
 
-        self.label_spec = LabelSpec(kind="multi_categorical", cardinalities=[10, 6, 3])
+        # self.label_spec = LabelSpec(kind="multi_categorical", cardinalities=[10, 7, 3])
+        self.label_spec = LabelSpec(kind="categorical", num_classes=config.num_classes)
 
         conditioning_network = build_conditioning_mlp_for(
             self.einet,
@@ -71,6 +72,7 @@ class PsiNetCSPN(AbstractCSPN):
         self.einet.param_nn = conditioning_network
 
     def forward(self, z: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
+        labels = labels[:, 0]
         return self.einet.forward(x=z, y=labels).squeeze(-1)
 
     def sample(self, labels: torch.Tensor) -> torch.Tensor:
