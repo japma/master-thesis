@@ -20,6 +20,12 @@ class VAETrainingType(StrEnum):
     TCVAE = "tcvae"
 
 
+class CSPNEncoderType(StrEnum):
+    CATEGORICAL = "categorical"
+    MULTI_BINARY = "multi_binary"
+    MULTI_CATEGORICAL = "multi_categorical"
+
+
 class CSPNType(StrEnum):
     PSINET = "psinet"
     SPFLOW = "spflow"
@@ -63,6 +69,35 @@ class PretrainedAutoencoderConfig(BaseModel):
     latent_dim: int
 
 
+class CSPNEncoderConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    encoder_type: CSPNEncoderType
+    num_classes: list[int] = []
+
+    @model_validator(mode="after")
+    def validate_encoder_config(self) -> Self:
+        match self.encoder_type:
+            case CSPNEncoderType.CATEGORICAL | CSPNEncoderType.MULTI_BINARY:
+                if (
+                    not self.num_classes
+                    or len(self.num_classes) != 1
+                    or self.num_classes[0] <= 0
+                ):
+                    raise ValueError(
+                        "num_classes must be a one-element list of positive integers"
+                    )
+            case CSPNEncoderType.MULTI_CATEGORICAL:
+                if not self.num_classes or any(c <= 0 for c in self.num_classes):
+                    raise ValueError(
+                        "num_classes must be a non-empty list of positive integers for multi-categorical encoder."
+                    )
+            case _:
+                raise ValueError("Unknown encoder type")
+
+        return self
+
+
 class CSPNConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -74,7 +109,7 @@ class CSPNConfig(BaseModel):
     min_var: float
     max_var: float
     h_dims: list[int]
-    num_classes: int = 0
+    encoder_config: CSPNEncoderConfig
 
     @model_validator(mode="after")
     def valid_var_range(self) -> Self:
@@ -153,11 +188,6 @@ class CSPNRunConfig(BaseModel):
     wandb: WandbConfig
 
     @model_validator(mode="after")
-    def inject_num_classes(self) -> Self:
-        self.model.num_classes = self.dataset.num_classes
-        return self
-
-    @model_validator(mode="after")
     def inject_num_vars(self) -> Self:
         self.model.num_vars = self.autoencoder.latent_dim
         return self
@@ -167,6 +197,9 @@ def load_config() -> tuple[AERunConfig | CSPNRunConfig, int | None]:
     parser = argparse.ArgumentParser()
     parser.add_argument("config_file", type=Path)
     parser.add_argument("--seed", type=int)
+    parser.add_argument(
+        "--wandb", type=str, choices=["online", "disabled"], default="online"
+    )
     args = parser.parse_args()
 
     seed = args.seed

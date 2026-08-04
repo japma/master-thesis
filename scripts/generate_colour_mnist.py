@@ -1,6 +1,7 @@
 import csv
 import os
 import random
+from collections.abc import Iterable
 
 import PIL.Image
 import PIL.ImageOps
@@ -60,6 +61,8 @@ def _process_split(
     with open(csv_path, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(["id", "label", "fg_colour", "bg_colour", "filename"])
+
+        assert isinstance(dataset, Iterable)
 
         for image, label in tqdm.tqdm(dataset):
             fg_colour, bg_colour = _label_to_colours(label)

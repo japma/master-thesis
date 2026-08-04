@@ -6,14 +6,18 @@ import torch
 from networkx import DiGraph
 
 from models.cspn.abstract_cspn import AbstractCSPN
-from models.cspn.psinet.conditioning_nn import build_conditioning_mlp_for, LabelSpec
+from models.cspn.psinet.conditioning_nn import build_conditioning_mlp_for
 from models.cspn.psinet.einsum_network import Args, EinsumNetwork
 from models.cspn.psinet.exponential_family_array import NormalArray
 from models.cspn.psinet.graph import random_binary_trees
-from utils.config import CSPNConfig
+from models.cspn.psinet.label_encoder import (
+    CategoricalLabelEncoder,
+    MultiBinaryLabelEncoder,
+    MultiCategoricalLabelEncoder,
+)
+from utils.config import CSPNConfig, CSPNEncoderType
 
 
-# TODO add more parameters
 class PsiNetCSPN(AbstractCSPN):
     def __init__(
         self,
@@ -60,19 +64,27 @@ class PsiNetCSPN(AbstractCSPN):
         )
         self.einet.initialize()
 
-        # self.label_spec = LabelSpec(kind="multi_categorical", cardinalities=[10, 7, 3])
-        self.label_spec = LabelSpec(kind="categorical", num_classes=config.num_classes)
+        match config.encoder_config.encoder_type:
+            case CSPNEncoderType.CATEGORICAL:
+                encoder = CategoricalLabelEncoder(config.encoder_config.num_classes[0])
+            case CSPNEncoderType.MULTI_BINARY:
+                encoder = MultiBinaryLabelEncoder(config.encoder_config.num_classes[0])
+            case CSPNEncoderType.MULTI_CATEGORICAL:
+                encoder = MultiCategoricalLabelEncoder(
+                    config.encoder_config.num_classes,
+                )
+            case _:
+                raise ValueError("Illegal encoder type")
 
         conditioning_network = build_conditioning_mlp_for(
             self.einet,
             h_dims=config.h_dims,
-            label_spec=self.label_spec,
+            encoder=encoder,
         )
 
         self.einet.param_nn = conditioning_network
 
     def forward(self, z: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
-        labels = labels[:, 0]
         return self.einet.forward(x=z, y=labels).squeeze(-1)
 
     def sample(self, labels: torch.Tensor) -> torch.Tensor:

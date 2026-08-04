@@ -20,6 +20,9 @@ model:
   min_var: 0.001
   max_var: 4.0
   h_dims: [ 256, 128 ]
+  encoder_config:
+    encoder_type: categorical
+    num_classes: [ 10 ]
 
 training:
   epochs: 200

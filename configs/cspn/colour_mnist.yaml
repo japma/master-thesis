@@ -20,15 +20,19 @@ model:
   min_var: 0.001
   max_var: 4.0
   h_dims: [ 256, 128 ]
+  encoder_config:
+    encoder_type: multi_categorical
+    # classes, fg colours, bg colours
+    num_classes: [ 10, 7, 3 ]
 
 training:
-  epochs: 200
+  epochs: 1
   learning_rate: 0.0003
   batch_size: 128
   early_stopping_patience: 10
   early_stopping_min_delta: 0.01
 
 wandb:
-  mode: online
+  mode: disabled
   project: master-thesis
   entity: jmartini-tu-darmstadt
