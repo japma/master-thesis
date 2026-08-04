@@ -1,9 +1,8 @@
 import torch
-from torch.nn import NLLLoss
 
 from models.autoencoder import AbstractAutoencoder
 from models.cspn.abstract_cspn import AbstractCSPN
-from training.losses.spn import negative_log_likelihood_loss
+from training.losses.spn import NLLLoss
 from training.objectives.base import AbstractObjective, StepOutput
 
 
@@ -44,7 +43,7 @@ class CSPNObjective(AbstractObjective):
         if labels is None:
             raise ValueError("Labels must be provided for CSPN training")
         outputs = self.model(latent, labels.long())
-        loss = self.loss_fn(outputs, latent)
+        loss = self.loss_fn(outputs)
 
         self.optimizer.zero_grad()
         loss.total.backward()
@@ -67,7 +66,7 @@ class CSPNObjective(AbstractObjective):
             if labels is None:
                 raise ValueError("Labels must be provided for CSPN training")
             outputs = self.model(latent, labels.long())
-            loss = self.loss_fn(outputs, latent)
+            loss = self.loss_fn(outputs)
 
         metrics = {
             "total": loss.total,

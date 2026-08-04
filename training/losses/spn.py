@@ -1,9 +1,13 @@
 import torch
+from torch import nn
 
 from training.losses.base import LossOutput
 
 
-def negative_log_likelihood_loss(outputs: torch.Tensor) -> LossOutput:
-    """Negative log-likelihood loss for SPN outputs."""
-    nll = -outputs.mean()
-    return LossOutput(total=nll)
+class NLLLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, outputs: torch.Tensor) -> LossOutput:
+        nll = -outputs.mean()
+        return LossOutput(total=nll)

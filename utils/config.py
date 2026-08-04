@@ -67,6 +67,7 @@ class PretrainedAutoencoderConfig(BaseModel):
     name: str
     external: bool
     latent_dim: int
+    tag: str = "best"
 
 
 class CSPNEncoderConfig(BaseModel):

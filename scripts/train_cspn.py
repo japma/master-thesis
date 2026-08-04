@@ -44,7 +44,7 @@ def main() -> None:
     if ae_cfg.external:
         ae = load_pretrained_autoencoder(ae_cfg.name)
     else:
-        ae_path = load_from_wandb(ckpt_name=ae_cfg.name, tag="best")
+        ae_path = load_from_wandb(ckpt_name=ae_cfg.name, tag=ae_cfg.tag)
         ae = load_ae_from_path(ae_path, device=device)
 
     if ae.get_latent_dim() != ae_cfg.latent_dim:

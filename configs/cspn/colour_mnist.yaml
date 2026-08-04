@@ -26,13 +26,13 @@ model:
     num_classes: [ 10, 7, 3 ]
 
 training:
-  epochs: 1
+  epochs: 200
   learning_rate: 0.0003
   batch_size: 128
   early_stopping_patience: 10
   early_stopping_min_delta: 0.01
 
 wandb:
-  mode: disabled
+  mode: online
   project: master-thesis
   entity: jmartini-tu-darmstadt
