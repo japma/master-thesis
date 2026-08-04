@@ -30,10 +30,9 @@ class AbstractAutoencoder(nn.Module, ABC):
             latent=latent,
         )
 
-    @abstractmethod
     def get_config(self) -> dict:
-        pass
+        return {}
 
     @abstractmethod
-    def get_latent_dim(self) -> int:
+    def get_latent_dim(self) -> torch.Size:
         pass

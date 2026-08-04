@@ -1,37 +1,37 @@
 type: cspn
 
 dataset:
-  name: mnist
+  name: celeba_single_attribute
   channels: 3
-  height: 28
-  width: 28
-  num_classes: 10
+  height: 64
+  width: 64
+  num_classes: 2
 
 autoencoder:
-  name: "autoencoder_mnist"
-  external: false
-  latent_dim: 16
+  name: "REPA-E/e2e-sdvae-hf"
+  external: true
 
 model:
   model_type: "psinet"
-  num_repetitions: 3
-  num_input_distributions: 8
+  num_vars: 256
+  num_repetitions: 2
+  num_input_distributions: 6
   num_sums: 8
   min_var: 0.001
   max_var: 4.0
-  h_dims: [ 256, 128 ]
+  h_dims: [ 512, 256 ]
   encoder_config:
     encoder_type: categorical
-    num_classes: [ 10 ]
+    num_classes: [ 2 ]
 
 training:
-  epochs: 1
+  epochs: 200
   learning_rate: 0.001
-  batch_size: 128
+  batch_size: 256
   early_stopping_patience: 10
   early_stopping_min_delta: 0.01
 
 wandb:
-  mode: disabled
+  mode: online
   project: master-thesis
   entity: jmartini-tu-darmstadt

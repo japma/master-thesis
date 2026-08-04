@@ -242,5 +242,5 @@ class VariationalAutoencoder(AbstractAutoencoder):
     def get_config(self) -> dict[str, object]:
         return self.config.model_dump()
 
-    def get_latent_dim(self) -> int:
-        return self.config.latent_dim
+    def get_latent_dim(self) -> torch.Size:
+        return torch.Size([self.config.latent_dim])

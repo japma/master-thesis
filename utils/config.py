@@ -65,7 +65,6 @@ class PretrainedAutoencoderConfig(BaseModel):
 
     name: str
     external: bool
-    latent_dim: int
     tag: str = "best"
 
 
@@ -102,7 +101,7 @@ class CSPNConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     model_type: CSPNType
-    num_vars: int = 0
+    num_vars: int
     num_repetitions: int
     num_input_distributions: int
     num_sums: int
@@ -187,22 +186,16 @@ class CSPNRunConfig(BaseModel):
     training: CSPNTrainingConfig
     wandb: WandbConfig
 
-    @model_validator(mode="after")
-    def inject_num_vars(self) -> Self:
-        self.model.num_vars = self.autoencoder.latent_dim
-        return self
-
 
 def load_config() -> tuple[AERunConfig | CSPNRunConfig, int | None]:
     parser = argparse.ArgumentParser()
     parser.add_argument("config_file", type=Path)
     parser.add_argument("--seed", type=int)
-    parser.add_argument(
-        "--wandb", type=str, choices=["online", "disabled"], default="online"
-    )
+    parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
     seed = args.seed
+    dry_run: bool = args.dry_run
 
     path = args.config_file
     if not path.exists():
@@ -212,6 +205,10 @@ def load_config() -> tuple[AERunConfig | CSPNRunConfig, int | None]:
         raw = yaml.safe_load(f)
 
     run_type = raw.get("type")
+    if dry_run:
+        raw["training"]["epochs"] = 1
+        raw["wandb"]["mode"] = "disabled"
+
     if run_type == "ae":
         return AERunConfig.model_validate(raw), seed
     elif run_type == "cspn":

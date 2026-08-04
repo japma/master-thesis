@@ -123,7 +123,7 @@ def _load_flowers102(
 ) -> Flowers102:
     train_transform = transforms.Compose(
         [
-            transforms.RandomRotation(10, expand=True),
+            # transforms.RandomRotation(10, expand=True),
             transforms.RandomHorizontalFlip(),
             transforms.Resize(size),
             transforms.ToTensor(),
@@ -149,7 +149,7 @@ def _load_cub200(
     train_transform = transforms.Compose(
         [
             transforms.RandomHorizontalFlip(),
-            transforms.RandomRotation(10, expand=True),
+            # transforms.RandomRotation(10, expand=True),
             transforms.Resize(size),
             transforms.ToTensor(),
         ]

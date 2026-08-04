@@ -8,13 +8,12 @@ dataset:
   num_classes: 2
 
 autoencoder:
-  name: "autoencoder_celeba"
-  external: false
-  latent_dim: 128
+  name: "stabilityai/sd-vae-ft-mse"
+  external: true
 
 model:
   model_type: "psinet"
-  num_vars: 128
+  num_vars: 256
   num_repetitions: 2
   num_input_distributions: 6
   num_sums: 8
@@ -25,16 +24,14 @@ model:
     encoder_type: categorical
     num_classes: [ 2 ]
 
-
 training:
-  epochs: 1
+  epochs: 200
   learning_rate: 0.001
-  batch_size: 128
+  batch_size: 256
   early_stopping_patience: 10
   early_stopping_min_delta: 0.01
 
-
 wandb:
-  mode: disabled
+  mode: online
   project: master-thesis
   entity: jmartini-tu-darmstadt

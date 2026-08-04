@@ -8,7 +8,7 @@ from torchinfo import summary
 
 import wandb
 from dataset_loaders import build_data_loaders
-from models.autoencoder.utils import load_pretrained_autoencoder
+from models.autoencoder.pretrained import PretrainedVAE
 from models.cspn.psinet_cspn import PsiNetCSPN
 from training.cspn_trainer import train_cspn
 from training.objectives.cspn import CSPNObjective
@@ -42,14 +42,16 @@ def main() -> None:
 
     ae_cfg = cfg.autoencoder
     if ae_cfg.external:
-        ae = load_pretrained_autoencoder(ae_cfg.name)
+        ae = PretrainedVAE(
+            name=ae_cfg.name, height=dataset_cfg.height, width=dataset_cfg.width
+        )
     else:
         ae_path = load_from_wandb(ckpt_name=ae_cfg.name, tag=ae_cfg.tag)
         ae = load_ae_from_path(ae_path, device=device)
 
-    if ae.get_latent_dim() != ae_cfg.latent_dim:
+    if ae.get_latent_dim().numel() != cspn_cfg.num_vars:
         raise ValueError(
-            f"Latent dimension of autoencoder checkpoint ({ae.get_latent_dim()}) does not match the expected latent dimension ({ae_cfg.latent_dim})"
+            f"AE latent dim {ae.get_latent_dim()} ({ae.get_latent_dim().numel()}) does not match CSPN num_vars {cspn_cfg.num_vars}"
         )
 
     print(f"Training CSPN on {dataset_name} | device={device} | seed={seed}")
