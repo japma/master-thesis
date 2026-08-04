@@ -1,0 +1,35 @@
+type: cspn
+
+dataset:
+  name: flowers102
+  channels: 3
+  height: 64
+  width: 64
+  num_classes: 102
+
+autoencoder:
+  name: "stabilityai/sd-vae-ft-mse"
+  external: true
+
+model:
+  model_type: "psinet"
+  num_vars: 256
+  num_repetitions: 5
+  num_input_distributions: 16
+  num_sums: 16
+  min_var: 0.001
+  max_var: 1.0
+  h_dims: [ 128, 128 ]
+  encoder_config:
+    encoder_type: categorical
+    num_classes: [ 102 ]
+
+training:
+  epochs: 200
+  learning_rate: 0.001
+  batch_size: 64
+
+wandb:
+  mode: online
+  project: master-thesis
+  entity: jmartini-tu-darmstadt
