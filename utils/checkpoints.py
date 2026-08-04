@@ -1,22 +1,17 @@
-import numpy
-
-from models.cspn.psinet.graph import Product
-from models.cspn.psinet.graph import EiNetAddress
-from models.cspn.psinet.graph import DistributionVector
 from pathlib import Path
 
 import networkx
+import numpy
 import torch
 from networkx.classes import DiGraph
 
 import wandb
-
-import models
 from models.autoencoder import (
     AbstractAutoencoder,
     VariationalAutoencoder,
 )
 from models.cspn.abstract_cspn import AbstractCSPN
+from models.cspn.psinet.graph import DistributionVector, EiNetAddress, Product
 from models.cspn.psinet_cspn import PsiNetCSPN
 from utils.config import AutoencoderConfig, AutoencoderType, CSPNConfig, CSPNType
 

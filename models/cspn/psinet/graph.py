@@ -1,10 +1,8 @@
-from typing import Mapping
-from typing import Hashable
-from networkx.classes.digraph import DiGraph
 from itertools import count
 
 import networkx as nx
 import numpy as np
+from networkx.classes.digraph import DiGraph
 
 
 class EiNetAddress:

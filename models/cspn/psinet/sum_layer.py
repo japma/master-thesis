@@ -1,9 +1,9 @@
-from torch.nn.modules.module import Module
-from torch._tensor import Tensor
 from itertools import count
 
 import torch
 import torch.nn.functional as F
+from torch._tensor import Tensor
+from torch.nn.modules.module import Module
 
 from models.cspn.psinet.layer import Layer
 from models.cspn.psinet.utils import sample_matrix_categorical

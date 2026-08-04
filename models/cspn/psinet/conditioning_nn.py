@@ -1,13 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
-from dataclasses import dataclass
-from typing import Literal
-
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 from models.cspn.psinet.factorized_leaf_layer import FactorizedLeafLayer
 from models.cspn.psinet.label_encoder import LabelEncoder

@@ -1,8 +1,6 @@
-from numpy import ndarray
-from numpy import generic
-from numpy import dtype
 import numpy as np
 import torch
+from numpy import ndarray
 from scipy.special import logsumexp
 
 from models.cspn.psinet.einsum_network import log_likelihoods

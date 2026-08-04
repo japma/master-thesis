@@ -3,8 +3,6 @@ import numpy as np
 import torch
 import torchvision.utils as vutils
 import umap
-from matplotlib.colors import Colormap
-from numpy.typing import NDArray
 from torch._tensor import Tensor
 
 

@@ -1,12 +1,10 @@
-import csv
 from collections.abc import Callable
 from pathlib import Path
 
 import pandas as pd
 import torch
-from PIL import Image, ImageOps
+from PIL import Image
 from torch.utils.data import Dataset
-from torchvision import datasets
 
 FG_TO_IDX = {
     "red": 0,

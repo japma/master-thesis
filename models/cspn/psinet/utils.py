@@ -1,8 +1,8 @@
-from torch._tensor import Tensor
-from torch._C import dtype
 import numpy as np
 import torch
 from PIL import Image
+from torch._C import dtype
+from torch._tensor import Tensor
 
 
 def one_hot(x, K, dtype: dtype=torch.float) -> Tensor:

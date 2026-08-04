@@ -1,5 +1,5 @@
-from torch._tensor import Tensor
 import torch
+from torch._tensor import Tensor
 
 from models.cspn.psinet.exponential_family_array import NormalArray
 from models.cspn.psinet.factorized_leaf_layer import FactorizedLeafLayer

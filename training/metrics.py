@@ -1,5 +1,6 @@
-from training.objectives.base import StepOutput
 import torch
+
+from training.objectives.base import StepOutput
 
 
 class MetricsCollector:

@@ -1,8 +1,7 @@
-from typing import Self
 import argparse
 from enum import StrEnum
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Self
 
 import yaml
 from pydantic import BaseModel, ConfigDict, model_validator

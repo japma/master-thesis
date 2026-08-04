@@ -2,7 +2,6 @@ import os
 from pathlib import Path
 
 import torch
-from numba.core.ir_utils import transfer_scope
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 from torchvision.datasets.celeba import CelebA

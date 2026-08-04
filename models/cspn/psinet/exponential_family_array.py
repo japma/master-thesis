@@ -1,6 +1,6 @@
-from torch._tensor import Tensor
-from torch._C import dtype
 import torch
+from torch._C import dtype
+from torch._tensor import Tensor
 
 from models.cspn.psinet.utils import one_hot
 

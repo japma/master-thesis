@@ -1,5 +1,5 @@
-from torch._tensor import Tensor
 import torch
+from torch._tensor import Tensor
 
 from models.cspn.psinet.layer import Layer
 
