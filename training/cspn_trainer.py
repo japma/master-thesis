@@ -7,7 +7,7 @@ from rtpt import RTPT
 import wandb
 from training.metrics import MetricsCollector
 from training.objectives.base import AbstractObjective
-from utils.config import CSPNRunConfig
+from utils.config import CSPNRunConfig, CSPNEncoderType
 
 
 def train_cspn(
@@ -22,23 +22,28 @@ def train_cspn(
     log_sample_every = 10
     sample_count = max(1, min(16, cfg.dataset.num_classes))
 
-    sample_labels = torch.tensor(
-        [
-            [0, 0, 0],
-            [1, 0, 0],
-            [2, 0, 0],
-            [3, 0, 0],
-            [4, 0, 0],
-            [5, 0, 0],
-            [6, 0, 0],
-            [7, 0, 0],
-            [8, 0, 0],
-            [9, 0, 0],
-        ]
-    ).to(device, non_blocking=True)
-    sample_labels = (
-        torch.arange(sample_count).repeat_interleave(3).to(device, non_blocking=True)
-    )
+    if cfg.model.encoder_config.encoder_type == CSPNEncoderType.CATEGORICAL:
+        sample_labels = (
+            torch.arange(sample_count)
+            .repeat_interleave(3)
+            .to(device, non_blocking=True)
+        )
+    else:
+        # TODO update the hardcoded colourmnist values
+        sample_labels = torch.tensor(
+            [
+                [0, 0, 0],
+                [1, 0, 0],
+                [2, 0, 0],
+                [3, 0, 0],
+                [4, 0, 0],
+                [5, 0, 0],
+                [6, 0, 0],
+                [7, 0, 0],
+                [8, 0, 0],
+                [9, 0, 0],
+            ]
+        ).to(device, non_blocking=True)
 
     train_metrics = MetricsCollector()
     val_metrics = MetricsCollector()

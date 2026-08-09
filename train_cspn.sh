@@ -8,6 +8,7 @@ source .venv/bin/activate
 
 configs=(
     "configs/cspn/mnist.yaml"
+    "configs/cspn/colour_mnist.yaml"
     "configs/cspn/celeba.yaml"
 )
 

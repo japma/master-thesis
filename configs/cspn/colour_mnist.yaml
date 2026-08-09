@@ -10,10 +10,10 @@ dataset:
 autoencoder:
   name: "autoencoder_colour_mnist"
   external: false
-  latent_dim: 16
 
 model:
   model_type: "psinet"
+  num_vars: 16
   num_repetitions: 3
   num_input_distributions: 8
   num_sums: 8

@@ -12,6 +12,7 @@ from models.cspn.psinet.exponential_family_array import NormalArray
 from models.cspn.psinet.graph import random_binary_trees
 from models.cspn.psinet.label_encoder import (
     CategoricalLabelEncoder,
+    LabelDropout,
     MultiBinaryLabelEncoder,
     MultiCategoricalLabelEncoder,
 )
@@ -76,6 +77,11 @@ class PsiNetCSPN(AbstractCSPN):
             case _:
                 raise ValueError("Illegal encoder type")
 
+        self.label_dropout = LabelDropout(
+            unknown_indices=encoder.unknown_indices,
+            dropout_prob=0.15 # TODO move to config
+        )
+
         conditioning_network = build_conditioning_mlp_for(
             self.einet,
             h_dims=config.h_dims,
@@ -85,12 +91,18 @@ class PsiNetCSPN(AbstractCSPN):
         self.einet.param_nn = conditioning_network
 
     def forward(self, z: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
+        labels = self.label_dropout(labels)
         return self.einet.forward(x=z, y=labels).squeeze(-1)
 
     def sample(self, labels: torch.Tensor) -> torch.Tensor:
         samples = self.einet.sample(y=labels)
         assert samples is not None
         return samples
+
+    def mpe(self, labels: torch.Tensor) -> torch.Tensor:
+        mpe_samples = self.einet.mpe(y=labels)
+        assert mpe_samples is not None
+        return mpe_samples
 
     def get_config(self) -> dict:
         return self.config.model_dump()

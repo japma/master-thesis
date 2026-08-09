@@ -13,7 +13,7 @@ def main() -> None:
     dataloader, _ = build_data_loaders(dataset_cfg)
 
     ae = PretrainedVAE(
-        name="REPA-E/e2e-sdvae-hf",
+        name="xkronosx/AutoEncoder-CelebA-256",
         height=dataset_cfg.height,
         width=dataset_cfg.width,
     )

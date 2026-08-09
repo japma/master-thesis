@@ -14,7 +14,7 @@ autoencoder:
 model:
   model_type: "psinet"
   num_vars: 256
-  num_repetitions: 5
+  num_repetitions: 3
   num_input_distributions: 16
   num_sums: 16
   min_var: 0.001
