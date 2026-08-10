@@ -13,9 +13,9 @@ _FG_COLOURS = {
     "red": (255, 0, 0),
     "green": (0, 255, 0),
     "blue": (0, 0, 255),
-    "orange": (255, 165, 0),
+    "cyan": (0, 255, 255),
     "yellow": (255, 255, 0),
-    "pink": (255, 165, 0),
+    "pink": (255, 0, 255),
 }
 
 _BG_COLOURS = {
@@ -62,7 +62,7 @@ def _process_split(
         writer = csv.writer(f)
         writer.writerow(["id", "label", "fg_colour", "bg_colour", "filename"])
 
-        assert isinstance(dataset, Iterable)
+        # assert isinstance(dataset, Iterable)
 
         for image, label in tqdm.tqdm(dataset):
             fg_colour, bg_colour = _label_to_colours(label)
@@ -83,6 +83,9 @@ def main() -> None:
 
     root = "data/colour-mnist"
     os.makedirs(root, exist_ok=True)
+
+    seed = 42
+    random.seed(seed)
 
     _process_split(train_ds, "train", root)
     _process_split(test_ds, "test", root)

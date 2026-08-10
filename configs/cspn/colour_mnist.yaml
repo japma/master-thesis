@@ -10,6 +10,7 @@ dataset:
 autoencoder:
   name: "autoencoder_colour_mnist"
   external: false
+  tag: "latest"
 
 model:
   model_type: "psinet"
@@ -23,7 +24,7 @@ model:
   encoder_config:
     encoder_type: multi_categorical
     # classes, fg colours, bg colours
-    num_classes: [ 10, 7, 3 ]
+    num_classes: [ 10, 6, 3 ]
 
 training:
   epochs: 200

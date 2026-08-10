@@ -6,14 +6,14 @@ import torch
 from PIL import Image
 from torch.utils.data import Dataset
 
+# TODO consolidate into one file with the generation script
 FG_TO_IDX = {
     "red": 0,
     "green": 1,
     "blue": 2,
-    "white": 3,
-    "orange": 4,
-    "yellow": 5,
-    "pink": 6,
+    "cyan": 3,
+    "yellow": 4,
+    "pink": 5,
 }
 
 BG_TO_IDX = {
