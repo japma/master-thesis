@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from pathlib import Path
 
 import torch
 
@@ -33,4 +34,8 @@ class AbstractObjective(ABC):
 
     @abstractmethod
     def sample(self, samples: torch.Tensor) -> torch.Tensor:
+        raise NotImplementedError
+
+    @abstractmethod
+    def save_checkpoint(self, path: Path) -> None:
         raise NotImplementedError

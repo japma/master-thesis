@@ -1,6 +1,7 @@
 """Autoencoder training loop."""
 
 from collections.abc import Sized
+from pathlib import Path
 
 import torch
 import tqdm
@@ -22,6 +23,7 @@ def train_autoencoder(
 ) -> None:
     epochs = cfg.training.epochs
     log_sample_every = 10
+    checkpoint_every = 25
 
     dataset = test_loader.dataset
 
@@ -88,6 +90,21 @@ def train_autoencoder(
                 step=epoch,
             )
 
+        if checkpoint_every > 0 and (epoch + 1) % checkpoint_every == 0:
+            intermediate_name = (
+                f"intermediate_{cfg.model.model_type}_{cfg.dataset.name}_{epoch + 1}"
+            )
+            intermediate_ckpt_path = (
+                Path("checkpoints/intermediate") / f"{intermediate_name}.pt"
+            )
+            objective.save_checkpoint(intermediate_ckpt_path)
+
+            intermediate_artifact = wandb.Artifact(
+                name=intermediate_name, type="autoencoder"
+            )
+            intermediate_artifact.add_file(str(intermediate_ckpt_path))
+            wandb.log_artifact(intermediate_artifact)
+
         objective.on_epoch_end()
         rtpt.step(subtitle=f"{epoch + 1}/{epochs}")
 
@@ -104,3 +121,11 @@ def train_autoencoder(
         },
         step=epoch,
     )
+
+    name = f"{cfg.model.model_type}_{cfg.dataset.name}"
+    ckpt_path = Path("checkpoints") / f"{name}.pt"
+    objective.save_checkpoint(ckpt_path)
+
+    artifact = wandb.Artifact(name=name, type="autoencoder")
+    artifact.add_file(str(ckpt_path))
+    wandb.log_artifact(artifact)

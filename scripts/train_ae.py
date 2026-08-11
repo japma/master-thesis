@@ -117,12 +117,6 @@ def main() -> None:
         rtpt=rtpt,
     )
 
-    ckpt_path = Path("checkpoints") / f"{run_name}.pt"
-    save_autoencoder(ae, ckpt_path)
-
-    artifact = wandb.Artifact(name=model_name, type="autoencoder")
-    artifact.add_file(str(ckpt_path))
-    wandb.log_artifact(artifact)
     wandb.finish()
 
 

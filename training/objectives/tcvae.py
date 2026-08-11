@@ -1,9 +1,12 @@
+from pathlib import Path
+
 import torch
 
 from models import VariationalAutoencoder
 from models.autoencoder.variational_autoencoder import VAEForwardOutput
 from training.losses.tcvae import BetaTCVAELoss, TCVAELossOutput
 from training.objectives.base import AbstractObjective, StepOutput
+from utils.checkpoints import save_autoencoder
 
 
 class TCVAEObjective(AbstractObjective):
@@ -92,3 +95,8 @@ class TCVAEObjective(AbstractObjective):
         with torch.no_grad():
             outputs: VAEForwardOutput = self.model(samples)
         return torch.sigmoid(outputs.reconstructed)
+
+    def save_checkpoint(self, path: Path) -> None:
+        # TODO maybe save optimizer and scheduler state as well
+        save_autoencoder(self.model, path)
+        print("Saved TCVAE checkpoint to", path)

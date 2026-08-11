@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import torch
 
 from models.cspn.psinet.label_pc import LabelPC
 from training.losses.spn import NLLLoss
 from training.objectives.base import AbstractObjective, StepOutput
+from utils.checkpoints import save_label_pc
 
 
 class LabelPCObjective(AbstractObjective):
@@ -62,3 +65,6 @@ class LabelPCObjective(AbstractObjective):
 
     def sample(self, samples: torch.Tensor) -> torch.Tensor:
         raise NotImplementedError
+
+    def save_checkpoint(self, path: Path) -> None:
+        save_label_pc(self.model, path)

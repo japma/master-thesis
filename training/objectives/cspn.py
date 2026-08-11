@@ -1,9 +1,12 @@
+from pathlib import Path
+
 import torch
 
 from models.autoencoder import AbstractAutoencoder
 from models.cspn.abstract_cspn import AbstractCSPN
 from training.losses.spn import NLLLoss
 from training.objectives.base import AbstractObjective, StepOutput
+from utils.checkpoints import save_cspn
 
 
 class CSPNObjective(AbstractObjective):
@@ -83,3 +86,7 @@ class CSPNObjective(AbstractObjective):
             sampled_latent: torch.Tensor = self.model.sample(samples.long())
             sampled_images: torch.Tensor = self.autoencoder.decode(sampled_latent)
         return sampled_images
+
+    def save_checkpoint(self, path: Path) -> None:
+        # TODO maybe save optimizer and scheduler state as well
+        save_cspn(self.model, path)

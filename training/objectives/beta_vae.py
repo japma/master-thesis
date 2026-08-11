@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import torch
 
 from models import VariationalAutoencoder
@@ -5,6 +7,7 @@ from models.autoencoder.variational_autoencoder import VAEForwardOutput
 from training.losses.vae import VAELoss, VAELossOutput
 from training.objectives.base import AbstractObjective, StepOutput
 from training.schedulers import BetaAnnealingScheduler
+from utils.checkpoints import save_autoencoder
 
 
 class BetaVAEObjective(AbstractObjective):
@@ -83,3 +86,8 @@ class BetaVAEObjective(AbstractObjective):
         with torch.no_grad():
             outputs: VAEForwardOutput = self.model(samples)
         return torch.sigmoid(outputs.reconstructed)
+
+    def save_checkpoint(self, path: Path) -> None:
+        # TODO maybe save optimizer and scheduler state as well
+        save_autoencoder(self.model, path)
+        print("Saved Beta VAE checkpoint to", path)
