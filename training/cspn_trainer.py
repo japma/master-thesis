@@ -41,9 +41,9 @@ def train_cspn(
         bald_vector = base_vector.clone()
         bald_vector[bald_idx] = 1.0
 
-        sample_labels = torch.stack([glasses_vector, male_vector, bald_vector]).to(
-            device, non_blocking=True
-        )
+        sample_labels = torch.stack(
+            [base_vector, glasses_vector, male_vector, bald_vector]
+        ).to(device, non_blocking=True)
 
     else:
         # TODO update the hardcoded colourmnist values
