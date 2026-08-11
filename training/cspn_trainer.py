@@ -28,6 +28,23 @@ def train_cspn(
             .repeat_interleave(3)
             .to(device, non_blocking=True)
         )
+    elif cfg.model.encoder_config.encoder_type == CSPNEncoderType.MULTI_BINARY:
+        base_vector = torch.zeros(40)
+        glasses_idx = 15
+        male_idx = 20
+        bald_idx = 4
+
+        glasses_vector = base_vector.clone()
+        glasses_vector[glasses_idx] = 1.0
+        male_vector = base_vector.clone()
+        male_vector[male_idx] = 1.0
+        bald_vector = base_vector.clone()
+        bald_vector[bald_idx] = 1.0
+
+        sample_labels = torch.stack([glasses_vector, male_vector, bald_vector]).to(
+            device, non_blocking=True
+        )
+
     else:
         # TODO update the hardcoded colourmnist values
         sample_labels = torch.tensor(
