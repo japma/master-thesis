@@ -10,7 +10,7 @@ class AbstractCSPN(nn.Module, ABC):
         pass
 
     @abstractmethod
-    def sample(self, labels: torch.Tensor) -> torch.Tensor:
+    def sample(self, labels: torch.Tensor, std_correction: float = 1.0) -> torch.Tensor:
         pass
 
     @abstractmethod

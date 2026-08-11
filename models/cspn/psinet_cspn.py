@@ -79,7 +79,7 @@ class PsiNetCSPN(AbstractCSPN):
 
         self.label_dropout = LabelDropout(
             unknown_indices=encoder.unknown_indices,
-            dropout_prob=0.15 # TODO move to config
+            dropout_prob=0.15,  # TODO move to config
         )
 
         conditioning_network = build_conditioning_mlp_for(
@@ -94,8 +94,8 @@ class PsiNetCSPN(AbstractCSPN):
         labels = self.label_dropout(labels)
         return self.einet.forward(x=z, y=labels).squeeze(-1)
 
-    def sample(self, labels: torch.Tensor) -> torch.Tensor:
-        samples = self.einet.sample(y=labels)
+    def sample(self, labels: torch.Tensor, std_correction: float = 1.0) -> torch.Tensor:
+        samples = self.einet.sample(y=labels, std_correction=std_correction)
         assert samples is not None
         return samples
 
