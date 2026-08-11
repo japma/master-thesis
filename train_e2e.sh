@@ -20,7 +20,7 @@ for config in "${ae_configs[@]}"; do
     echo "Started at: $(date)"
     echo "========================================"
 
-    uv run train_autoencoder "$config"
+    uv run train_ae "$config"
 
     echo "Finished $config at $(date)"
     echo ""

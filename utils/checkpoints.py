@@ -1,3 +1,4 @@
+from models.cspn.psinet.label_pc import LabelPC
 from pathlib import Path
 
 import networkx
@@ -108,3 +109,46 @@ def load_cspn_from_path(path: Path, device=None) -> AbstractCSPN:
     model = _create_cspn_from_checkpoint(cfg, graph=ckpt["graph"])
     model.load_state_dict(ckpt["model_state"])
     return model
+
+
+# --- LabelPC ---
+def save_label_pc(model: LabelPC, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    torch.save(
+        {
+            "model_cfg": model.get_config(),
+            "model_state": model.state_dict(),
+            "graph": model.get_graph(),
+        },
+        path,
+    )
+    print("Saved LabelPC checkpoint to", path)
+
+
+def _create_label_pc_from_checkpoint(cfg: dict, graph: DiGraph) -> LabelPC:
+    return LabelPC(
+        num_attributes=cfg["num_attributes"],
+        num_input_distributions=cfg["num_input_distributions"],
+        num_sums=cfg["num_sums"],
+        num_repetitions=cfg["num_repetitions"],
+        graph=graph,
+    )
+
+
+def load_label_pc_from_path(path: Path, device=None) -> LabelPC:
+    with (
+        torch.serialization.safe_globals([networkx.classes.digraph.DiGraph]),
+        torch.serialization.safe_globals([DistributionVector]),
+        torch.serialization.safe_globals([EiNetAddress]),
+        torch.serialization.safe_globals([Product]),
+        torch.serialization.safe_globals([numpy._core.multiarray.scalar]),
+        torch.serialization.safe_globals([numpy.dtype]),
+    ):
+        ckpt = torch.load(path, map_location=device, weights_only=False)
+
+    if "graph" not in ckpt:
+        raise AssertionError(f"Checkpoint at {path} has no saved `graph` entry")
+
+    model = _create_label_pc_from_checkpoint(ckpt["model_cfg"], graph=ckpt["graph"])
+    model.load_state_dict(ckpt["model_state"])
+    return model.to(device) if device is not None else model

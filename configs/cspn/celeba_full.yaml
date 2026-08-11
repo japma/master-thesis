@@ -1,0 +1,37 @@
+type: cspn
+
+dataset:
+  name: celeba
+  channels: 3
+  height: 64
+  width: 64
+  num_classes: 40
+
+autoencoder:
+  name: "autoencoder_celeba"
+  external: false
+
+model:
+  model_type: "psinet"
+  num_vars: 128
+  num_repetitions: 2
+  num_input_distributions: 6
+  num_sums: 8
+  min_var: 0.001
+  max_var: 4.0
+  h_dims: [ 512, 256 ]
+  encoder_config:
+    encoder_type: multi_binary
+    num_classes: [ 40 ]
+
+training:
+  epochs: 200
+  learning_rate: 0.001
+  batch_size: 256
+  early_stopping_patience: 10
+  early_stopping_min_delta: 0.01
+
+wandb:
+  mode: online
+  project: master-thesis
+  entity: jmartini-tu-darmstadt

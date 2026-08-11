@@ -6,15 +6,15 @@ import torch.nn as nn
 
 from models.cspn.psinet.factorized_leaf_layer import FactorizedLeafLayer
 from models.cspn.psinet.label_encoder import LabelEncoder
+from models.cspn.psinet.param_shapes import derive_layer_param_shapes
 from models.cspn.psinet.sum_layer import EinsumLayer, EinsumMixingLayer
 
 
 def derive_head_shapes(einet_layers: list) -> list[tuple[int, ...]]:
-    if not isinstance(einet_layers[0], FactorizedLeafLayer):
-        raise AssertionError("einet_layers[0] must be the FactorizedLeafLayer.")
+    layer_shapes = derive_layer_param_shapes(einet_layers)
 
     leaf = einet_layers[0]
-    full_leaf_shape = leaf.ef_array.params_shape
+    full_leaf_shape = layer_shapes[0]
     num_dims = leaf.num_dims
     if full_leaf_shape[-1] != 2 * num_dims:
         raise AssertionError(
@@ -23,17 +23,7 @@ def derive_head_shapes(einet_layers: list) -> list[tuple[int, ...]]:
         )
     half_shape = (*full_leaf_shape[:-1], num_dims)
 
-    shapes: list[tuple[int, ...]] = [half_shape, half_shape]  # mu head, var head
-
-    for layer in einet_layers[1:]:
-        if isinstance(layer, (EinsumLayer, EinsumMixingLayer)):
-            shapes.append(tuple(layer.params_shape))
-        else:
-            raise AssertionError(
-                f"Unexpected layer type in einet_layers[1:]: {type(layer)}"
-            )
-
-    return shapes
+    return [half_shape, half_shape, *layer_shapes[1:]]  # mu head, var head, sum-layer
 
 
 class ConditioningMLP(nn.Module):
