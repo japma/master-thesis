@@ -96,12 +96,6 @@ def main() -> None:
         rtpt=rtpt,
     )
 
-    ckpt_path = Path("checkpoints") / f"{run_name}.pt"
-    save_cspn(cspn, ckpt_path)
-
-    artifact = wandb.Artifact(name=run_name, type="cspn")
-    artifact.add_file(str(ckpt_path))
-    wandb.log_artifact(artifact)
     wandb.finish()
 
 

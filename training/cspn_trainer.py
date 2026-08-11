@@ -1,5 +1,7 @@
 """CSPN training loop."""
 
+from pathlib import Path
+
 import torch
 import tqdm
 from rtpt import RTPT
@@ -20,6 +22,8 @@ def train_cspn(
 ) -> None:
     epochs = cfg.training.epochs
     log_sample_every = 10
+    checkpoint_every = 25
+
     sample_count = max(1, min(16, cfg.dataset.num_classes))
 
     if cfg.model.encoder_config.encoder_type == CSPNEncoderType.CATEGORICAL:
@@ -109,6 +113,25 @@ def train_cspn(
                 step=epoch,
             )
 
+        if epoch % checkpoint_every == 0 and epoch > 0:
+            # TODO maybe this can be refactored into a function
+            intermediate_name = (
+                f"intermediate_{cfg.model.model_type}_{cfg.dataset.name}"
+            )
+            intermediate_ckpt_path = (
+                Path("checkpoints/intermediate") / f"{intermediate_name}.ckpt"
+            )
+            objective.save_checkpoint(intermediate_ckpt_path)
+            print(f"Saved intermediate checkpoint: {intermediate_ckpt_path}")
+
+            intermediate_artifact = wandb.Artifact(
+                name=intermediate_name,
+                type="cspn",
+                description=f"Epoch {epoch + 1}",
+            )
+            intermediate_artifact.add_file(str(intermediate_ckpt_path))
+            wandb.log_artifact(intermediate_artifact)
+
         objective.on_epoch_end()
         rtpt.step(subtitle=f"{epoch + 1}/{epochs}")
 
@@ -123,3 +146,11 @@ def train_cspn(
         },
         step=epoch,
     )
+
+    name = f"final_{cfg.model.model_type}_{cfg.dataset.name}"
+    ckpt_path = Path("checkpoints") / f"{name}.ckpt"
+    objective.save_checkpoint(ckpt_path)
+
+    artifact = wandb.Artifact(name=name, type="cspn")
+    artifact.add_file(str(ckpt_path))
+    wandb.log_artifact(artifact)
