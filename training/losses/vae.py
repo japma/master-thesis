@@ -27,7 +27,6 @@ class VAELoss(nn.Module):
     ) -> None:
         super().__init__()
         self.beta = beta
-        # TODO use free bits
         self.free_bits = free_bits
         self.lambda_perceptual = lambda_perceptual
         self.perceptual = VGGPerceptualLoss() if lambda_perceptual > 0 else None

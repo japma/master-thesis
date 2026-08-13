@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from utils.config import AutoencoderConfig
 
@@ -45,28 +46,51 @@ class ResBlock(nn.Module):
 
 
 class SelfAttention2d(nn.Module):
-    """Spatial self-attention with a learnable per-channel gate."""
-
     def __init__(
-        self, channels: int, num_heads: int = 1, init_gate: float = 1e-4
+        self,
+        channels: int,
+        spatial_size: int,
+        num_heads: int = 1,
+        init_gate: float = 1e-4,
     ) -> None:
         super().__init__()
         self.norm = make_norm(channels)
         self.attn = nn.MultiheadAttention(channels, num_heads, batch_first=True)
         self.gate = nn.Parameter(torch.full((channels,), init_gate))
+        self.pos_embed = nn.Parameter(
+            torch.randn(1, spatial_size * spatial_size, channels) * 0.02
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         batch_size, channels, height, width = x.shape
         h = self.norm(x)
-
         h = h.view(batch_size, channels, height * width).permute(0, 2, 1)
+        h = h + self.pos_embed
         h, _ = self.attn(h, h, h, need_weights=False)
         h = h.permute(0, 2, 1).view(batch_size, channels, height, width)
         return x + self.gate.view(1, channels, 1, 1) * h
 
 
+class BlurPool2d(nn.Module):
+    """Fixed binomial low-pass filter + stride-2 subsample (anti-aliased downsampling)."""
+
+    kernel: torch.Tensor
+
+    def __init__(self, channels: int) -> None:
+        super().__init__()
+        kernel_1d = torch.tensor([1.0, 2.0, 1.0])
+        kernel_2d = kernel_1d[:, None] * kernel_1d[None, :]
+        kernel_2d = kernel_2d / kernel_2d.sum()
+        kernel = kernel_2d.expand(channels, 1, 3, 3).contiguous()
+        self.register_buffer("kernel", kernel)
+        self.channels: int = channels
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return F.conv2d(x, self.kernel, stride=2, padding=1, groups=self.channels)
+
+
 class EncoderBlock(nn.Module):
-    """Strided downsample followed by `num_resblocks` residual blocks."""
+    """Conv + norm + activation, then anti-aliased downsample, then `num_resblocks` residual blocks."""
 
     def __init__(
         self, in_channels: int, out_channels: int, num_resblocks: int = 1
@@ -78,11 +102,12 @@ class EncoderBlock(nn.Module):
                 out_channels,
                 kernel_size=3,
                 padding=1,
-                stride=2,
+                stride=1,
                 bias=False,
             ),
             make_norm(out_channels),
             nn.ReLU(inplace=True),
+            BlurPool2d(out_channels),
         )
         self.res = nn.Sequential(
             *[ResBlock(out_channels) for _ in range(num_resblocks)]
@@ -143,9 +168,10 @@ class VariationalAutoencoder(AbstractAutoencoder):
 
         self.encoder = nn.ModuleList(encoder_blocks)
 
-        self.bottleneck_attn = SelfAttention2d(current_channels)
-
         self.encoded_size: int = config.image_size // (2**config.num_blocks)
+
+        self.bottleneck_attn = SelfAttention2d(current_channels, self.encoded_size)
+
         flat_dim: int = current_channels * self.encoded_size * self.encoded_size
         self.bottleneck_channels: int = current_channels
 
@@ -199,9 +225,7 @@ class VariationalAutoencoder(AbstractAutoencoder):
         nn.init.normal_(self.log_var_head.weight, mean=0.0, std=0.01)
         nn.init.zeros_(self.log_var_head.bias)
 
-    def _encode_distribution(
-        self, x: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def encode_distribution(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         h = self.input_proj(x)
         for block in self.encoder:
             h = block(h)
@@ -213,7 +237,7 @@ class VariationalAutoencoder(AbstractAutoencoder):
         return mu, log_var
 
     def encode(self, x: torch.Tensor) -> torch.Tensor:
-        mu, _ = self._encode_distribution(x)
+        mu, _ = self.encode_distribution(x)
         return mu
 
     def decode_logits(self, z: torch.Tensor) -> torch.Tensor:
@@ -229,7 +253,7 @@ class VariationalAutoencoder(AbstractAutoencoder):
         return torch.sigmoid(self.decode_logits(z))
 
     def forward(self, x: torch.Tensor) -> AutoencoderForwardOutput:
-        mu, log_var = self._encode_distribution(x)
+        mu, log_var = self.encode_distribution(x)
         z = reparameterize(mu, log_var)
         logits = self.decode_logits(z)
         return VAEForwardOutput(

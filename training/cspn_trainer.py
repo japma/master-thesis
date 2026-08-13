@@ -119,7 +119,7 @@ def train_cspn(
                 f"intermediate_{cfg.model.model_type}_{cfg.dataset.name}"
             )
             intermediate_ckpt_path = (
-                Path("checkpoints/intermediate") / f"{intermediate_name}.ckpt"
+                Path("checkpoints/intermediate") / f"{intermediate_name}.pt"
             )
             objective.save_checkpoint(intermediate_ckpt_path)
             print(f"Saved intermediate checkpoint: {intermediate_ckpt_path}")
@@ -147,8 +147,8 @@ def train_cspn(
         step=epoch,
     )
 
-    name = f"final_{cfg.model.model_type}_{cfg.dataset.name}"
-    ckpt_path = Path("checkpoints") / f"{name}.ckpt"
+    name = f"{cfg.model.model_type}_{cfg.dataset.name}"
+    ckpt_path = Path("checkpoints") / f"{name}.pt"
     objective.save_checkpoint(ckpt_path)
 
     artifact = wandb.Artifact(name=name, type="cspn")
