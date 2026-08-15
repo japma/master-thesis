@@ -25,10 +25,6 @@ class Args:
     num_classes: number of outputs of the PC.
     exponential_family: which exponential family to use; (sub-class ExponentialFamilyTensor).
     exponential_family_args: arguments for the exponential family, e.g. trial-number N for Binomial.
-    use_em: determines if the internal em algorithm shall be used; otherwise you might use e.g. SGD.
-    online_em_frequency: how often shall online be triggered in terms, of batches? 1 means after each batch, None means
-                         batch EM. In the latter case, EM updates must be triggered manually after each epoch.
-    online_em_stepsize: stepsize for inline EM. Only relevant if online_em_frequency not is None.
     """
 
     def __init__(
@@ -40,9 +36,6 @@ class Args:
         num_classes: int = 1,
         exponential_family: type[NormalArray]=NormalArray,
         exponential_family_args=None,
-        use_em: bool = True,
-        online_em_frequency: int = 1,
-        online_em_stepsize: float = 0.05,
     ) -> None:
         self.num_var = num_var
         self.num_dims = num_dims
@@ -53,9 +46,6 @@ class Args:
         if exponential_family_args is None:
             exponential_family_args = {}
         self.exponential_family_args = exponential_family_args
-        self.use_em = use_em
-        self.online_em_frequency = online_em_frequency
-        self.online_em_stepsize = online_em_stepsize
 
 
 class EinsumNetwork(torch.nn.Module):
@@ -76,7 +66,14 @@ class EinsumNetwork(torch.nn.Module):
         num_nodes is the number of nodes which are realized in parallel using this layer.
     Thus, in classical PCs, we would interpret the each layer as a collection of vector_length * num_nodes PC nodes.
 
-    The class EinsumNetork mainly governs the layer-wise layout, initialization, forward() calls, EM learning, etc.
+    The class EinsumNetork mainly governs the layer-wise layout, initialization, forward() calls, etc.
+
+    Every einet_layer's parameters come from one of two sources, selected by whether param_nn is given:
+      - param_nn is a module (e.g. a CSPN-style hypernetwork conditioned on labels `y`): params = param_nn(y, x).
+      - param_nn is None: each layer uses its own directly-trained parameters (populated by initialize()),
+        batch-expanded to match the input. This is the plain, unconditional PC case -- see LabelPC.
+    Either way, forward()/backtrack() always work with a list of per-layer parameter tensors of shape
+    (batch, *layer.params_shape).
     """
 
     def __init__(self, graph, param_nn=None, args=None) -> None:
@@ -84,7 +81,6 @@ class EinsumNetwork(torch.nn.Module):
         super().__init__()
 
         self.param_nn = param_nn
-        self.last_params = None
         check_flag, check_msg = check_graph(graph)
         if not check_flag:
             raise AssertionError(check_msg)
@@ -121,7 +117,6 @@ class EinsumNetwork(torch.nn.Module):
                 self.args.num_dims,
                 self.args.exponential_family,
                 self.args.exponential_family_args,
-                use_em=self.args.use_em,
             )
         ]
 
@@ -129,24 +124,17 @@ class EinsumNetwork(torch.nn.Module):
         for c, layer in enumerate(self.graph_layers[1:]):
             if c % 2 == 0:  # product layer
                 einet_layers.append(
-                    EinsumLayer(
-                        self.graph, layer, einet_layers, use_em=self.args.use_em
-                    )
+                    EinsumLayer(self.graph, layer, einet_layers)
                 )
             else:  # sum layer
                 # the Mixing layer is only for regions which have multiple partitions as children.
                 multi_sums = [n for n in layer if len(graph.succ[n]) > 1]
                 if multi_sums:
                     einet_layers.append(
-                        EinsumMixingLayer(
-                            graph, multi_sums, einet_layers[-1], use_em=self.args.use_em
-                        )
+                        EinsumMixingLayer(graph, multi_sums, einet_layers[-1])
                     )
 
         self.einet_layers = torch.nn.ModuleList(einet_layers)
-        self.em_set_hyperparams(
-            self.args.online_em_frequency, self.args.online_em_stepsize
-        )
 
     def initialize(self, init_dict=None) -> None:
         """
@@ -173,13 +161,41 @@ class EinsumNetwork(torch.nn.Module):
         """Get indices of marginalized variables."""
         return self.einet_layers[0].get_marginalization_idx()
 
-    def forward(self, x: Tensor, y):
+    def _own_layer_params(self, layer) -> Tensor:
+        """The parameter tensor a layer would use when there is no param_nn -- unbatched,
+        shape layer.params_shape (or layer.ef_array.params_shape for the leaf layer)."""
+        if isinstance(layer, FactorizedLeafLayer):
+            return layer.ef_array.params
+        return layer.params
+
+    def _get_params(
+        self, x: Tensor | None, y: Tensor | None, batch_size: int | None = None
+    ) -> list[Tensor]:
+        """Resolve the per-layer parameter list, batched to shape (batch, *layer.params_shape)."""
+        if self.param_nn is not None:
+            return self.param_nn(y, x)
+        if batch_size is None:
+            if x is not None:
+                batch_size = x.shape[0]
+            elif y is not None:
+                batch_size = y.shape[0]
+            else:
+                raise ValueError(
+                    "Need x or y to determine batch size when param_nn is None."
+                )
+        params = []
+        for layer in self.einet_layers:
+            p = self._own_layer_params(layer)
+            params.append(p.unsqueeze(0).expand(batch_size, *p.shape))
+        return params
+
+    def forward(self, x: Tensor, y: Tensor | None = None):
         """Evaluate the EinsumNetwork feed forward.
         x: x for p(x|y) (target variable), shape=[B, N]
-        y: evidence for p(x|y) (conditional variable) shape=[B, M]
+        y: evidence for p(x|y) (conditional variable) shape=[B, M]. Only required when this net has a
+           param_nn (a conditioning hypernetwork); unconditional PCs (param_nn is None) don't need it.
         """
-        assert self.param_nn is not None, "param_nn must be set and be valid nn.Module"
-        params = self.param_nn(y, x)
+        params = self._get_params(x=x, y=y)
 
         input_layer = self.einet_layers[0]
         input_layer(x, params[0])
@@ -188,51 +204,42 @@ class EinsumNetwork(torch.nn.Module):
             einsum_layer(params[j])
         return self.einet_layers[-1].prob[:, :, 0]
 
-    def forward_integral(self, x_lower, x_upper, y):
-        """Evaluate the EinsumNetwork feed forward.
-        x_lower: lower bound for integral of p(x|y), shape=[B, N]
-        x_upper: lower bound for integral of p(x|y), shape=[B, N]
-        y: evidence for p(x|y) (conditional variable) shape=[B, M]
-        """
-        assert self.param_nn is not None, "param_nn must be set and be valid nn.Module"
-        params = self.param_nn(y, None)
-
-        input_layer = self.einet_layers[0]
-        input_layer.bounded_integral(x_lower, x_upper, params[0])
-        for i, einsum_layer in enumerate(self.einet_layers[1:]):
-            j = i + 1  # increment i by 1 as enumerate starts with 0, we need +1
-            einsum_layer(params[j])
-        return self.einet_layers[-1].prob[:, :, 0]
-
     def backtrack(
-        self, y, num_samples=1, class_idx=0, x=None, mode="sampling", **kwargs
+        self, y: Tensor | None = None, num_samples: int=1, class_idx: int=0, x=None, mode="sampling", **kwargs
     ) -> Tensor | None:
         """
         Perform backtracking; for sampling or MPE approximation.
         """
-        assert self.param_nn is not None, "param_nn must be set and be valid nn.Module"
-        params = self.param_nn(y, None)
+        if x is not None:
+            batch_size = x.shape[0]
+        elif y is not None:
+            batch_size = y.shape[0]
+        else:
+            raise ValueError("backtrack() needs x or y to determine the batch size.")
+
+        params = self._get_params(x=None, y=y, batch_size=batch_size)
 
         if len(params) != len(self.einet_layers):
             raise AssertionError(
-                f"param_nn produced {len(params)} param tensors but there are "
+                f"param source produced {len(params)} param tensors but there are "
                 f"{len(self.einet_layers)} einet_layers. These must match 1:1."
             )
         layer_to_params = dict(zip(self.einet_layers, params, strict=False))
         if x is not None:
-            if x.shape[0] != y.shape[0]:
+            if y is not None and x.shape[0] != y.shape[0]:
                 raise AssertionError(
                     f"x and y must share the same batch size, got x.shape[0]={x.shape[0]} "
                     f"and y.shape[0]={y.shape[0]}."
                 )
             self.forward(x, y)
         else:
+            assert y is not None  # guaranteed by the batch_size resolution above
             dummy_x = torch.zeros(
-                y.shape[0], self.args.num_var, device=y.device, dtype=torch.float32
+                batch_size, self.args.num_var, device=y.device, dtype=torch.float32
             )
             self.forward(dummy_x, y)
 
-        num_samples = y.shape[0]
+        num_samples = batch_size
 
         sample_idx = {l: [] for l in self.einet_layers}
         dist_idx = {l: [] for l in self.einet_layers}
@@ -335,7 +342,7 @@ class EinsumNetwork(torch.nn.Module):
                 return samples
         return None
 
-    def sample(self, y, num_samples: int=1, class_idx: int=0, x=None, **kwargs) -> Tensor | None:
+    def sample(self, y: Tensor | None = None, num_samples: int=1, class_idx: int=0, x=None, **kwargs) -> Tensor | None:
         return self.backtrack(
             y,
             num_samples=num_samples,
@@ -345,7 +352,7 @@ class EinsumNetwork(torch.nn.Module):
             **kwargs,
         )
 
-    def mpe(self, y, num_samples: int=1, class_idx: int=0, x=None, **kwargs) -> Tensor | None:
+    def mpe(self, y: Tensor | None = None, num_samples: int=1, class_idx: int=0, x=None, **kwargs) -> Tensor | None:
         return self.backtrack(
             y,
             num_samples=num_samples,
@@ -354,61 +361,3 @@ class EinsumNetwork(torch.nn.Module):
             mode="argmax",
             **kwargs,
         )
-
-    def em_set_hyperparams(self, online_em_frequency, online_em_stepsize, purge=True) -> None:
-        for l in self.einet_layers:
-            l.em_set_hyperparams(online_em_frequency, online_em_stepsize, purge)
-
-    def em_process_batch(self) -> None:
-        for l in self.einet_layers:
-            l.em_process_batch()
-
-    def em_update(self) -> None:
-        for l in self.einet_layers:
-            l.em_update()
-
-
-def log_likelihoods(outputs, labels=None):
-    """Compute the likelihood of EinsumNetwork."""
-    if labels is None:
-        num_dist = outputs.shape[-1]
-        if num_dist == 1:
-            lls = outputs
-        else:
-            num_dist = torch.tensor(float(num_dist), device=outputs.device)
-            lls = torch.logsumexp(outputs - torch.log(num_dist), -1)
-    else:
-        lls = outputs.gather(-1, labels.unsqueeze(-1))
-    return lls
-
-
-def eval_accuracy_batched(einet, x, labels, batch_size):
-    """Computes accuracy in batched way."""
-    with torch.no_grad():
-        idx_batches = torch.arange(
-            0, x.shape[0], dtype=torch.int64, device=x.device
-        ).split(batch_size)
-        n_correct = 0
-        for batch_count, idx in enumerate(idx_batches):
-            batch_x = x[idx, :]
-            batch_labels = labels[idx]
-            outputs = einet.forward(batch_x)
-            _, pred = outputs.max(1)
-            n_correct += torch.sum(pred == batch_labels)
-        return (n_correct.float() / x.shape[0]).item()
-
-
-def eval_loglikelihood_batched(einet, x, labels=None, batch_size: int=100):
-    """Computes log-likelihood in batched way."""
-    with torch.no_grad():
-        idx_batches = torch.arange(
-            0, x.shape[0], dtype=torch.int64, device=x.device
-        ).split(batch_size)
-        ll_total = 0.0
-        for batch_count, idx in enumerate(idx_batches):
-            batch_x = x[idx, :]
-            batch_labels = labels[idx] if labels is not None else None
-            outputs = einet(batch_x)
-            ll_sample = log_likelihoods(outputs, batch_labels)
-            ll_total += ll_sample.sum().item()
-        return ll_total

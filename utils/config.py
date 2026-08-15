@@ -110,6 +110,7 @@ class CSPNConfig(BaseModel):
     max_var: float
     h_dims: list[int]
     encoder_config: CSPNEncoderConfig
+    normalize_latents: bool = False
 
     @model_validator(mode="after")
     def valid_var_range(self) -> Self:
@@ -215,15 +216,25 @@ class CSPNRunConfig(BaseModel):
     wandb: WandbConfig
 
 
-def load_config() -> tuple[AERunConfig | CSPNRunConfig, int | None]:
+def load_config() -> tuple[AERunConfig | CSPNRunConfig, int | None, bool]:
     parser = argparse.ArgumentParser()
     parser.add_argument("config_file", type=Path)
     parser.add_argument("--seed", type=int)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help=(
+            "Resume from the intermediate checkpoint's saved training state "
+            "(optimizer/scheduler/epoch/RNG), if one exists. No-ops back to a "
+            "fresh run if no matching train-state sidecar is found."
+        ),
+    )
     args = parser.parse_args()
 
     seed = args.seed
     dry_run: bool = args.dry_run
+    resume: bool = args.resume
 
     path = args.config_file
     if not path.exists():
@@ -238,8 +249,8 @@ def load_config() -> tuple[AERunConfig | CSPNRunConfig, int | None]:
         raw["wandb"]["mode"] = "disabled"
 
     if run_type == "ae":
-        return AERunConfig.model_validate(raw), seed
+        return AERunConfig.model_validate(raw), seed, resume
     elif run_type == "cspn":
-        return CSPNRunConfig.model_validate(raw), seed
+        return CSPNRunConfig.model_validate(raw), seed, resume
     else:
         raise ValueError(f"Unknown or missing run type: {run_type!r}")

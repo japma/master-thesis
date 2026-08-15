@@ -88,5 +88,4 @@ class CSPNObjective(AbstractObjective):
         return sampled_images
 
     def save_checkpoint(self, path: Path) -> None:
-        # TODO maybe save optimizer and scheduler state as well
         save_cspn(self.model, path)

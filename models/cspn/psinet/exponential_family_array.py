@@ -25,12 +25,10 @@ class ExponentialFamilyArray(torch.nn.Module):
     each RV, it evaluates an array of array_shape densities, each with their own parameters. Here, num_var is the number
     of random variables, i.e. the size of the set (boldface) X in the paper.
 
-    The boolean use_em indicates if we want to use the on-board EM algorithm (alternatives would be SGD, Adam,...).
-
-    After the ExponentialFamilyArray has been generated, we need to initialize it. There are several options for
-    initialization (see also method initialize(...) below):
-        'default': use the default initializer (to be written in derived classes).
-        Tensor: provide a custom initialization.
+    Parameters are always supplied externally to forward()/sample()/argmax() -- either from a conditioning
+    hypernetwork (CSPN-style), or, when the enclosing EinsumNetwork has no such network, from this array's own
+    directly-trained self.params (see EinsumNetwork._get_params). Either way they are unconstrained; reparam()
+    maps them into the exponential family's valid domain (see reparam_function()).
 
     In order to implement a concrete exponential family, we need to derive this class and implement
 
@@ -39,22 +37,19 @@ class ExponentialFamilyArray(torch.nn.Module):
         log_h(self, x)
 
         expectation_to_natural(self, phi)
-        default_initializer(self)
-        project_params(self, params)
         reparam_function(self)
         _sample(self, *args, **kwargs)
 
     Please see docstrings of these functions below, for further details.
     """
 
-    def __init__(self, num_var, num_dims, array_shape, num_stats, use_em) -> None:
+    def __init__(self, num_var, num_dims, array_shape, num_stats) -> None:
         """
         :param num_var: number of random variables (int)
         :param num_dims: dimensionality of random variables (int)
         :param array_shape: shape of log-probability tensor, (tuple of ints)
                             log-probability tensor will be of shape (batch_size, num_var,) + array_shape
         :param num_stats: number of sufficient statistics of exponential family (int)
-        :param use_em: use internal EM algorithm? (bool)
         """
         super().__init__()
 
@@ -71,18 +66,9 @@ class ExponentialFamilyArray(torch.nn.Module):
         self.marginalization_idx = None
         self.marginalization_mask = None
 
-        self._use_em = False  # use_em
-        self._p_acc = None
-        self._stats_acc = None
-        self._online_em_frequency = None
-        self._online_em_stepsize = None
-        self._online_em_counter = 0
-
-        # if em is switched off, we re-parametrize the expectation parameters
-        # self.reparam holds the function object for this task
-        self.reparam = None
-        if not self._use_em:
-            self.reparam = self.reparam_function()
+        # unconstrained (real-valued) parameters get transformed to the constrained set of the
+        # expectation parameter via this function.
+        self.reparam = self.reparam_function()
 
     # --------------------------------------------------------------------------------
     # The following functions need to be implemented to specify an exponential family.
@@ -132,35 +118,13 @@ class ExponentialFamilyArray(torch.nn.Module):
         """
         raise NotImplementedError
 
-    def default_initializer(self):
-        """
-        Default initializer for params.
-
-        :return: initial parameters for the implemented exponential family (Tensor).
-                 Must be of shape (self.num_var, *self.array_shape, self.num_stats)
-        """
-        raise NotImplementedError
-
-    def project_params(self, params):
-        """
-        Project onto parameters' constraint set.
-
-        Exponential families are usually defined on a constrained domain, e.g. the second parameter of a Gaussian needs
-        to be non-negative. The EM algorithm takes the parameters sometimes out of their domain. This function projects
-        them back onto their domain.
-
-        :param params: the current parameters, same shape as self.params.
-        :return: projected parameters, same shape as self.params.
-        """
-        raise NotImplementedError
-
     def reparam_function(self):
         """
         Re-parameterize parameters, in order that they stay in their constrained domain.
 
-        When we are not using the EM, we need to transform unconstrained (real-valued) parameters to the constrained set
-        of the expectation parameter. This function should return such a function (i.e. the return value should not be
-        a projection, but a function which does the projection).
+        We transform unconstrained (real-valued) parameters to the constrained set of the expectation parameter.
+        This function should return such a function (i.e. the return value should not be a projection, but a
+        function which does the projection).
 
         :return: function object f which takes as input unconstrained parameters (Tensor) and returns re-parametrized
                  parameters.
@@ -196,7 +160,7 @@ class ExponentialFamilyArray(torch.nn.Module):
 
     # --------------------------------------------------------------------------------
 
-    def initialize(self, initializer: str="default") -> None:
+    def initialize(self, initializer: str = "default") -> None:
         """
         Initialize the parameters for this ExponentialFamilyArray.
 
@@ -206,11 +170,7 @@ class ExponentialFamilyArray(torch.nn.Module):
         :return: None
         """
         if type(initializer) == str and initializer == "default":
-            # default initializer; when em is switched off, we reparametrize and use Gaussian noise as init values.
-            if self._use_em:
-                self.params = torch.nn.Parameter(self.default_initializer())
-            else:
-                self.params = torch.nn.Parameter(torch.randn(self.params_shape))
+            self.params = torch.nn.Parameter(torch.randn(self.params_shape))
         elif type(initializer) == torch.Tensor:
             # provided initializer
             if initializer.shape != self.params_shape:
@@ -233,12 +193,8 @@ class ExponentialFamilyArray(torch.nn.Module):
         :return: log-densities of implemented exponential family (Tensor).
                  Will be of shape (batch_size, self.num_var, *self.array_shape)
         """
-        if self._use_em:
-            # with torch.no_grad():
-            theta = self.expectation_to_natural(params)
-        else:
-            phi = self.reparam(params)
-            theta = self.expectation_to_natural(phi)
+        phi = self.reparam(params)
+        theta = self.expectation_to_natural(phi)
 
         # suff_stats: (batch_size, self.num_var, self.num_stats)
         self.suff_stats = self.sufficient_statistics(x)
@@ -259,11 +215,6 @@ class ExponentialFamilyArray(torch.nn.Module):
         # compute the exponential family tensor
         # (batch_size, self.num_var, *self.array_shape)
         self.ll = log_h + (theta * self.suff_stats).sum(-1) - log_normalizer
-        # self.ll = log_h + (theta.unsqueeze(0) * self.suff_stats).sum(-1) - log_normalizer
-
-        if self._use_em:
-            # EM needs the gradient with respect to self.ll
-            self.ll.requires_grad_()
 
         # Marginalization in PCs works by simply setting leaves corresponding to marginalized variables to 1 (0 in
         # (log-domain). We achieve this by a simple multiplicative 0-1 mask, generated here.
@@ -287,100 +238,15 @@ class ExponentialFamilyArray(torch.nn.Module):
 
         return output
 
-    def sample(self, num_samples: int=1, **kwargs):
-        if self._use_em:
-            params = self.params
-        else:
-            with torch.no_grad():
-                params = self.reparam(self.params)
+    def sample(self, num_samples: int = 1, **kwargs):
+        with torch.no_grad():
+            params = self.reparam(self.params)
         return self._sample(num_samples, params, **kwargs)
 
     def argmax(self, params, **kwargs):
-        if self._use_em:
-            params = self.params
-        else:
-            with torch.no_grad():
-                params = self.reparam(params)
+        with torch.no_grad():
+            params = self.reparam(params)
         return self._argmax(params, **kwargs)
-
-    def bounded_integral(self, lower_bound, upper_bound, params, **kwargs):
-        if self._use_em:
-            params = self.params
-        else:
-            with torch.no_grad():
-                params = self.reparam(params)
-        return self._bounded_integral(lower_bound, upper_bound, params, **kwargs)
-
-    def em_set_hyperparams(self, online_em_frequency, online_em_stepsize, purge: bool=True) -> None:
-        """Set new setting for online EM."""
-        if purge:
-            self.em_purge()
-            self._online_em_counter = 0
-        self._online_em_frequency = online_em_frequency
-        self._online_em_stepsize = online_em_stepsize
-
-    def em_purge(self) -> None:
-        """Discard em statistics."""
-        if self.ll is not None and self.ll.grad is not None:
-            self.ll.grad.zero_()
-        self._p_acc = None
-        self._stats_acc = None
-
-    def em_process_batch(self) -> None:
-        """
-        Accumulate EM statistics of current batch. This should typically be called via EinsumNetwork.em_process_batch().
-        """
-        if not self._use_em:
-            raise AssertionError("em_process_batch called while _use_em==False.")
-        if self.params is None:
-            return
-
-        with torch.no_grad():
-            p = self.ll.grad
-            weighted_stats = (p.unsqueeze(-1) * self.suff_stats).sum(0)
-            p = p.sum(0)
-
-            if self._p_acc is None:
-                self._p_acc = torch.zeros_like(p)
-            self._p_acc += p
-
-            if self._stats_acc is None:
-                self._stats_acc = torch.zeros_like(weighted_stats)
-            self._stats_acc += weighted_stats
-
-            self.ll.grad.zero_()
-
-            if self._online_em_frequency is not None:
-                self._online_em_counter += 1
-                if self._online_em_counter == self._online_em_frequency:
-                    self.em_update(True)
-                    self._online_em_counter = 0
-
-    def em_update(self, _triggered: bool=False) -> None:
-        """
-        Do an EM update. If the setting is online EM (online_em_stepsize is not None), then this function does nothing,
-        since updates are triggered automatically. (Thus, leave the private parameter _triggered alone)
-
-        :param _triggered: for internal use, don't set
-        :return: None
-        """
-        if not self._use_em:
-            raise AssertionError("em_update called while _use_em==False.")
-        if self._online_em_stepsize is not None and not _triggered:
-            return
-
-        with torch.no_grad():
-            if self._online_em_stepsize is None:
-                self.params.data = self._stats_acc / (self._p_acc.unsqueeze(-1) + 1e-12)
-            else:
-                s = self._online_em_stepsize
-                self.params.data = (1.0 - s) * self.params + s * (
-                    self._stats_acc / (self._p_acc.unsqueeze(-1) + 1e-12)
-                )
-            self.params.data = self.project_params(self.params.data)
-
-        self._p_acc = None
-        self._stats_acc = None
 
     def set_marginalization_idx(self, idx) -> None:
         """Set indicices of marginalized variables."""
@@ -401,36 +267,15 @@ class NormalArray(ExponentialFamilyArray):
     """Implementation of Normal distribution."""
 
     def __init__(
-        self, num_var, num_dims, array_shape, min_var: float=0.0001, max_var: float=10.0, use_em: bool=True
+        self, num_var, num_dims, array_shape, min_var: float = 0.0001, max_var: float = 10.0
     ) -> None:
-        super().__init__(num_var, num_dims, array_shape, 2 * num_dims, use_em=use_em)
+        super().__init__(num_var, num_dims, array_shape, 2 * num_dims)
         self.log_2pi = torch.tensor(1.8378770664093453)
         self.min_var = min_var
         self.max_var = max_var
 
-    def default_initializer(self) -> Tensor:
-        phi = torch.empty(self.num_var, *self.array_shape, 2 * self.num_dims)
-        with torch.no_grad():
-            phi[..., 0 : self.num_dims] = torch.randn(
-                self.num_var, *self.array_shape, self.num_dims
-            )
-            phi[..., self.num_dims :] = 1.0 + phi[..., 0 : self.num_dims] ** 2
-        return phi
-
-    def project_params(self, phi):
-        phi_project = phi.clone()
-        mu2 = phi_project[..., 0 : self.num_dims] ** 2
-        phi_project[..., self.num_dims :] -= mu2
-        phi_project[..., self.num_dims :] = torch.clamp(
-            phi_project[..., self.num_dims :], self.min_var, self.max_var
-        )
-        phi_project[..., self.num_dims :] += mu2
-        return phi_project
-
     def reparam_function(self):
         def reparam(params_in) -> Tensor:
-            # mu = params_in[..., 0].clone()
-            # var = self.min_var + torch.sigmoid(params_in[..., 1]) * (self.max_var - self.min_var)
             mu = params_in[..., 0 : self.num_dims].clone()
             var = self.min_var + torch.sigmoid(params_in[..., self.num_dims :]) * (
                 self.max_var - self.min_var
@@ -464,7 +309,7 @@ class NormalArray(ExponentialFamilyArray):
     def log_h(self, x):
         return -0.5 * self.log_2pi * self.num_dims
 
-    def _sample(self, num_samples, params, std_correction: float=1.0):
+    def _sample(self, num_samples, params, std_correction: float = 1.0):
         with torch.no_grad():
             mu = params[..., 0 : self.num_dims]
             var = params[..., self.num_dims :] - mu**2
@@ -480,88 +325,13 @@ class NormalArray(ExponentialFamilyArray):
             mu = params[..., 0 : self.num_dims]
             return shift_last_axis_to(mu, 2)  # TODO is this change always correct?
 
-    def _bounded_integral(self, lower_bound, upper_bound, params, **kwargs) -> Tensor:
-        # calculate the probability between lower_bound and upper_bound (bounded integral)
-        with torch.no_grad():
-            mu = params[..., 0 : self.num_dims]
-            var = params[..., self.num_dims :] - mu**2
-
-            # only make calculations for indices which are not marginalized (to maybe save time)
-            not_marg_indices = [
-                index
-                for index in list(range(self.num_var))
-                if index not in self.marginalization_idx
-            ]
-            mu = mu[:, not_marg_indices]
-            var = var[:, not_marg_indices]
-            if lower_bound is not None:
-                lower_bound = lower_bound[:, not_marg_indices]
-                lower_bound = lower_bound.reshape(lower_bound.shape + (1, 1, 1)).repeat(
-                    (1, 1) + mu.shape[2:]
-                )
-            if upper_bound is not None:
-                upper_bound = upper_bound[:, not_marg_indices]
-                upper_bound = upper_bound.reshape(upper_bound.shape + (1, 1, 1)).repeat(
-                    (1, 1) + mu.shape[2:]
-                )
-
-            if lower_bound is None and upper_bound is None:
-                cdfs = torch.ones_like(mu)
-            elif lower_bound is None:
-                cdfs = torch.distributions.normal.Normal(mu, var).cdf(upper_bound)
-            elif upper_bound is None:
-                cdfs = 1 - torch.distributions.normal.Normal(mu, var).cdf(lower_bound)
-            else:
-                cdfs = torch.distributions.normal.Normal(
-                    mu, var, validate_args=False
-                ).cdf(upper_bound) - torch.distributions.normal.Normal(mu, var).cdf(
-                    lower_bound
-                )
-
-        cdfs = torch.log(cdfs + 10e-20)
-
-        # Marginalization in PCs works by simply setting leaves corresponding to marginalized variables to 1 (0 in
-        # (log-domain). We achieve this by a simple multiplicative 0-1 mask, generated here.
-        # TODO: the marginalization mask doesn't need to be computed every time; only when marginalization_idx changes.
-        if self.marginalization_idx is not None:
-            with torch.no_grad():
-                self.marginalization_mask = torch.ones(
-                    self.num_var, dtype=self.ll.dtype, device=self.ll.device
-                )
-                self.marginalization_mask.data[self.marginalization_idx] = 0.0
-                shape = (1, self.num_var) + (1,) * len(self.array_shape)
-                self.marginalization_mask = self.marginalization_mask.reshape(shape)
-                self.marginalization_mask.requires_grad_(False)
-        else:
-            self.marginalization_mask = None
-
-        if self.marginalization_mask is not None:
-            cdf_new = torch.zeros(
-                (cdfs.shape[0], self.num_var, cdfs.shape[2], cdfs.shape[3])
-            ).to(self.marginalization_mask.device)
-            cdf_new[:, not_marg_indices] = cdfs[:, :, :, :, 0]
-            output = cdf_new * self.marginalization_mask
-        else:
-            output = cdfs
-
-        return output
-
 
 class BinomialArray(ExponentialFamilyArray):
     """Implementation of Binomial distribution."""
 
-    def __init__(self, num_var, num_dims, array_shape, N, use_em: bool=True) -> None:
-        super().__init__(num_var, num_dims, array_shape, num_dims, use_em=use_em)
+    def __init__(self, num_var, num_dims, array_shape, N) -> None:
+        super().__init__(num_var, num_dims, array_shape, num_dims)
         self.N = torch.tensor(float(N))
-
-    def default_initializer(self) -> Tensor:
-        phi = (
-            0.01 + 0.98 * torch.rand(self.num_var, *self.array_shape, self.num_dims)
-        ) * self.N
-        return phi
-
-    def project_params(self, phi):
-        return torch.clamp(phi, 0.0, self.N)
 
     def reparam_function(self):
         def reparam(params) -> Tensor:
@@ -603,8 +373,8 @@ class BinomialArray(ExponentialFamilyArray):
         self,
         num_samples,
         params,
-        dtype: dtype=torch.float32,
-        memory_efficient_binomial_sampling: bool=True,
+        dtype: dtype = torch.float32,
+        memory_efficient_binomial_sampling: bool = True,
     ):
         with torch.no_grad():
             params = params / self.N
@@ -624,7 +394,7 @@ class BinomialArray(ExponentialFamilyArray):
                 samples = torch.sum(rand < params.unsqueeze(-1), -1).type(dtype)
             return shift_last_axis_to(samples, 2)
 
-    def _argmax(self, params, dtype: dtype=torch.float32):
+    def _argmax(self, params, dtype: dtype = torch.float32):
         with torch.no_grad():
             params = params / self.N
             mode = torch.clamp(torch.floor((self.N + 1.0) * params), 0.0, self.N).type(
@@ -636,22 +406,9 @@ class BinomialArray(ExponentialFamilyArray):
 class CategoricalArray(ExponentialFamilyArray):
     """Implementation of Categorical distribution."""
 
-    def __init__(self, num_var, num_dims, array_shape, K, use_em: bool=True) -> None:
-        super().__init__(num_var, num_dims, array_shape, num_dims * K, use_em=use_em)
+    def __init__(self, num_var, num_dims, array_shape, K) -> None:
+        super().__init__(num_var, num_dims, array_shape, num_dims * K)
         self.K = K
-
-    def default_initializer(self) -> Tensor:
-        phi = 0.01 + 0.98 * torch.rand(
-            self.num_var, *self.array_shape, self.num_dims * self.K
-        )
-        return phi
-
-    def project_params(self, phi) -> Tensor:
-        """Note that this is not actually l2-projection. For simplicity, we simply renormalize."""
-        phi = phi.reshape(self.num_var, *self.array_shape, self.num_dims, self.K)
-        phi = torch.clamp(phi, min=1e-12)
-        phi = phi / torch.sum(phi, -1, keepdim=True)
-        return phi.reshape(self.num_var, *self.array_shape, self.num_dims * self.K)
 
     def reparam_function(self):
         def reparam(params) -> Tensor:
@@ -682,7 +439,7 @@ class CategoricalArray(ExponentialFamilyArray):
     def log_h(self, x) -> Tensor:
         return torch.zeros([], device=x.device)
 
-    def _sample(self, num_samples, params, dtype: dtype=torch.float32):
+    def _sample(self, num_samples, params, dtype: dtype = torch.float32):
         with torch.no_grad():
             dist = params.reshape(
                 self.num_var, *self.array_shape, self.num_dims, self.K
@@ -694,7 +451,7 @@ class CategoricalArray(ExponentialFamilyArray):
             samples = torch.sum(rand > cum_sum, -1).type(dtype)
             return shift_last_axis_to(samples, 2)
 
-    def _argmax(self, params, dtype: dtype=torch.float32):
+    def _argmax(self, params, dtype: dtype = torch.float32):
         with torch.no_grad():
             dist = params.reshape(
                 self.num_var, *self.array_shape, self.num_dims, self.K

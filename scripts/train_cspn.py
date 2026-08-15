@@ -8,17 +8,24 @@ from torchinfo import summary
 
 import wandb
 from dataset_loaders import build_data_loaders
+from dataset_loaders.latent_normalizer import LatentNormalizer
 from models.autoencoder.pretrained import PretrainedVAE
 from models.cspn.psinet_cspn import PsiNetCSPN
 from training.cspn_trainer import train_cspn
 from training.objectives.cspn import CSPNObjective
-from utils.checkpoints import load_ae_from_path, load_from_wandb, save_cspn
+from utils.checkpoints import (
+    intermediate_checkpoint_path,
+    load_ae_from_path,
+    load_cspn_from_path,
+    load_from_wandb,
+    save_cspn,
+)
 from utils.config import CSPNRunConfig, CSPNType, load_config
 from utils.reproducibility import resolve_device, seed_everything
 
 
 def main() -> None:
-    cfg, cfg_seed = load_config()
+    cfg, cfg_seed, resume = load_config()
     assert isinstance(cfg, CSPNRunConfig)
     dataset_cfg = cfg.dataset
     cspn_cfg = cfg.model
@@ -48,6 +55,7 @@ def main() -> None:
     else:
         ae_path = load_from_wandb(ckpt_name=ae_cfg.name, tag=ae_cfg.tag)
         ae = load_ae_from_path(ae_path, device=device)
+    ae = ae.to(device)
 
     if ae.get_latent_dim().numel() != cspn_cfg.num_vars:
         raise ValueError(
@@ -56,17 +64,40 @@ def main() -> None:
 
     print(f"Training CSPN on {dataset_name} | device={device} | seed={seed}")
 
-    if cspn_cfg.model_type == CSPNType.PSINET:
-        cspn = PsiNetCSPN(config=cspn_cfg)
-    else:
+    if cspn_cfg.model_type != CSPNType.PSINET:
         raise ValueError(f"Unknown model type {cspn_cfg.model_type}")
 
-    print("CSPN architecture:")
-    summary(cspn)
+    cspn_ckpt_path = intermediate_checkpoint_path(cspn_cfg.model_type, dataset_cfg.name)
+    resumed_cspn = False
+    if resume and cspn_ckpt_path.exists():
+        cspn = load_cspn_from_path(cspn_ckpt_path, device=device).to(device)
+        resumed_cspn = True
+        print(f"Resumed model weights from {cspn_ckpt_path}")
+    else:
+        if resume:
+            print(
+                f"--resume given but no checkpoint found at {cspn_ckpt_path}; "
+                "starting from scratch"
+            )
+        cspn = PsiNetCSPN(config=cspn_cfg).to(device)
+    assert isinstance(cspn, PsiNetCSPN)
 
     train_loader, test_loader = build_data_loaders(
         dataset_cfg, batch_size=training_cfg.batch_size
     )
+
+    # Skipped when resuming: latent_mean/latent_std were already restored from the
+    # checkpoint's state dict above, and re-fitting would just redundantly recompute
+    # the same (deterministic) statistics from the same train loader.
+    if cspn_cfg.normalize_latents and not resumed_cspn:
+        normalizer = LatentNormalizer()
+        normalizer.fit(ae, train_loader, device)
+        assert normalizer.mean is not None
+        assert normalizer.std is not None
+        cspn.set_latent_stats(normalizer.mean, normalizer.std)
+
+    print("CSPN architecture:")
+    summary(cspn)
 
     optimizer = torch.optim.Adam(cspn.parameters(), lr=training_cfg.learning_rate)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
@@ -74,8 +105,8 @@ def main() -> None:
     )
 
     objective = CSPNObjective(
-        model=cspn.to(device),
-        autoencoder=ae.to(device),
+        model=cspn,
+        autoencoder=ae,
         optimizer=optimizer,
         lr_scheduler=scheduler,
     )
@@ -94,6 +125,7 @@ def main() -> None:
         train_loader=train_loader,
         test_loader=test_loader,
         rtpt=rtpt,
+        resume=resume,
     )
 
     wandb.finish()

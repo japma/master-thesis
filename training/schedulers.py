@@ -15,6 +15,14 @@ class BetaAnnealingScheduler:
         self._current_step += 1
 
     @property
+    def current_step(self) -> int:
+        return self._current_step
+
+    @current_step.setter
+    def current_step(self, value: int) -> None:
+        self._current_step = value
+
+    @property
     def beta(self) -> float:
         if self._current_step >= self.num_steps:
             return self.beta_end

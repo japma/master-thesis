@@ -9,6 +9,7 @@ from rtpt import RTPT
 import wandb
 from training.metrics import MetricsCollector
 from training.objectives.base import AbstractObjective
+from utils.checkpoints import intermediate_checkpoint_path, train_state_path
 from utils.config import CSPNRunConfig, CSPNEncoderType
 
 
@@ -19,10 +20,29 @@ def train_cspn(
     train_loader: torch.utils.data.DataLoader,
     test_loader: torch.utils.data.DataLoader,
     rtpt: RTPT,
+    resume: bool = False,
 ) -> None:
     epochs = cfg.training.epochs
     log_sample_every = 10
     checkpoint_every = 25
+
+    intermediate_ckpt_path = intermediate_checkpoint_path(
+        cfg.model.model_type, cfg.dataset.name
+    )
+    intermediate_trainstate_path = train_state_path(intermediate_ckpt_path)
+
+    start_epoch = 0
+    if resume:
+        start_epoch = objective.load_train_state(
+            intermediate_trainstate_path, device=device
+        )
+        if start_epoch > 0:
+            print(f"Resuming training from epoch {start_epoch}")
+        else:
+            print(
+                f"--resume given but no training state found at "
+                f"{intermediate_trainstate_path}; starting from epoch 0"
+            )
 
     sample_count = max(1, min(16, cfg.dataset.num_classes))
 
@@ -69,7 +89,8 @@ def train_cspn(
     train_metrics = MetricsCollector()
     val_metrics = MetricsCollector()
 
-    for epoch in range(epochs):
+    epoch = max(start_epoch - 1, 0)
+    for epoch in range(start_epoch, epochs):
         # Train step
         for images, labels in tqdm.tqdm(
             train_loader, desc=f"Train {epoch + 1}/{epochs}"
@@ -115,17 +136,12 @@ def train_cspn(
 
         if epoch % checkpoint_every == 0 and epoch > 0:
             # TODO maybe this can be refactored into a function
-            intermediate_name = (
-                f"intermediate_{cfg.model.model_type}_{cfg.dataset.name}"
-            )
-            intermediate_ckpt_path = (
-                Path("checkpoints/intermediate") / f"{intermediate_name}.pt"
-            )
             objective.save_checkpoint(intermediate_ckpt_path)
+            objective.save_train_state(intermediate_trainstate_path, epoch)
             print(f"Saved intermediate checkpoint: {intermediate_ckpt_path}")
 
             intermediate_artifact = wandb.Artifact(
-                name=intermediate_name,
+                name=intermediate_ckpt_path.stem,
                 type="cspn",
                 description=f"Epoch {epoch + 1}",
             )

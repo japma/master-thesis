@@ -13,19 +13,20 @@ softmax = torch.nn.functional.softmax
 
 class SumLayer(Layer):
     """
-    Implements an abstract SumLayer class. Takes care of parameters and EM.
+    Implements an abstract SumLayer class, taking care of parameters.
     EinsumLayer and MixingLayer are derived from SumLayer.
     """
 
-    def __init__(self, params_shape, normalization_dims, use_em, params_mask=None) -> None:
+    params_mask: torch.Tensor | None
+
+    def __init__(self, params_shape, normalization_dims, params_mask=None) -> None:
         """
         :param params_shape: shape of tensor containing all sum weights (tuple of ints).
         :param normalization_dims: the dimensions (axes) of the sum-weights which shall be normalized
                                    (int of tuple of ints)
-        :param use_em: use the on-board EM algorithm?
         :param params_mask: binary mask for masking out certain parameters (tensor of shape params_shape).
         """
-        super().__init__(use_em=use_em)
+        super().__init__()
 
         self.params_shape = params_shape
         self.params = None
@@ -34,13 +35,6 @@ class SumLayer(Layer):
             params_mask = params_mask.clone().detach()
         self.register_buffer("params_mask", params_mask)
 
-        self.online_em_frequency = None
-        self.online_em_stepsize = None
-        self._online_em_counter = 0
-
-        # if EM is not used, we reparametrize
-        self.reparam = None
-        # if not self._use_em:
         self.reparam = self.reparam_function()
 
     # --------------------------------------------------------------------------------
@@ -64,7 +58,7 @@ class SumLayer(Layer):
         sample_idx,
         params,
         use_evidence=False,
-        mode: str="sample",
+        mode: str = "sample",
         **kwargs,
     ):
         """
@@ -101,7 +95,7 @@ class SumLayer(Layer):
             )
         return params
 
-    def initialize(self, initializer: str="default") -> None:
+    def initialize(self, initializer: str = "default") -> None:
         """
         Initialize the parameters for this SumLayer.
 
@@ -113,11 +107,7 @@ class SumLayer(Layer):
         if initializer is None:
             self.params = None
         elif isinstance(initializer, str) and initializer == "default":
-            if self._use_em:
-                self.params = torch.nn.Parameter(self.default_initializer())
-            else:
-                # self.params = torch.nn.Parameter(torch.randn(self.params_shape))
-                self.params = torch.nn.Parameter(self.default_initializer())
+            self.params = torch.nn.Parameter(self.default_initializer())
         elif isinstance(initializer, torch.Tensor):
             if initializer.shape != self.params_shape:
                 raise AssertionError("Incorrect parameter shape.")
@@ -134,7 +124,6 @@ class SumLayer(Layer):
                  Here, num_dist is the vector length of vectorized sum nodes (K in the paper), and num_nodes is the
                  number of sum nodes in this layer.
         """
-        # if not self._use_em:
         params = self.reparam(params)
         self._forward(params)
 
@@ -144,8 +133,8 @@ class SumLayer(Layer):
         dist_idx,
         node_idx,
         sample_idx,
-        use_evidence: bool=False,
-        mode: str="sample",
+        use_evidence: bool = False,
+        mode: str = "sample",
         **kwargs,
     ):
         """
@@ -154,78 +143,30 @@ class SumLayer(Layer):
         if mode != "sample" and mode != "argmax":
             raise AssertionError(f"Unknown backtracking mode {mode}")
 
-        if self._use_em:
-            params = self.params
-        else:
-            with torch.no_grad():
-                params = self.reparam(params)
+        with torch.no_grad():
+            params = self.reparam(params)
         return self._backtrack(
             dist_idx, node_idx, sample_idx, params, use_evidence, mode, **kwargs
         )
-
-    def em_purge(self) -> None:
-        """Discard em statistics."""
-        if self.params is not None:
-            self.params.grad = None
-
-    def em_process_batch(self) -> None:
-        """
-        Accumulate EM statistics of current batch. This should be called after call to backwards() on the output of
-        the EiNet.
-        """
-        if not self._use_em:
-            raise AssertionError("em_process_batch called while _use_em==False.")
-        if self.params is None:
-            return
-
-        if self.online_em_frequency is not None:
-            self._online_em_counter += 1
-            if self._online_em_counter == self.online_em_frequency:
-                self.em_update(True)
-                self._online_em_counter = 0
-
-    def em_update(self, _triggered: bool=False) -> None:
-        """
-        Do an EM update. If the setting is online EM (online_em_stepsize is not None), then this function does nothing,
-        since updates are triggered automatically. Thus, leave the private parameter _triggered alone.
-
-        :param _triggered: for internal use, don't set
-        :return: None
-        """
-        if not self._use_em:
-            raise AssertionError("em_update called while _use_em==False.")
-        if self.params is None:
-            return
-
-        if self.online_em_stepsize is not None and not _triggered:
-            return
-
-        with torch.no_grad():
-            n = self.params.grad * self.params.data
-
-            if self.online_em_stepsize is None:
-                self.params.data = n
-            else:
-                s = self.online_em_stepsize
-                p = torch.clamp(n, 1e-16)
-                p = p / (p.sum(self.normalization_dims, keepdim=True))
-                self.params.data = (1.0 - s) * self.params + s * p
-
-            self.params.data = torch.clamp(self.params, 1e-16)
-            if self.params_mask is not None:
-                self.params.data *= self.params_mask
-            self.params.data = self.params / (
-                self.params.sum(self.normalization_dims, keepdim=True)
-            )
-            self.params.grad = None
 
     def reparam_function(self):
         """
         Reparametrization function, transforming unconstrained parameters into valid sum-weights
         (non-negative, normalized). Handles a leading batch dimension in params_in.
+
+        If self.params_mask is set, masked-out positions (e.g. padding introduced by
+        EinsumMixingLayer for regions with fewer than the max number of children) are excluded
+        from the softmax normalization entirely, rather than merely zeroed after the fact --
+        otherwise they'd still absorb some of the normalized probability mass, leaving the real
+        entries summing to less than 1.
         """
 
         def reparam(params_in) -> Tensor:
+            if self.params_mask is not None:
+                params_in = params_in.masked_fill(
+                    self.params_mask.unsqueeze(0) == 0, float("-inf")
+                )
+
             # params_in: (batch, *params_shape)
             # self.normalization_dims indexes into params_shape (without the batch dim).
             # Shift them up by 1 to account for the leading batch dim.
@@ -255,10 +196,6 @@ class SumLayer(Layer):
             return out
 
         return reparam
-
-    def project_params(self, params):
-        """Currently not required."""
-        raise NotImplementedError
 
 
 class EinsumLayer(SumLayer):
@@ -328,7 +265,7 @@ class EinsumLayer(SumLayer):
     as there are *product nodes*. Thus, an argument to the constructor is the list of product nodes in this layer.
     """
 
-    def __init__(self, graph, products, layers, use_em: bool=True) -> None:
+    def __init__(self, graph, products, layers) -> None:
 
         self.products = products
 
@@ -355,7 +292,7 @@ class EinsumLayer(SumLayer):
             self.num_sums,
             len(self.products),
         )
-        super().__init__(param_shape, normalization_dims=(0, 1), use_em=use_em)
+        super().__init__(param_shape, normalization_dims=(0, 1))
 
         # get pairs of nodes which are input to the products (list of lists)
         # length of the outer list is same as self.products, length of inner lists is 2
@@ -436,8 +373,6 @@ class EinsumLayer(SumLayer):
         def cidx(layer_counter: int, child_num: int) -> Module | Tensor:
             return self.__getattr__(f"idx_layer_{layer_counter}_child_{child_num}")
 
-        self._last_params = params
-
         # iterate over all layers which contain "left" nodes, get their indices; then, concatenate them to one tensor
         self.left_child_log_prob = torch.cat(
             [l.prob[:, :, cidx(c, 0)] for c, l in enumerate(self.left_layers)], 2
@@ -465,7 +400,6 @@ class EinsumLayer(SumLayer):
 
         # LogEinsumExp trick, re-add the max
         prob = torch.log(prob + 1e-10) + left_max + right_max
-        # print(prob.min(), prob.mean(), prob.max())
 
         # zero-padding (-inf in log-domain) for the following mixing layer
         if self.dummy_idx:
@@ -479,8 +413,8 @@ class EinsumLayer(SumLayer):
         node_idx: list[int],
         sample_idx: list[int],
         params: Tensor,
-        use_evidence: bool=False,
-        mode: str="sample",
+        use_evidence: bool = False,
+        mode: str = "sample",
         **kwargs,
     ) -> tuple[list[int], list[int], list[int], list[int], list[Module], list[Module]]:
         """
@@ -495,31 +429,23 @@ class EinsumLayer(SumLayer):
 
         :param dist_idx: list of indices into axis 1 of log-density tensor
         :param node_idx: list of indices into axis 2 of log-density tensor
-        :param sample_idx: global identifier of the sample to be produced. For batched (non-EM) params, this is
-                            also the correct index into the batch dimension of params -- it must be used directly
-                            rather than reconstructed, since ancestral sampling can route different batch elements
-                            through different layers/nodes and thus permute or subset this list.
-        :param params: parameters to be used for this layer. Either unbatched, shape self.params_shape (EM mode,
-                       self.params is global), or batched, shape (batch, *self.params_shape) (non-EM mode, params
-                       come from param_nn per-sample).
+        :param sample_idx: global identifier of the sample to be produced. This is also the correct index into the
+                            batch dimension of params -- it must be used directly rather than reconstructed, since
+                            ancestral sampling can route different batch elements through different layers/nodes and
+                            thus permute or subset this list.
+        :param params: batched parameters to be used for this layer, shape (batch, *self.params_shape).
         :param use_evidence: using evidence form bottom-up pass? For conditional sampling.
         :param mode: 'sample' or 'argmax'; for sampling or MPE approximation, respectively.
         :param kwargs: other keyword arguments
         :return: selected layers and indices below
         """
         with torch.no_grad():
-            is_batched = params.dim() == len(self.params_shape) + 1
-
             if use_evidence:
-                if is_batched:
-                    # params: (batch, in0, in1, sums, products) -- index the batch dim with the
-                    # *actual* sample_idx, not node_idx/dist_idx, and not a reconstructed guess.
-                    log_prior = torch.log(
-                        params[sample_idx, :, :, dist_idx, node_idx]
-                    )  # -> (N, in0, in1)
-                else:
-                    log_prior = torch.log(params[:, :, dist_idx, node_idx])
-                    log_prior = log_prior.permute(2, 0, 1)
+                # params: (batch, in0, in1, sums, products) -- index the batch dim with the
+                # *actual* sample_idx, not node_idx/dist_idx, and not a reconstructed guess.
+                log_prior = torch.log(
+                    params[sample_idx, :, :, dist_idx, node_idx]
+                )  # -> (N, in0, in1)
                 left_log_prob = self.left_child_log_prob[
                     sample_idx, :, node_idx
                 ].unsqueeze(2)
@@ -532,16 +458,12 @@ class EinsumLayer(SumLayer):
                     log_posterior - torch.logsumexp(log_posterior, 1, keepdim=True)
                 )
             else:
-                if is_batched:
-                    # Use the real sample_idx to select each active path's own batch element.
-                    # Do NOT reconstruct a round-robin index: once sampling diverges (e.g. via
-                    # an upstream EinsumMixingLayer choice), sample_idx is a non-contiguous
-                    # subset/permutation of range(batch_size), not tidy repeated blocks.
-                    posterior = params[sample_idx, :, :, dist_idx, node_idx]
-                    posterior = posterior.reshape(posterior.shape[0], -1)
-                else:
-                    posterior = params[:, :, dist_idx, node_idx].permute(2, 0, 1)
-                    posterior = posterior.reshape(posterior.shape[0], -1)
+                # Use the real sample_idx to select each active path's own batch element.
+                # Do NOT reconstruct a round-robin index: once sampling diverges (e.g. via
+                # an upstream EinsumMixingLayer choice), sample_idx is a non-contiguous
+                # subset/permutation of range(batch_size), not tidy repeated blocks.
+                posterior = params[sample_idx, :, :, dist_idx, node_idx]
+                posterior = posterior.reshape(posterior.shape[0], -1)
 
             if mode == "sample":
                 idx = sample_matrix_categorical(posterior)
@@ -600,12 +522,11 @@ class EinsumMixingLayer(SumLayer):
     excerpt.
     """
 
-    def __init__(self, graph, nodes, einsum_layer, use_em) -> None:
+    def __init__(self, graph, nodes, einsum_layer) -> None:
         """
         :param graph: the PC graph (see Graph.py)
         :param nodes: the nodes of the current layer (see constructor of EinsumNetwork), which have multiple children
         :param einsum_layer:
-        :param use_em:
         """
 
         self.nodes = nodes
@@ -644,15 +565,11 @@ class EinsumMixingLayer(SumLayer):
             node.einet_address.layer = self
             node.einet_address.idx = c
 
-        super().__init__(
-            param_shape, normalization_dims=(2,), use_em=use_em, params_mask=params_mask
-        )
+        super().__init__(param_shape, normalization_dims=(2,), params_mask=params_mask)
 
         self.register_buffer("padded_idx", torch.tensor(padded_idx))
 
     def _forward(self, params) -> None:
-        self._last_params = params
-
         self.child_log_prob = self.layers[0].prob[:, :, self.padded_idx]
         self.child_log_prob = self.child_log_prob.reshape(
             (
@@ -676,28 +593,22 @@ class EinsumMixingLayer(SumLayer):
         node_idx: list[int],
         sample_idx: list[int],
         params: Tensor,
-        use_evidence: bool=False,
-        mode: str="sample",
+        use_evidence: bool = False,
+        mode: str = "sample",
         **kwargs,
     ) -> tuple[list[int], list[int], list[Module]]:
         """
         Helper routine for backtracking in EiNets.
 
-        :param sample_idx: global identifier of the sample to be produced. For batched (non-EM) params, this is
-                            also the correct index into the batch dimension of params -- it must be used directly
-                            rather than reconstructed, since ancestral sampling can route different batch elements
-                            through different layers/nodes and thus permute or subset this list.
-        :param params: parameters to be used for this layer. Either unbatched, shape self.params_shape (EM mode),
-                       or batched, shape (batch, *self.params_shape) (non-EM mode, params come from param_nn).
+        :param sample_idx: global identifier of the sample to be produced. This is also the correct index into the
+                            batch dimension of params -- it must be used directly rather than reconstructed, since
+                            ancestral sampling can route different batch elements through different layers/nodes and
+                            thus permute or subset this list.
+        :param params: batched parameters to be used for this layer, shape (batch, *self.params_shape).
         """
         with torch.no_grad():
-            is_batched = params.dim() == len(self.params_shape) + 1
-
             if use_evidence:
-                if is_batched:
-                    log_prior = torch.log(params[sample_idx, dist_idx, node_idx, :])
-                else:
-                    log_prior = torch.log(params[dist_idx, node_idx, :])
+                log_prior = torch.log(params[sample_idx, dist_idx, node_idx, :])
                 log_posterior = (
                     log_prior + self.child_log_prob[sample_idx, dist_idx, node_idx, :]
                 )
@@ -705,12 +616,9 @@ class EinsumMixingLayer(SumLayer):
                     log_posterior - torch.logsumexp(log_posterior, 1, keepdim=True)
                 )
             else:
-                if is_batched:
-                    # Use the real sample_idx, not a reconstructed round-robin guess -- see
-                    # EinsumLayer._backtrack for why the reconstruction is unsafe in general.
-                    posterior = params[sample_idx, dist_idx, node_idx, :]
-                else:
-                    posterior = params[dist_idx, node_idx, :]
+                # Use the real sample_idx, not a reconstructed round-robin guess -- see
+                # EinsumLayer._backtrack for why the reconstruction is unsafe in general.
+                posterior = params[sample_idx, dist_idx, node_idx, :]
 
             if mode == "sample":
                 idx = sample_matrix_categorical(posterior)

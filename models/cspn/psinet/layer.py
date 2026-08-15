@@ -6,9 +6,8 @@ class Layer(torch.nn.Module):
     Abstract layer class. Specifies functionality every layer in an EiNet should implement.
     """
 
-    def __init__(self, use_em: bool=True) -> None:
+    def __init__(self) -> None:
         super().__init__()
-        self._use_em = use_em
         self.prob = None
 
     def default_initializer(self):
@@ -52,42 +51,6 @@ class Layer(torch.nn.Module):
         :param kwargs:
         :return:
         """
-        raise NotImplementedError
-
-    def em_set_hyperparams(self, online_em_frequency, online_em_stepsize, purge: bool=True) -> None:
-        """
-        Set new setting for online EM.
-
-        :param online_em_frequency: How often, i.e. after how many calls to em_process_batch(self), shall
-                                    em_update(self) be called?
-        :param online_em_stepsize: step size of online em.
-        :param purge: discard current learn statistics?
-        :return: None
-        """
-        if purge:
-            self.em_purge()
-            self._online_em_counter = 0
-        self.online_em_frequency = online_em_frequency
-        self.online_em_stepsize = online_em_stepsize
-
-    def em_set_batch(self) -> None:
-        """Set batch mode EM."""
-        self.em_set_params(None, None)
-
-    def em_purge(self):
-        """Discard accumulated EM statistics"""
-        raise NotImplementedError
-
-    def em_process_batch(self):
-        """Process the current batch. This should be called after backwards() on the whole model."""
-        raise NotImplementedError
-
-    def em_update(self):
-        """Perform an EM update step."""
-        raise NotImplementedError
-
-    def project_params(self, params):
-        """Project paramters onto feasible set."""
         raise NotImplementedError
 
     def reparam_function(self):

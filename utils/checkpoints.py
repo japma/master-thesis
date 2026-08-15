@@ -15,9 +15,65 @@ from models.cspn.abstract_cspn import AbstractCSPN
 from models.cspn.psinet.graph import DistributionVector, EiNetAddress, Product
 from models.cspn.psinet_cspn import PsiNetCSPN
 from utils.config import AutoencoderConfig, AutoencoderType, CSPNConfig, CSPNType
+from utils.reproducibility import get_rng_state, set_rng_state
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 ARTIFACTS_DIR = PROJECT_ROOT / "artifacts"
+
+
+# --- Resumable training state ---
+# Kept entirely separate from the model checkpoints above: this sidecar file is
+# purely additive (optimizer/scheduler/epoch/RNG state for resuming a crashed run),
+# so existing model checkpoints (and code that only ever loads those) are completely
+# unaffected whether or not a sidecar exists next to them.
+def intermediate_checkpoint_path(model_type: str, dataset_name: str) -> Path:
+    name = f"intermediate_{model_type}_{dataset_name}"
+    return Path("checkpoints/intermediate") / f"{name}.pt"
+
+
+def train_state_path(checkpoint_path: Path) -> Path:
+    return checkpoint_path.with_name(checkpoint_path.stem + ".trainstate.pt")
+
+
+def save_train_state(
+    path: Path,
+    epoch: int,
+    optimizer: torch.optim.Optimizer,
+    lr_scheduler: torch.optim.lr_scheduler.LRScheduler,
+    extra: dict | None = None,
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    torch.save(
+        {
+            "epoch": epoch,
+            "optimizer_state": optimizer.state_dict(),
+            "lr_scheduler_state": lr_scheduler.state_dict(),
+            "rng_state": get_rng_state(),
+            "extra": extra or {},
+        },
+        path,
+    )
+    print("Saved training state to", path)
+
+
+def load_train_state(path: Path, device: torch.device | None = None) -> dict | None:
+    """Returns None (rather than raising) if no sidecar exists -- the normal case for
+    a fresh run, or for any checkpoint saved before this feature existed."""
+    if not path.exists():
+        return None
+    return torch.load(path, map_location=device, weights_only=False)
+
+
+def restore_train_state(
+    state: dict,
+    optimizer: torch.optim.Optimizer,
+    lr_scheduler: torch.optim.lr_scheduler.LRScheduler,
+) -> int:
+    """Applies a loaded train-state dict and returns the epoch to resume from."""
+    optimizer.load_state_dict(state["optimizer_state"])
+    lr_scheduler.load_state_dict(state["lr_scheduler_state"])
+    set_rng_state(state["rng_state"])
+    return state["epoch"] + 1
 
 
 # --- General ---

@@ -22,18 +22,15 @@ class FactorizedLeafLayer(Layer):
     computation) together in forward(...).
     """
 
-    def __init__(
-        self, leaves, num_var, num_dims, exponential_family, ef_args, use_em: bool=True
-    ) -> None:
+    def __init__(self, leaves, num_var, num_dims, exponential_family, ef_args) -> None:
         """
         :param leaves: list of PC leaves (DistributionVector, see Graph.py)
         :param num_var: number of random variables (int)
         :param num_dims: dimensionality of RVs (int)
         :param exponential_family: type of exponential family (derived from ExponentialFamilyArray)
         :param ef_args: arguments of exponential_family
-        :param use_em: use on-board EM algorithm? (boolean)
         """
-        super().__init__(use_em=use_em)
+        super().__init__()
 
         self.nodes = leaves
         self.num_var = num_var
@@ -56,7 +53,7 @@ class FactorizedLeafLayer(Layer):
         # this computes an array of (batch, num_var, num_dist, num_repetition) exponential family densities
         # see ExponentialFamilyArray
         self.ef_array = exponential_family(
-            num_var, num_dims, (num_dist, num_replica), use_em=use_em, **ef_args
+            num_var, num_dims, (num_dist, num_replica), **ef_args
         )
 
         # self.scope_tensor indicates which densities in self.ef_array belongs to which leaf.
@@ -72,9 +69,6 @@ class FactorizedLeafLayer(Layer):
 
     # --------------------------------------------------------------------------------
     # Implementation of Layer interface
-
-    def default_initializer(self):
-        return self.ef_array.default_initializer()
 
     def initialize(self, initializer=None) -> None:
         self.ef_array.initialize(initializer)
@@ -99,41 +93,16 @@ class FactorizedLeafLayer(Layer):
                  Will be of shape (batch_size, num_dist, len(self.nodes))
                  Note: num_dist is K in the paper, len(self.nodes) is the number of PC leaves
         """
-        self._last_params = params
         self.prob = torch.einsum(
             "bxir,xro->bio", self.ef_array(x, params), self.scope_tensor
         )
 
-    def bounded_integral(self, x_lower=None, x_upper=None, params=None) -> None:
-        """
-        Compute the factorized leaf densities. We are doing the computation in the log-domain, so this is actually
-        computing sums over densities. This is the same as forward but using bounded integrals.
-
-        We first pass the data x into self.ef_array.bounded_integral, which computes a tensor of shape
-        (batch_size, num_var, num_dist, num_replica). This is best interpreted as vectors of length num_dist, for each
-        sample in the batch and each RV. Since some leaves have overlapping scope, we need to compute "enough" leaves,
-        hence the num_replica dimension. The assignment of these log-densities to leaves is represented with
-        self.scope_tensor.
-        In the end, the factorization (sum in log-domain) is realized with a single einsum.
-
-        :param x: input data (Tensor).
-                  If self.num_dims == 1, this can be either of shape (batch_size, self.num_var, 1) or
-                  (batch_size, self.num_var).
-                  If self.num_dims > 1, this must be of shape (batch_size, self.num_var, self.num_dims).
-        :return: log-density vectors of leaves
-                 Will be of shape (batch_size, num_dist, len(self.nodes))
-                 Note: num_dist is K in the paper, len(self.nodes) is the number of PC leaves
-        """
-        self.prob = torch.einsum(
-            "bxir,xro->bio",
-            self.ef_array.bounded_integral(x_lower, x_upper, params),
-            self.scope_tensor,
-        )
-
-    def backtrack(self, params, dist_idx, node_idx, mode: str="sample", **kwargs) -> Tensor:
+    def backtrack(self, params, dist_idx, node_idx, mode: str = "sample", **kwargs) -> Tensor:
         """
         Backtrackng mechanism for EiNets.
 
+        :param params: batched leaf parameters for this layer, as produced during the forward pass this
+                       backtracking call corresponds to (shape (batch, *self.ef_array.params_shape)).
         :param dist_idx: list of N indices into the distribution vectors, which shall be sampled.
         :param node_idx: list of N indices into the leaves, which shall be sampled.
         :param mode: 'sample' or 'argmax'; for sampling or MPE approximation, respectively.
@@ -143,16 +112,8 @@ class FactorizedLeafLayer(Layer):
         if len(dist_idx) != len(node_idx):
             raise AssertionError("Invalid input.")
 
-        stored_params = self._last_params
-        if stored_params is None:
-            raise RuntimeError(
-                "FactorizedLeafLayer has no stored params from a forward pass. "
-                "Ensure einet.forward() or einet.backtrack() with x is called "
-                "before sampling, or that param_nn has been run."
-            )
-
         with torch.no_grad():
-            phi = self.ef_array.reparam(stored_params)
+            phi = self.ef_array.reparam(params)
 
             N = len(dist_idx)
 
@@ -196,24 +157,6 @@ class FactorizedLeafLayer(Layer):
                 values[n, :, :] = cur_value
 
             return values
-
-    def em_set_hyperparams(self, online_em_frequency, online_em_stepsize, purge: bool=True) -> None:
-        self.ef_array.em_set_hyperparams(online_em_frequency, online_em_stepsize, purge)
-
-    def em_purge(self) -> None:
-        self.ef_array.em_purge()
-
-    def em_process_batch(self) -> None:
-        self.ef_array.em_process_batch()
-
-    def em_update(self) -> None:
-        self.ef_array.em_update()
-
-    def project_params(self, params) -> None:
-        self.ef_array.project_params(params)
-
-    def reparam_function(self):
-        return self.ef_array.reparam_function()
 
     # --------------------------------------------------------------------------------
 

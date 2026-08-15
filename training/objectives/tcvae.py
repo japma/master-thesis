@@ -102,6 +102,12 @@ class TCVAEObjective(AbstractObjective):
         return torch.sigmoid(outputs.reconstructed)
 
     def save_checkpoint(self, path: Path) -> None:
-        # TODO maybe save optimizer and scheduler state as well
         save_autoencoder(self.model, path)
         print("Saved TCVAE checkpoint to", path)
+
+    def extra_train_state(self) -> dict:
+        return {"beta_scheduler_step": self.beta_scheduler.current_step}
+
+    def load_extra_train_state(self, extra: dict) -> None:
+        if "beta_scheduler_step" in extra:
+            self.beta_scheduler.current_step = extra["beta_scheduler_step"]

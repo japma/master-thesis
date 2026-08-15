@@ -16,13 +16,17 @@ from training.losses.vae import VAELoss
 from training.objectives.beta_vae import BetaVAEObjective
 from training.objectives.tcvae import TCVAEObjective
 from training.schedulers import BetaAnnealingScheduler
-from utils.checkpoints import save_autoencoder
+from utils.checkpoints import (
+    intermediate_checkpoint_path,
+    load_ae_from_path,
+    save_autoencoder,
+)
 from utils.config import AERunConfig, VAETrainingType, load_config
 from utils.reproducibility import resolve_device, seed_everything
 
 
 def main() -> None:
-    cfg, cfg_seed = load_config()
+    cfg, cfg_seed, resume = load_config()
     assert isinstance(cfg, AERunConfig)
     dataset_cfg = cfg.dataset
     autoencoder_cfg = cfg.model
@@ -46,7 +50,20 @@ def main() -> None:
 
     print(f"Training Autoencoder on {dataset_name} | device={device} | seed={seed}")
 
-    ae = VariationalAutoencoder(config=autoencoder_cfg).to(device)
+    ae_ckpt_path = intermediate_checkpoint_path(
+        autoencoder_cfg.model_type, dataset_cfg.name
+    )
+    if resume and ae_ckpt_path.exists():
+        ae = load_ae_from_path(ae_ckpt_path, device=device).to(device)
+        print(f"Resumed model weights from {ae_ckpt_path}")
+    else:
+        if resume:
+            print(
+                f"--resume given but no checkpoint found at {ae_ckpt_path}; "
+                "starting from scratch"
+            )
+        ae = VariationalAutoencoder(config=autoencoder_cfg).to(device)
+    assert isinstance(ae, VariationalAutoencoder)
     print("Autoencoder Architecture:")
     summary(ae)
 
@@ -128,6 +145,7 @@ def main() -> None:
         train_loader=train_loader,
         test_loader=test_loader,
         rtpt=rtpt,
+        resume=resume,
     )
 
     wandb.finish()

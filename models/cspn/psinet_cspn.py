@@ -20,6 +20,9 @@ from utils.config import CSPNConfig, CSPNEncoderType
 
 
 class PsiNetCSPN(AbstractCSPN):
+    latent_mean: torch.Tensor
+    latent_std: torch.Tensor
+
     def __init__(
         self,
         config: CSPNConfig,
@@ -55,7 +58,6 @@ class PsiNetCSPN(AbstractCSPN):
                 "min_var": config.min_var,
                 "max_var": config.max_var,
             },
-            use_em=False,
         )
 
         self.einet = EinsumNetwork(
@@ -90,19 +92,49 @@ class PsiNetCSPN(AbstractCSPN):
 
         self.einet.param_nn = conditioning_network
 
+        if self.config.normalize_latents:
+            self.register_buffer("latent_mean", torch.zeros(config.num_vars))
+            self.register_buffer("latent_std", torch.ones(config.num_vars))
+
+    def set_latent_stats(self, mean: torch.Tensor, std: torch.Tensor) -> None:
+        """Inject train-set latent mean/std (see dataset_loaders.latent_normalizer.
+        LatentNormalizer.fit). Only valid when config.normalize_latents is True."""
+        if not self.config.normalize_latents:
+            raise RuntimeError(
+                "Cannot set latent stats: config.normalize_latents is False"
+            )
+        with torch.no_grad():
+            self.latent_mean.copy_(mean)
+            self.latent_std.copy_(std)
+
+    def _normalize(self, z: torch.Tensor) -> torch.Tensor:
+        if not self.config.normalize_latents:
+            return z
+        return (z - self.latent_mean) / self.latent_std
+
+    def _denormalize(self, z: torch.Tensor) -> torch.Tensor:
+        if not self.config.normalize_latents:
+            return z
+        return z * self.latent_std + self.latent_mean
+
     def forward(self, z: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
         labels = self.label_dropout(labels)
-        return self.einet.forward(x=z, y=labels).squeeze(-1)
+        log_prob = self.einet.forward(x=self._normalize(z), y=labels).squeeze(-1)
+        if self.config.normalize_latents:
+            # change of variables for z_norm = (z - mean) / std:
+            # log p(z) = log p_norm(z_norm) - sum(log std)
+            log_prob = log_prob - self.latent_std.log().sum()
+        return log_prob
 
     def sample(self, labels: torch.Tensor, std_correction: float = 1.0) -> torch.Tensor:
         samples = self.einet.sample(y=labels, std_correction=std_correction)
         assert samples is not None
-        return samples
+        return self._denormalize(samples)
 
     def mpe(self, labels: torch.Tensor) -> torch.Tensor:
         mpe_samples = self.einet.mpe(y=labels)
         assert mpe_samples is not None
-        return mpe_samples
+        return self._denormalize(mpe_samples)
 
     def get_config(self) -> dict:
         return self.config.model_dump()
