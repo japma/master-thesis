@@ -56,7 +56,7 @@ class AutoencoderConfig(BaseModel):
     num_blocks: int
     base_channels: int
     image_size: int = 0
-    channels: int = 0
+    channels: int = 3 # rgb as default
     num_encoder_resblocks: int = 1
     num_decoder_resblocks: int = 1
 
