@@ -31,6 +31,10 @@ def intermediate_checkpoint_path(model_type: str, dataset_name: str) -> Path:
     return Path("checkpoints/intermediate") / f"{name}.pt"
 
 
+def label_pc_checkpoint_path(dataset_name: str) -> Path:
+    return Path("checkpoints") / f"label_pc_{dataset_name}.pt"
+
+
 def train_state_path(checkpoint_path: Path) -> Path:
     return checkpoint_path.with_name(checkpoint_path.stem + ".trainstate.pt")
 

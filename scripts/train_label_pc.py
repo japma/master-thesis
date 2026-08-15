@@ -1,7 +1,5 @@
 """Entry point for LabelPC training."""
 
-from pathlib import Path
-
 import torch
 from rtpt import RTPT
 from torchinfo import summary
@@ -11,13 +9,13 @@ from dataset_loaders import build_data_loaders
 from models.cspn.psinet.label_pc import LabelPC
 from training.label_pc_trainer import train_label_pc
 from training.objectives.label_pc_objective import LabelPCObjective
-from utils.checkpoints import save_label_pc
+from utils.checkpoints import label_pc_checkpoint_path, save_label_pc
 from utils.config import CSPNRunConfig, load_config
 from utils.reproducibility import resolve_device, seed_everything
 
 
 def main() -> None:
-    cfg, cfg_seed = load_config()
+    cfg, cfg_seed, _resume = load_config()
     assert isinstance(cfg, CSPNRunConfig)
     dataset_cfg = cfg.dataset
     training_cfg = cfg.training
@@ -89,7 +87,7 @@ def main() -> None:
         rtpt=rtpt,
     )
 
-    ckpt_path = Path("checkpoints") / f"{run_name}.pt"
+    ckpt_path = label_pc_checkpoint_path(dataset_name)
     save_label_pc(label_pc, ckpt_path)
 
     artifact = wandb.Artifact(name=run_name, type="label_pc")

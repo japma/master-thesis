@@ -7,10 +7,40 @@ import tqdm
 from rtpt import RTPT
 
 import wandb
+from models.cspn.psinet.label_pc import LabelPC
 from training.metrics import MetricsCollector
 from training.objectives.base import AbstractObjective
 from utils.checkpoints import intermediate_checkpoint_path, train_state_path
 from utils.config import CSPNRunConfig, CSPNEncoderType
+
+
+def _themed_multi_binary_labels(
+    themes: list[dict[int, float]],
+    num_attributes: int,
+    device: torch.device,
+    label_pc: LabelPC | None,
+) -> torch.Tensor:
+    """Builds one label vector per theme (a sparse {attribute_idx: value} spec)."""
+    if label_pc is not None:
+        return torch.cat(
+            [
+                label_pc.complete_partial(known, batch_size=1, device=device)
+                for known in themes
+            ],
+            dim=0,
+        )
+
+    print(
+        "No LabelPC available -- falling back to zero-filled (attribute=off) labels "
+        "for sample logging."
+    )
+    vectors = []
+    for known in themes:
+        vector = torch.zeros(num_attributes)
+        for idx, value in known.items():
+            vector[idx] = value
+        vectors.append(vector)
+    return torch.stack(vectors).to(device, non_blocking=True)
 
 
 def train_cspn(
@@ -21,6 +51,7 @@ def train_cspn(
     test_loader: torch.utils.data.DataLoader,
     rtpt: RTPT,
     resume: bool = False,
+    label_pc: LabelPC | None = None,
 ) -> None:
     epochs = cfg.training.epochs
     log_sample_every = 10
@@ -53,21 +84,21 @@ def train_cspn(
             .to(device, non_blocking=True)
         )
     elif cfg.model.encoder_config.encoder_type == CSPNEncoderType.MULTI_BINARY:
-        base_vector = torch.zeros(40)
         glasses_idx = 15
         male_idx = 20
         bald_idx = 4
 
-        glasses_vector = base_vector.clone()
-        glasses_vector[glasses_idx] = 1.0
-        male_vector = base_vector.clone()
-        male_vector[male_idx] = 1.0
-        bald_vector = base_vector.clone()
-        bald_vector[bald_idx] = 1.0
-
-        sample_labels = torch.stack(
-            [base_vector, glasses_vector, male_vector, bald_vector]
-        ).to(device, non_blocking=True)
+        # {} = fully unconditional (all attributes marginalized/sampled by LabelPC,
+        # or zero-filled in the no-LabelPC fallback).
+        themes: list[dict[int, float]] = [
+            {},
+            {glasses_idx: 1.0},
+            {male_idx: 1.0},
+            {bald_idx: 1.0},
+        ]
+        sample_labels = _themed_multi_binary_labels(
+            themes, cfg.dataset.num_classes, device, label_pc
+        )
 
     else:
         # TODO update the hardcoded colourmnist values

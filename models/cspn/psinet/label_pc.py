@@ -74,6 +74,31 @@ class LabelPC(nn.Module):
         assert completed is not None
         return completed
 
+    def complete_partial(
+        self,
+        known: dict[int, float],
+        batch_size: int,
+        device: torch.device | None = None,
+    ) -> torch.Tensor:
+        """Convenience wrapper around complete() for the common case: a sparse
+        {attribute_idx: value} spec, shared across the whole batch, with every other
+        attribute filled in by sampling from p(unknown attributes | known attributes)
+        rather than left at an arbitrary placeholder value.
+
+        :param known: attribute index -> value, for the attributes that are fixed.
+                      Attributes not present in this dict are marginalized and sampled.
+        :param batch_size: how many (independent) completions to draw.
+        :return: (batch_size, num_attributes) tensor of concrete attribute values.
+        """
+        known_values = torch.zeros(batch_size, self.num_attributes, device=device)
+        known_mask = torch.zeros(
+            batch_size, self.num_attributes, dtype=torch.bool, device=device
+        )
+        for idx, value in known.items():
+            known_values[:, idx] = value
+            known_mask[:, idx] = True
+        return self.complete(known_values, known_mask)
+
     def forward(self, attributes: torch.Tensor) -> torch.Tensor:
         return self.log_likelihood(attributes)
 

@@ -10,17 +10,20 @@ import wandb
 from dataset_loaders import build_data_loaders
 from dataset_loaders.latent_normalizer import LatentNormalizer
 from models.autoencoder.pretrained import PretrainedVAE
+from models.cspn.psinet.label_pc import LabelPC
 from models.cspn.psinet_cspn import PsiNetCSPN
 from training.cspn_trainer import train_cspn
 from training.objectives.cspn import CSPNObjective
 from utils.checkpoints import (
     intermediate_checkpoint_path,
+    label_pc_checkpoint_path,
     load_ae_from_path,
     load_cspn_from_path,
     load_from_wandb,
+    load_label_pc_from_path,
     save_cspn,
 )
-from utils.config import CSPNRunConfig, CSPNType, load_config
+from utils.config import CSPNEncoderType, CSPNRunConfig, CSPNType, load_config
 from utils.reproducibility import resolve_device, seed_everything
 
 
@@ -96,6 +99,20 @@ def main() -> None:
         assert normalizer.std is not None
         cspn.set_latent_stats(normalizer.mean, normalizer.std)
 
+    label_pc: LabelPC | None = None
+    if cspn_cfg.encoder_config.encoder_type == CSPNEncoderType.MULTI_BINARY:
+        label_pc_path = label_pc_checkpoint_path(dataset_name)
+        if label_pc_path.exists():
+            label_pc = load_label_pc_from_path(label_pc_path, device=device)
+            label_pc.eval()
+            print(f"Loaded LabelPC from {label_pc_path} for attribute-completion sampling")
+        else:
+            print(
+                f"No LabelPC checkpoint found at {label_pc_path}; sample logging will "
+                "fall back to zero-filled attributes. Run scripts/train_label_pc.py "
+                "first to enable attribute-completion sampling."
+            )
+
     print("CSPN architecture:")
     summary(cspn)
 
@@ -126,6 +143,7 @@ def main() -> None:
         test_loader=test_loader,
         rtpt=rtpt,
         resume=resume,
+        label_pc=label_pc,
     )
 
     wandb.finish()
