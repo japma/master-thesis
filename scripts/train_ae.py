@@ -63,11 +63,6 @@ def main() -> None:
     lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer, T_max=training_cfg.epochs
     )
-    beta_scheduler = BetaAnnealingScheduler(
-        beta_start=cfg.training.beta_start,
-        beta_end=cfg.training.beta_end,
-        num_steps=len(train_loader) * training_cfg.kl_warmup_epochs,
-    )
 
     rtpt = RTPT(
         name_initials="JM",
@@ -77,6 +72,12 @@ def main() -> None:
     rtpt.start()
 
     if training_cfg.vae_type == VAETrainingType.BETA:
+        beta_scheduler = BetaAnnealingScheduler(
+            beta_start=training_cfg.beta_start,
+            beta_end=training_cfg.beta_end,
+            num_steps=len(train_loader) * training_cfg.kl_warmup_epochs,
+        )
+
         loss_fn = VAELoss(
             beta=beta,
             free_bits=training_cfg.free_bits,
@@ -91,17 +92,29 @@ def main() -> None:
             beta_scheduler=beta_scheduler,
         )
     elif training_cfg.vae_type == VAETrainingType.TCVAE:
-        loss_fn = BetaTCVAELoss(
-            alpha=1.0,
-            beta=6.0,
-            gamma=1.0,
-            free_bits=training_cfg.free_bits,
+        assert training_cfg.tcvae_alpha is not None
+        assert training_cfg.tcvae_beta is not None
+        assert training_cfg.tcvae_gamma is not None
+
+        tcvae_beta_scheduler = BetaAnnealingScheduler(
+            beta_start=training_cfg.beta_start,
+            beta_end=training_cfg.tcvae_beta,
+            num_steps=len(train_loader) * training_cfg.kl_warmup_epochs,
         )
+
+        loss_fn = BetaTCVAELoss(
+            alpha=training_cfg.tcvae_alpha,
+            beta=training_cfg.tcvae_beta,
+            gamma=training_cfg.tcvae_gamma,
+            free_bits=training_cfg.free_bits,
+            lambda_perceptual=training_cfg.lambda_perceptual,
+        ).to(device)
         objective = TCVAEObjective(
             model=ae,
             optimizer=optimizer,
             lr_scheduler=lr_scheduler,
             loss_fn=loss_fn,
+            beta_scheduler=tcvae_beta_scheduler,
             train_data_size=train_data_size,
             test_data_size=test_data_size,
         )

@@ -147,7 +147,9 @@ class VariationalAutoencoder(AbstractAutoencoder):
         num_decoder_resblocks: int = config.num_decoder_resblocks
 
         self.input_proj = nn.Sequential(
-            nn.Conv2d(3, config.base_channels, kernel_size=3, padding=1, bias=False),
+            nn.Conv2d(
+                config.channels, config.base_channels, kernel_size=3, padding=1, bias=False
+            ),
             make_norm(config.base_channels),
             nn.ReLU(inplace=True),
         )
@@ -202,7 +204,9 @@ class VariationalAutoencoder(AbstractAutoencoder):
         )
         self.decoder = nn.ModuleList(decoder_blocks)
 
-        self.output_proj = nn.Conv2d(config.base_channels, 3, kernel_size=3, padding=1)
+        self.output_proj = nn.Conv2d(
+            config.base_channels, config.channels, kernel_size=3, padding=1
+        )
 
         self._init_weights()
 

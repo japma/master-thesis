@@ -7,6 +7,7 @@ from torch import nn
 
 from models.autoencoder.variational_autoencoder import VAEForwardOutput
 from training.losses.base import LossOutput
+from training.losses.perceptual import VGGPerceptualLoss
 
 LOG_2PI = math.log(2.0 * math.pi)
 
@@ -29,6 +30,7 @@ class TCVAELossOutput(LossOutput):
     mi: torch.Tensor
     tc: torch.Tensor
     dwkl: torch.Tensor
+    perceptual: torch.Tensor
 
 
 class BetaTCVAELoss(nn.Module):
@@ -40,6 +42,7 @@ class BetaTCVAELoss(nn.Module):
         beta (float):
         gamma (float):
         free_bits (float):
+        lambda_perceptual (float): weight of the VGG perceptual term; 0 disables it.
     """
 
     def __init__(
@@ -48,12 +51,15 @@ class BetaTCVAELoss(nn.Module):
         beta: float = 6.0,
         gamma: float = 1.0,
         free_bits: float = 0.5,
+        lambda_perceptual: float = 1.0,
     ) -> None:
         super().__init__()
         self.alpha = alpha
         self.beta = beta
         self.gamma = gamma
         self.free_bits = free_bits
+        self.lambda_perceptual = lambda_perceptual
+        self.perceptual = VGGPerceptualLoss() if lambda_perceptual > 0 else None
 
     def _decompose_kl(
         self,
@@ -107,6 +113,7 @@ class BetaTCVAELoss(nn.Module):
         target: torch.Tensor,
         model_output: VAEForwardOutput,
         dataset_size: int,
+        beta: float | None = None,
     ) -> TCVAELossOutput:
         recon_loss = (
             F.binary_cross_entropy_with_logits(
@@ -124,13 +131,23 @@ class BetaTCVAELoss(nn.Module):
             model_output.latent, model_output.mu, log_var, dataset_size=dataset_size
         )
 
-        kl_loss = self.alpha * mi + self.beta * tc + self.gamma * dwkl
+        effective_beta = beta if beta is not None else self.beta
+        kl_loss = self.alpha * mi + effective_beta * tc + self.gamma * dwkl
+
+        recon_img = torch.sigmoid(model_output.reconstructed)
+        if self.perceptual is not None:
+            perc = self.perceptual(recon=recon_img, target=target)
+        else:
+            perc = torch.tensor(0.0, device=target.device)
+
+        total_loss = recon_loss + kl_loss + self.lambda_perceptual * perc
 
         return TCVAELossOutput(
-            total=recon_loss + kl_loss,
+            total=total_loss,
             recon=recon_loss,
             kl=kl_loss,
             mi=mi,
             tc=tc,
             dwkl=dwkl,
+            perceptual=perc,
         )

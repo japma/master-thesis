@@ -135,6 +135,7 @@ def _load_flowers102(
             transforms.ToTensor(),
         ]
     )
+    # Intentionally inverted so that we use the larger split for training
     return datasets.Flowers102(
         root=DATA_DIR,
         split="test" if train else "train",

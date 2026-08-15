@@ -38,8 +38,13 @@ class VAELoss(nn.Module):
         beta: float | None = None,
     ) -> VAELossOutput:
 
-        recon_loss = F.binary_cross_entropy_with_logits(
-            model_outputs.reconstructed, images, reduction="mean"
+        recon_loss = (
+            F.binary_cross_entropy_with_logits(
+                model_outputs.reconstructed, images, reduction="none"
+            )
+            .flatten(1)
+            .sum(dim=1)
+            .mean()
         )
 
         kl_loss = kl_loss_fn(

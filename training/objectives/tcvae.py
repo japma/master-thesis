@@ -6,6 +6,7 @@ from models import VariationalAutoencoder
 from models.autoencoder.variational_autoencoder import VAEForwardOutput
 from training.losses.tcvae import BetaTCVAELoss, TCVAELossOutput
 from training.objectives.base import AbstractObjective, StepOutput
+from training.schedulers import BetaAnnealingScheduler
 from utils.checkpoints import save_autoencoder
 
 
@@ -20,6 +21,7 @@ class TCVAEObjective(AbstractObjective):
         optimizer: torch.optim.Optimizer,
         lr_scheduler: torch.optim.lr_scheduler.LRScheduler,
         loss_fn: BetaTCVAELoss,
+        beta_scheduler: BetaAnnealingScheduler,
         train_data_size: int,
         test_data_size: int,
     ) -> None:
@@ -28,6 +30,7 @@ class TCVAEObjective(AbstractObjective):
         self.optimizer = optimizer
         self.lr_scheduler = lr_scheduler
         self.loss_fn: BetaTCVAELoss = loss_fn
+        self.beta_scheduler = beta_scheduler
         self.train_data_size = train_data_size
         self.test_data_size = test_data_size
 
@@ -43,22 +46,24 @@ class TCVAEObjective(AbstractObjective):
         self.model.train()
         outputs: VAEForwardOutput = self.model(images)
 
+        current_beta: float = self.beta_scheduler.beta
         loss: TCVAELossOutput = self.loss_fn(
-            images, outputs, dataset_size=self.train_data_size
+            images, outputs, dataset_size=self.train_data_size, beta=current_beta
         )
         self.optimizer.zero_grad(set_to_none=True)
         loss.total.backward()
         self.optimizer.step()
+        self.beta_scheduler.step()
 
         metrics = {
             "total": loss.total,
             "recon": loss.recon,
             "kl": loss.kl,
-            # TODO maybe add the perc loss here as well
-            # "perceptual": loss.perceptual,
+            "perceptual": loss.perceptual,
             "mi": loss.mi,
             "tc": loss.tc,
             "dwkl": loss.dwkl,
+            "beta": torch.tensor(current_beta),
         }
         return StepOutput(metrics=metrics, batch_size=images.size(0))
 
@@ -79,7 +84,7 @@ class TCVAEObjective(AbstractObjective):
             "total": loss.total,
             "recon": loss.recon,
             "kl": loss.kl,
-            # "perceptual": loss.perceptual,
+            "perceptual": loss.perceptual,
             "mi": loss.mi,
             "tc": loss.tc,
             "dwkl": loss.dwkl,
