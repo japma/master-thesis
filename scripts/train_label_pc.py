@@ -12,6 +12,7 @@ from training.objectives.label_pc_objective import LabelPCObjective
 from utils.checkpoints import label_pc_checkpoint_path, save_label_pc
 from utils.config import CSPNRunConfig, load_config
 from utils.reproducibility import resolve_device, seed_everything
+from utils.wandb_utils import init_run, log_checkpoint_artifact
 
 
 def main() -> None:
@@ -27,13 +28,7 @@ def main() -> None:
 
     run_name = f"label_pc_{dataset_name}"
 
-    wandb.init(
-        entity=wandb_cfg.entity,
-        project=wandb_cfg.project,
-        name=run_name,
-        config=cfg.model_dump(),
-        mode=wandb_cfg.mode,
-    )
+    init_run(wandb_cfg, run_name, cfg.model_dump())
 
     # TODO: hardcoded until LabelPC gets its own config section
     NUM_INPUT_DISTRIBUTIONS: int = 10
@@ -90,9 +85,7 @@ def main() -> None:
     ckpt_path = label_pc_checkpoint_path(dataset_name)
     save_label_pc(label_pc, ckpt_path)
 
-    artifact = wandb.Artifact(name=run_name, type="label_pc")
-    artifact.add_file(str(ckpt_path))
-    wandb.log_artifact(artifact)
+    log_checkpoint_artifact(ckpt_path, name=run_name, type="label_pc")
     wandb.finish()
 
 

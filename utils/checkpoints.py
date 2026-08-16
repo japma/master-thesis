@@ -6,7 +6,6 @@ import numpy
 import torch
 from networkx.classes import DiGraph
 
-import wandb
 from models.autoencoder import (
     AbstractAutoencoder,
     VariationalAutoencoder,
@@ -16,9 +15,6 @@ from models.cspn.psinet.graph import DistributionVector, EiNetAddress, Product
 from models.cspn.psinet_cspn import PsiNetCSPN
 from utils.config import AutoencoderConfig, AutoencoderType, CSPNConfig, CSPNType
 from utils.reproducibility import get_rng_state, set_rng_state
-
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-ARTIFACTS_DIR = PROJECT_ROOT / "artifacts"
 
 
 # --- Resumable training state ---
@@ -78,24 +74,6 @@ def restore_train_state(
     lr_scheduler.load_state_dict(state["lr_scheduler_state"])
     set_rng_state(state["rng_state"])
     return state["epoch"] + 1
-
-
-# --- General ---
-def load_from_wandb(
-    ckpt_name: str,
-    tag: str = "latest",
-) -> Path:
-    """Load a checkpoint from wandb artifacts. Uses the most recent checkpoint unless tag is provided."""
-    # TODO use use_artifact instead (might solve other inconsistencies as well)
-    print(f"Loading checkpoint {ckpt_name}:{tag} from Weights & Biases artifacts...")
-    entity = "jmartini-tu-darmstadt"
-    project = "master-thesis"
-    name = f"{entity}/{project}/{ckpt_name}:{tag}"
-    api = wandb.Api()
-    artifact = api.artifact(name)
-    file = artifact.file(str(ARTIFACTS_DIR))
-    print(f"Loaded {file} from Weights & Biases artifact {name}")
-    return Path(file)
 
 
 # --- Autoencoder ---

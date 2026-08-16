@@ -6,10 +6,10 @@ import torch
 import tqdm
 from rtpt import RTPT
 
-import wandb
 from training.metrics import MetricsCollector
 from training.objectives.label_pc_objective import LabelPCObjective
 from utils.config import CSPNRunConfig
+from utils.wandb_utils import log_scalar_metrics
 
 
 def train_label_pc(
@@ -44,13 +44,7 @@ def train_label_pc(
         avg_val_loss = val_metrics.compute_average_metrics()
         print(f"Val Loss: {avg_val_loss}")
 
-        metrics = {}
-        for key, value in avg_train_loss.items():
-            metrics[f"train/{key}"] = value
-        for key, value in avg_val_loss.items():
-            metrics[f"val/{key}"] = value
-
-        wandb.log(metrics, step=epoch)
+        log_scalar_metrics(avg_train_loss, avg_val_loss, step=epoch)
         train_metrics.reset()
         val_metrics.reset()
 

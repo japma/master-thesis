@@ -23,6 +23,7 @@ from utils.checkpoints import (
 )
 from utils.config import AERunConfig, VAETrainingType, load_config
 from utils.reproducibility import resolve_device, seed_everything
+from utils.wandb_utils import init_run
 
 
 def main() -> None:
@@ -40,13 +41,7 @@ def main() -> None:
     model_name = f"autoencoder_{dataset_name}"
     run_name = f"{model_name}_{training_cfg.vae_type}"
 
-    wandb.init(
-        entity=wandb_cfg.entity,
-        project=wandb_cfg.project,
-        name=run_name,
-        config=cfg.model_dump(),
-        mode=wandb_cfg.mode,
-    )
+    init_run(wandb_cfg, run_name, cfg.model_dump())
 
     print(f"Training Autoencoder on {dataset_name} | device={device} | seed={seed}")
 

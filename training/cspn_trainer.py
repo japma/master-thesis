@@ -6,12 +6,12 @@ import torch
 import tqdm
 from rtpt import RTPT
 
-import wandb
 from models.cspn.psinet.label_pc import LabelPC
 from training.metrics import MetricsCollector
 from training.objectives.base import AbstractObjective
 from utils.checkpoints import intermediate_checkpoint_path, train_state_path
-from utils.config import CSPNRunConfig, CSPNEncoderType
+from utils.config import CSPNEncoderType, CSPNRunConfig
+from utils.wandb_utils import log_checkpoint_artifact, log_images, log_scalar_metrics
 
 
 def _themed_multi_binary_labels(
@@ -143,27 +143,13 @@ def train_cspn(
         avg_val_loss = val_metrics.compute_average_metrics()
         print(f"Val Loss: {avg_val_loss}")
 
-        metrics = {}
-        for key, value in avg_train_loss.items():
-            metrics[f"train/{key}"] = value
-        for key, value in avg_val_loss.items():
-            metrics[f"val/{key}"] = value
-
-        wandb.log(metrics, step=epoch)
+        log_scalar_metrics(avg_train_loss, avg_val_loss, step=epoch)
         train_metrics.reset()
         val_metrics.reset()
 
         if epoch % log_sample_every == 0:
             samples = objective.sample(sample_labels)
-            samples_u8 = (samples.clamp(0, 1) * 255).byte().cpu()
-            wandb.log(
-                {
-                    "samples/cspn_generated_images": [
-                        wandb.Image(img) for img in samples_u8
-                    ]
-                },
-                step=epoch,
-            )
+            log_images("samples/cspn_generated_images", samples, step=epoch)
 
         if epoch % checkpoint_every == 0 and epoch > 0:
             # TODO maybe this can be refactored into a function
@@ -171,33 +157,22 @@ def train_cspn(
             objective.save_train_state(intermediate_trainstate_path, epoch)
             print(f"Saved intermediate checkpoint: {intermediate_ckpt_path}")
 
-            intermediate_artifact = wandb.Artifact(
+            log_checkpoint_artifact(
+                intermediate_ckpt_path,
                 name=intermediate_ckpt_path.stem,
                 type="cspn",
                 description=f"Epoch {epoch + 1}",
             )
-            intermediate_artifact.add_file(str(intermediate_ckpt_path))
-            wandb.log_artifact(intermediate_artifact)
 
         objective.on_epoch_end()
         rtpt.step(subtitle=f"{epoch + 1}/{epochs}")
 
     # Final samples
     final_samples = objective.sample(sample_labels)
-    final_samples_u8 = (final_samples.clamp(0, 1) * 255).byte().cpu()
-    wandb.log(
-        {
-            "samples/cspn_generated_images": [
-                wandb.Image(img) for img in final_samples_u8
-            ]
-        },
-        step=epoch,
-    )
+    log_images("samples/cspn_generated_images", final_samples, step=epoch)
 
     name = f"{cfg.model.model_type}_{cfg.dataset.name}"
     ckpt_path = Path("checkpoints") / f"{name}.pt"
     objective.save_checkpoint(ckpt_path)
 
-    artifact = wandb.Artifact(name=name, type="cspn")
-    artifact.add_file(str(ckpt_path))
-    wandb.log_artifact(artifact)
+    log_checkpoint_artifact(ckpt_path, name=name, type="cspn")

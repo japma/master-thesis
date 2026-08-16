@@ -19,12 +19,12 @@ from utils.checkpoints import (
     label_pc_checkpoint_path,
     load_ae_from_path,
     load_cspn_from_path,
-    load_from_wandb,
     load_label_pc_from_path,
     save_cspn,
 )
 from utils.config import CSPNEncoderType, CSPNRunConfig, CSPNType, load_config
 from utils.reproducibility import resolve_device, seed_everything
+from utils.wandb_utils import init_run, load_from_wandb
 
 
 def main() -> None:
@@ -42,13 +42,7 @@ def main() -> None:
 
     run_name = f"cspn_{dataset_name}_{cspn_cfg.model_type}"
 
-    wandb.init(
-        entity=wandb_cfg.entity,
-        project=wandb_cfg.project,
-        name=run_name,
-        config=cfg.model_dump(),
-        mode=wandb_cfg.mode,
-    )
+    init_run(wandb_cfg, run_name, cfg.model_dump())
 
     ae_cfg = cfg.autoencoder
     if ae_cfg.external:

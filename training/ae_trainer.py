@@ -7,11 +7,11 @@ import torch
 import tqdm
 from rtpt import RTPT
 
-import wandb
 from training.metrics import MetricsCollector
 from training.objectives.base import AbstractObjective
 from utils.checkpoints import intermediate_checkpoint_path, train_state_path
 from utils.config import AERunConfig
+from utils.wandb_utils import log_checkpoint_artifact, log_images, log_scalar_metrics
 
 
 def train_autoencoder(
@@ -57,11 +57,7 @@ def train_autoencoder(
         [test_loader.dataset[i.item()][0] for i in sample_indices]
     ).to(device)
 
-    sample_images_u8 = (sample_images.clamp(0, 1) * 255).byte().cpu()
-    wandb.log(
-        {"samples/input": [wandb.Image(img) for img in sample_images_u8]},
-        step=0,
-    )
+    log_images("samples/input", sample_images, step=0)
 
     train_metrics = MetricsCollector()
     val_metrics = MetricsCollector()
@@ -86,65 +82,36 @@ def train_autoencoder(
         avg_val_loss = val_metrics.compute_average_metrics()
         print(f"Loss: {avg_val_loss}")
 
-        metrics = {}
-        for key, value in avg_train_loss.items():
-            metrics[f"train/{key}"] = value
-        for key, value in avg_val_loss.items():
-            metrics[f"val/{key}"] = value
-
-        wandb.log(metrics, step=epoch)
+        log_scalar_metrics(avg_train_loss, avg_val_loss, step=epoch)
 
         train_metrics.reset()
         val_metrics.reset()
 
         if epoch % log_sample_every == 0:
             reconstructed_samples = objective.sample(sample_images)
-            reconstructed_samples_u8 = (
-                (reconstructed_samples.clamp(0, 1) * 255).byte().cpu()
-            )
-            wandb.log(
-                {
-                    "samples/reconstructed": [
-                        wandb.Image(img) for img in reconstructed_samples_u8
-                    ]
-                },
-                step=epoch,
-            )
+            log_images("samples/reconstructed", reconstructed_samples, step=epoch)
 
         if epoch % checkpoint_every == 0 and epoch > 0:
             # TODO maybe refactor this into a function??
             objective.save_checkpoint(intermediate_ckpt_path)
             objective.save_train_state(intermediate_trainstate_path, epoch)
 
-            intermediate_artifact = wandb.Artifact(
+            log_checkpoint_artifact(
+                intermediate_ckpt_path,
                 name=intermediate_ckpt_path.stem,
                 type="autoencoder",
                 description=f"Epoch: {epoch + 1}",
             )
-            intermediate_artifact.add_file(str(intermediate_ckpt_path))
-            wandb.log_artifact(intermediate_artifact)
 
         objective.on_epoch_end()
         rtpt.step(subtitle=f"{epoch + 1}/{epochs}")
 
     # Final reconstructions
     final_reconstructed_samples = objective.sample(sample_images)
-    final_reconstructed_samples_u8 = (
-        (final_reconstructed_samples.clamp(0, 1) * 255).byte().cpu()
-    )
-    wandb.log(
-        {
-            "samples/reconstructed": [
-                wandb.Image(img) for img in final_reconstructed_samples_u8
-            ]
-        },
-        step=epoch,
-    )
+    log_images("samples/reconstructed", final_reconstructed_samples, step=epoch)
 
     name = f"{cfg.model.model_type}_{cfg.dataset.name}"
     ckpt_path = Path("checkpoints") / f"{name}.pt"
     objective.save_checkpoint(ckpt_path)
 
-    artifact = wandb.Artifact(name=name, type="autoencoder")
-    artifact.add_file(str(ckpt_path))
-    wandb.log_artifact(artifact)
+    log_checkpoint_artifact(ckpt_path, name=name, type="autoencoder")
