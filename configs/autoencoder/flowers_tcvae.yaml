@@ -2,10 +2,6 @@ type: ae
 
 dataset:
   name: flowers102
-  channels: 3
-  width: 64
-  height: 64
-  num_classes: 102
 
 model:
   model_type: variational

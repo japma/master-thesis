@@ -2,10 +2,6 @@ type: cspn
 
 dataset:
   name: colour_mnist
-  channels: 3
-  height: 28
-  width: 28
-  num_classes: 10
 
 autoencoder:
   name: "autoencoder_colour_mnist"

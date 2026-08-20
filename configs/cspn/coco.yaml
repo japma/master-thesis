@@ -2,10 +2,6 @@ type: cspn
 
 dataset:
   name: coco
-  channels: 3
-  height: 128
-  width: 128
-  num_classes: 80
 
 autoencoder:
   name: "madebyollins/taesd"

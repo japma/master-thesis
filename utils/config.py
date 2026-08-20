@@ -216,6 +216,39 @@ class CSPNRunConfig(BaseModel):
     wandb: WandbConfig
 
 
+def _deep_merge(base: dict, override: dict) -> dict:
+    """override's keys win; nested dicts are merged recursively rather than replaced
+    wholesale, so e.g. a config only needs to state the dataset fields that diverge
+    from configs/datasets/{name}.yaml's defaults."""
+    merged = dict(base)
+    for key, value in override.items():
+        if (
+            key in merged
+            and isinstance(merged[key], dict)
+            and isinstance(value, dict)
+        ):
+            merged[key] = _deep_merge(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def _apply_dataset_defaults(raw: dict) -> dict:
+    dataset = raw.get("dataset")
+    if not isinstance(dataset, dict) or "name" not in dataset:
+        return raw
+
+    fragment_path = Path("configs/datasets") / f"{dataset['name']}.yaml"
+    if not fragment_path.exists():
+        return raw
+
+    with open(fragment_path) as f:
+        defaults = yaml.safe_load(f) or {}
+
+    raw["dataset"] = _deep_merge(defaults, dataset)
+    return raw
+
+
 def load_config() -> tuple[AERunConfig | CSPNRunConfig, int | None, bool]:
     parser = argparse.ArgumentParser()
     parser.add_argument("config_file", type=Path)
@@ -242,6 +275,8 @@ def load_config() -> tuple[AERunConfig | CSPNRunConfig, int | None, bool]:
 
     with open(path) as f:
         raw = yaml.safe_load(f)
+
+    raw = _apply_dataset_defaults(raw)
 
     run_type = raw.get("type")
     if dry_run:
