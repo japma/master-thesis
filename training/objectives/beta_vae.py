@@ -6,7 +6,7 @@ import torch
 from models import VariationalAutoencoder
 from models.autoencoder.variational_autoencoder import VAEForwardOutput
 from training.losses.vae import VAELoss, VAELossOutput
-from training.objectives.base import AbstractObjective, StepOutput
+from training.objectives.base import AbstractObjective, Batch, StepOutput
 from training.schedulers import BetaAnnealingScheduler
 from utils.checkpoints import save_autoencoder
 
@@ -29,11 +29,9 @@ class BetaVAEObjective(AbstractObjective):
         self.beta_scheduler = beta_scheduler
         self.max_grad_norm: float = max_grad_norm
 
-    def train_step(
-        self,
-        images: torch.Tensor,
-        labels: torch.Tensor | None = None,
-    ) -> StepOutput:
+    def train_step(self, batch: Batch) -> StepOutput:
+        assert batch.images is not None
+        images = batch.images
         self.model.train()
         outputs: VAEForwardOutput = self.model(images)
 
@@ -58,11 +56,9 @@ class BetaVAEObjective(AbstractObjective):
         return StepOutput(metrics=metrics, batch_size=images.size(0))
 
     @torch.no_grad()
-    def val_step(
-        self,
-        images: torch.Tensor,
-        labels: torch.Tensor | None = None,
-    ) -> StepOutput:
+    def val_step(self, batch: Batch) -> StepOutput:
+        assert batch.images is not None
+        images = batch.images
         self.model.eval()
         with torch.no_grad():
             outputs: VAEForwardOutput = self.model(images)

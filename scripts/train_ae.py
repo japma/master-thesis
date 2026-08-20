@@ -1,7 +1,6 @@
 """Entry point for autoencoder training."""
 
 from collections.abc import Sized
-from pathlib import Path
 
 import torch
 from rtpt import RTPT
@@ -10,20 +9,20 @@ from torchinfo import summary
 import wandb
 from dataset_loaders import build_data_loaders
 from models import VariationalAutoencoder
-from training.ae_trainer import train_autoencoder
+from training.loop import CheckpointSpec, run_training_loop
 from training.losses.tcvae import BetaTCVAELoss
 from training.losses.vae import VAELoss
 from training.objectives.beta_vae import BetaVAEObjective
 from training.objectives.tcvae import TCVAEObjective
 from training.schedulers import BetaAnnealingScheduler
 from utils.checkpoints import (
+    final_checkpoint_path,
     intermediate_checkpoint_path,
     load_ae_from_path,
-    save_autoencoder,
 )
 from utils.config import AERunConfig, VAETrainingType, load_config
 from utils.reproducibility import resolve_device, seed_everything
-from utils.wandb_utils import init_run
+from utils.wandb_utils import init_run, log_images
 
 
 def main() -> None:
@@ -65,6 +64,7 @@ def main() -> None:
     train_loader, test_loader = build_data_loaders(
         dataset_cfg, batch_size=training_cfg.batch_size
     )
+    test_dataset = test_loader.dataset
     assert isinstance(train_loader.dataset, Sized)
     assert isinstance(test_loader.dataset, Sized)
 
@@ -133,14 +133,29 @@ def main() -> None:
     else:
         raise ValueError(f"Unknown training type: {training_cfg.vae_type}")
 
-    train_autoencoder(
+    sample_indices = torch.randperm(test_data_size)[: min(10, test_data_size)]
+    sample_images = torch.stack(
+        [test_dataset[i.item()][0] for i in sample_indices]
+    ).to(device)
+    log_images("samples/input", sample_images, step=0)
+
+    checkpoint = CheckpointSpec(
+        intermediate_path=ae_ckpt_path,
+        final_path=final_checkpoint_path(autoencoder_cfg.model_type, dataset_name),
+        artifact_type="autoencoder",
+    )
+
+    run_training_loop(
         objective=objective,
         device=device,
-        cfg=cfg,
+        epochs=training_cfg.epochs,
         train_loader=train_loader,
         test_loader=test_loader,
         rtpt=rtpt,
+        checkpoint=checkpoint,
         resume=resume,
+        sample_probe=sample_images,
+        sample_log_key="samples/reconstructed",
     )
 
     wandb.finish()

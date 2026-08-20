@@ -6,7 +6,7 @@ import torch
 
 from models.cspn.psinet.label_pc import LabelPC
 from training.losses.spn import NLLLoss
-from training.objectives.base import AbstractObjective, StepOutput
+from training.objectives.base import AbstractObjective, Batch, StepOutput
 from utils.checkpoints import save_label_pc
 
 
@@ -25,13 +25,10 @@ class LabelPCObjective(AbstractObjective):
         self.lr_scheduler = lr_scheduler
         self.loss_fn = NLLLoss()
 
-    def train_step(
-        self,
-        images: torch.Tensor,
-        labels: torch.Tensor | None = None,
-    ) -> StepOutput:
-        if labels is None:
+    def train_step(self, batch: Batch) -> StepOutput:
+        if batch.labels is None:
             raise ValueError("Labels must be provided for LabelPC training")
+        labels = batch.labels
 
         self.model.train()
         outputs = self.model(labels.float())
@@ -45,13 +42,10 @@ class LabelPCObjective(AbstractObjective):
         return StepOutput(metrics=metrics, batch_size=labels.size(0))
 
     @torch.no_grad()
-    def val_step(
-        self,
-        images: torch.Tensor,
-        labels: torch.Tensor | None = None,
-    ) -> StepOutput:
-        if labels is None:
+    def val_step(self, batch: Batch) -> StepOutput:
+        if batch.labels is None:
             raise ValueError("Labels must be provided for LabelPC training")
+        labels = batch.labels
 
         self.model.eval()
         outputs = self.model(labels.float())

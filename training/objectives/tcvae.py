@@ -5,7 +5,7 @@ import torch
 from models import VariationalAutoencoder
 from models.autoencoder.variational_autoencoder import VAEForwardOutput
 from training.losses.tcvae import BetaTCVAELoss, TCVAELossOutput
-from training.objectives.base import AbstractObjective, StepOutput
+from training.objectives.base import AbstractObjective, Batch, StepOutput
 from training.schedulers import BetaAnnealingScheduler
 from utils.checkpoints import save_autoencoder
 
@@ -34,15 +34,9 @@ class TCVAEObjective(AbstractObjective):
         self.train_data_size = train_data_size
         self.test_data_size = test_data_size
 
-    def train_step(
-        self,
-        images: torch.Tensor,
-        labels: torch.Tensor | None = None,
-    ) -> StepOutput:
-        """Step function used for training
-        :param images
-        :param labels
-        """
+    def train_step(self, batch: Batch) -> StepOutput:
+        assert batch.images is not None
+        images = batch.images
         self.model.train()
         outputs: VAEForwardOutput = self.model(images)
 
@@ -68,11 +62,9 @@ class TCVAEObjective(AbstractObjective):
         return StepOutput(metrics=metrics, batch_size=images.size(0))
 
     @torch.no_grad()
-    def val_step(
-        self,
-        images: torch.Tensor,
-        labels: torch.Tensor | None = None,
-    ) -> StepOutput:
+    def val_step(self, batch: Batch) -> StepOutput:
+        assert batch.images is not None
+        images = batch.images
         self.model.eval()
         with torch.no_grad():
             outputs: VAEForwardOutput = self.model(images)

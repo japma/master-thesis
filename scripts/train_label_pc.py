@@ -7,16 +7,20 @@ from torchinfo import summary
 import wandb
 from dataset_loaders import build_data_loaders
 from models.cspn.psinet.label_pc import LabelPC
-from training.label_pc_trainer import train_label_pc
+from training.loop import CheckpointSpec, run_training_loop
 from training.objectives.label_pc_objective import LabelPCObjective
-from utils.checkpoints import label_pc_checkpoint_path, save_label_pc
+from utils.checkpoints import (
+    intermediate_checkpoint_path,
+    label_pc_checkpoint_path,
+    load_label_pc_from_path,
+)
 from utils.config import CSPNRunConfig, load_config
 from utils.reproducibility import resolve_device, seed_everything
-from utils.wandb_utils import init_run, log_checkpoint_artifact
+from utils.wandb_utils import init_run
 
 
 def main() -> None:
-    cfg, cfg_seed, _resume = load_config()
+    cfg, cfg_seed, resume = load_config()
     assert isinstance(cfg, CSPNRunConfig)
     dataset_cfg = cfg.dataset
     training_cfg = cfg.training
@@ -41,12 +45,23 @@ def main() -> None:
 
     print(f"Training LabelPC on {dataset_name} | device={device} | seed={seed}")
 
-    label_pc = LabelPC(
-        num_attributes=num_attributes,
-        num_input_distributions=NUM_INPUT_DISTRIBUTIONS,
-        num_sums=NUM_SUMS,
-        num_repetitions=NUM_REPETITIONS,
-    )
+    label_pc_ckpt_path = intermediate_checkpoint_path("label_pc", dataset_name)
+    if resume and label_pc_ckpt_path.exists():
+        label_pc = load_label_pc_from_path(label_pc_ckpt_path, device=device)
+        print(f"Resumed model weights from {label_pc_ckpt_path}")
+    else:
+        if resume:
+            print(
+                f"--resume given but no checkpoint found at {label_pc_ckpt_path}; "
+                "starting from scratch"
+            )
+        label_pc = LabelPC(
+            num_attributes=num_attributes,
+            num_input_distributions=NUM_INPUT_DISTRIBUTIONS,
+            num_sums=NUM_SUMS,
+            num_repetitions=NUM_REPETITIONS,
+        )
+    label_pc = label_pc.to(device)
 
     print("LabelPC architecture:")
     summary(label_pc)
@@ -61,7 +76,7 @@ def main() -> None:
     )
 
     objective = LabelPCObjective(
-        model=label_pc.to(device),
+        model=label_pc,
         optimizer=optimizer,
         lr_scheduler=scheduler,
     )
@@ -73,19 +88,24 @@ def main() -> None:
     )
     rtpt.start()
 
-    train_label_pc(
+    checkpoint = CheckpointSpec(
+        intermediate_path=label_pc_ckpt_path,
+        final_path=label_pc_checkpoint_path(dataset_name),
+        artifact_type="label_pc",
+    )
+
+    run_training_loop(
         objective=objective,
         device=device,
-        cfg=cfg,
+        epochs=training_cfg.epochs,
         train_loader=train_loader,
         test_loader=test_loader,
         rtpt=rtpt,
+        checkpoint=checkpoint,
+        resume=resume,
+        needs_images=False,
     )
 
-    ckpt_path = label_pc_checkpoint_path(dataset_name)
-    save_label_pc(label_pc, ckpt_path)
-
-    log_checkpoint_artifact(ckpt_path, name=run_name, type="label_pc")
     wandb.finish()
 
 

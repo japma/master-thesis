@@ -1,7 +1,5 @@
 """Entry point for CSPN training."""
 
-from pathlib import Path
-
 import torch
 from rtpt import RTPT
 from torchinfo import summary
@@ -12,19 +10,95 @@ from dataset_loaders.latent_normalizer import LatentNormalizer
 from models.autoencoder.pretrained import PretrainedVAE
 from models.cspn.psinet.label_pc import LabelPC
 from models.cspn.psinet_cspn import PsiNetCSPN
-from training.cspn_trainer import train_cspn
+from training.loop import CheckpointSpec, run_training_loop
 from training.objectives.cspn import CSPNObjective
 from utils.checkpoints import (
+    final_checkpoint_path,
     intermediate_checkpoint_path,
     label_pc_checkpoint_path,
     load_ae_from_path,
     load_cspn_from_path,
     load_label_pc_from_path,
-    save_cspn,
 )
 from utils.config import CSPNEncoderType, CSPNRunConfig, CSPNType, load_config
 from utils.reproducibility import resolve_device, seed_everything
 from utils.wandb_utils import init_run, load_from_wandb
+
+
+def _themed_multi_binary_labels(
+    themes: list[dict[int, float]],
+    num_attributes: int,
+    device: torch.device,
+    label_pc: LabelPC | None,
+) -> torch.Tensor:
+    """Builds one label vector per theme (a sparse {attribute_idx: value} spec)."""
+    if label_pc is not None:
+        return torch.cat(
+            [
+                label_pc.complete_partial(known, batch_size=1, device=device)
+                for known in themes
+            ],
+            dim=0,
+        )
+
+    print(
+        "No LabelPC available -- falling back to zero-filled (attribute=off) labels "
+        "for sample logging."
+    )
+    vectors = []
+    for known in themes:
+        vector = torch.zeros(num_attributes)
+        for idx, value in known.items():
+            vector[idx] = value
+        vectors.append(vector)
+    return torch.stack(vectors).to(device, non_blocking=True)
+
+
+def _build_sample_labels(
+    cfg: CSPNRunConfig,
+    device: torch.device,
+    label_pc: LabelPC | None,
+) -> torch.Tensor:
+    sample_count = max(1, min(16, cfg.dataset.num_classes))
+
+    if cfg.model.encoder_config.encoder_type == CSPNEncoderType.CATEGORICAL:
+        return (
+            torch.arange(sample_count)
+            .repeat_interleave(3)
+            .to(device, non_blocking=True)
+        )
+    elif cfg.model.encoder_config.encoder_type == CSPNEncoderType.MULTI_BINARY:
+        glasses_idx = 15
+        male_idx = 20
+        bald_idx = 4
+
+        # {} = fully unconditional (all attributes marginalized/sampled by LabelPC,
+        # or zero-filled in the no-LabelPC fallback).
+        themes: list[dict[int, float]] = [
+            {},
+            {glasses_idx: 1.0},
+            {male_idx: 1.0},
+            {bald_idx: 1.0},
+        ]
+        return _themed_multi_binary_labels(
+            themes, cfg.dataset.num_classes, device, label_pc
+        )
+    else:
+        # TODO update the hardcoded colourmnist values
+        return torch.tensor(
+            [
+                [0, 0, 0],
+                [1, 0, 0],
+                [2, 0, 0],
+                [3, 0, 0],
+                [4, 0, 0],
+                [5, 0, 0],
+                [6, 0, 0],
+                [7, 0, 0],
+                [8, 0, 0],
+                [9, 0, 0],
+            ]
+        ).to(device, non_blocking=True)
 
 
 def main() -> None:
@@ -129,15 +203,25 @@ def main() -> None:
     )
     rtpt.start()
 
-    train_cspn(
+    sample_labels = _build_sample_labels(cfg, device, label_pc)
+
+    checkpoint = CheckpointSpec(
+        intermediate_path=cspn_ckpt_path,
+        final_path=final_checkpoint_path(cspn_cfg.model_type, dataset_name),
+        artifact_type="cspn",
+    )
+
+    run_training_loop(
         objective=objective,
         device=device,
-        cfg=cfg,
+        epochs=training_cfg.epochs,
         train_loader=train_loader,
         test_loader=test_loader,
         rtpt=rtpt,
+        checkpoint=checkpoint,
         resume=resume,
-        label_pc=label_pc,
+        sample_probe=sample_labels,
+        sample_log_key="samples/cspn_generated_images",
     )
 
     wandb.finish()

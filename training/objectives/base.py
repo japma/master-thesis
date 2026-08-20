@@ -21,24 +21,36 @@ class StepOutput:
     batch_size: int
 
 
+@dataclass
+class Batch:
+    """images is None when an objective (e.g. LabelPC) never reads image data --
+    lets the training loop skip transferring a full image tensor to device for
+    nothing."""
+
+    images: torch.Tensor | None
+    labels: torch.Tensor | None = None
+
+    def to(self, device: torch.device) -> "Batch":
+        return Batch(
+            images=self.images.to(device, non_blocking=True)
+            if self.images is not None
+            else None,
+            labels=self.labels.to(device, non_blocking=True)
+            if self.labels is not None
+            else None,
+        )
+
+
 class AbstractObjective(ABC):
     optimizer: torch.optim.Optimizer
     lr_scheduler: torch.optim.lr_scheduler.LRScheduler
 
     @abstractmethod
-    def train_step(
-        self,
-        images: torch.Tensor,
-        labels: torch.Tensor | None = None,
-    ) -> StepOutput:
+    def train_step(self, batch: Batch) -> StepOutput:
         raise NotImplementedError
 
     @abstractmethod
-    def val_step(
-        self,
-        images: torch.Tensor,
-        labels: torch.Tensor | None = None,
-    ) -> StepOutput:
+    def val_step(self, batch: Batch) -> StepOutput:
         raise NotImplementedError
 
     @abstractmethod
