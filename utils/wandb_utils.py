@@ -56,8 +56,10 @@ def load_from_wandb(ckpt_name: str, tag: str = "latest") -> Path:
     print(f"Loading checkpoint {ckpt_name}:{tag} from Weights & Biases artifacts...")
     name = f"{ENTITY}/{PROJECT}/{ckpt_name}:{tag}"
     run = wandb.run
-    tracking = run is not None and not run.disabled and not run.offline
-    artifact = run.use_artifact(name) if tracking else wandb.Api().artifact(name)
+    if run is not None and not run.disabled and not run.offline:
+        artifact = run.use_artifact(name)
+    else:
+        artifact = wandb.Api().artifact(name)
     download_dir = Path(artifact.download())
     files = [f for f in download_dir.rglob("*") if f.is_file()]
     assert len(files) == 1, (

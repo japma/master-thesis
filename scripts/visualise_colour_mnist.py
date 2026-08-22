@@ -9,6 +9,7 @@ Missing combinations are shown as a black/empty cell.
 
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 
 import matplotlib.image as mpimg
@@ -18,31 +19,25 @@ import pandas as pd
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
-FG_TO_IDX: dict[str, int] = {
-    "red": 0,
-    "green": 1,
-    "blue": 2,
-    "cyan": 3,
-    "yellow": 4,
-    "pink": 5,
-}
+from dataset_loaders.colour_mnist import (
+    BG_TO_IDX,
+    DATASET_DIR_NAME,
+    FG_TO_IDX,
+    IDX_TO_BG,
+    IDX_TO_FG,
+    LABELS_FILENAME,
+    NUM_BG,
+    NUM_DIGITS,
+    NUM_FG,
+    SPLITS,
+)
 
-BG_TO_IDX: dict[str, int] = {
-    "white": 0,
-    "black": 1,
-    "grey": 2,
-}
-
-IDX_TO_FG: dict[int, str] = {v: k for k, v in FG_TO_IDX.items()}
-IDX_TO_BG: dict[int, str] = {v: k for k, v in BG_TO_IDX.items()}
-
-N_LABELS: int = 10
-N_FG: int = len(FG_TO_IDX)
-N_BG: int = len(BG_TO_IDX)
+N_LABELS: int = NUM_DIGITS
+N_FG: int = NUM_FG
+N_BG: int = NUM_BG
 N_COLS: int = N_FG * N_BG  # 18
 
-CSV_PATH: Path = Path("data/colour-mnist/train/labels.csv")
-IMAGES_DIR: Path = Path("data/colour-mnist/train/images")
+DATA_ROOT: Path = Path("data") / DATASET_DIR_NAME
 
 
 def column_index(fg_colour: str, bg_colour: str) -> int:
@@ -128,8 +123,13 @@ def build_grid_figure(
 
 
 def main() -> None:
-    df: pd.DataFrame = pd.read_csv(CSV_PATH)
-    build_grid_figure(df, IMAGES_DIR)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--split", default="train", choices=SPLITS)
+    args = parser.parse_args()
+
+    split_dir: Path = DATA_ROOT / args.split
+    df: pd.DataFrame = pd.read_csv(split_dir / LABELS_FILENAME)
+    build_grid_figure(df, split_dir / "images")
     plt.show()
 
 
