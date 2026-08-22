@@ -322,3 +322,73 @@ def plot_latent_comparison_multiclass(
     ax.set_ylabel("UMAP component 2")
     plt.tight_layout()
     plt.show()
+
+
+def plot_combination_heatmap(
+    values,
+    held_out=None,
+    title: str = "",
+    cmap: str = "viridis",
+    vmin: float | None = None,
+    vmax: float | None = None,
+):
+    """Heatmap of a (digit, fg, bg) table: rows are digits, columns grouped by background.
+
+    Combinations flagged in `held_out` (a boolean table of the same shape) get a red
+    outline, so "did the held-out cells behave differently" is answerable at a glance.
+    """
+    import numpy as np
+    from matplotlib.patches import Rectangle
+
+    from dataset_loaders.colour_mnist import (
+        BG_NAMES,
+        FG_NAMES,
+        NUM_BG,
+        NUM_DIGITS,
+        NUM_FG,
+    )
+
+    values = np.asarray(values)
+    grid = np.full((NUM_DIGITS, NUM_FG * NUM_BG), np.nan)
+    for fg in range(NUM_FG):
+        for bg in range(NUM_BG):
+            grid[:, bg * NUM_FG + fg] = values[:, fg, bg]
+
+    fig, ax = plt.subplots(figsize=(11, 5.5))
+    image = ax.imshow(grid, aspect="auto", cmap=cmap, vmin=vmin, vmax=vmax)
+    fig.colorbar(image, ax=ax, fraction=0.025)
+
+    ax.set_xticks(range(NUM_FG * NUM_BG))
+    ax.set_xticklabels(
+        [FG_NAMES[i % NUM_FG][:2] for i in range(NUM_FG * NUM_BG)], fontsize=7
+    )
+    for bg in range(NUM_BG):
+        centre = bg * NUM_FG + (NUM_FG - 1) / 2
+        ax.text(centre, -0.85, BG_NAMES[bg], ha="center", fontsize=9)
+        if bg:
+            ax.axvline(bg * NUM_FG - 0.5, color="white", linewidth=2)
+
+    ax.set_yticks(range(NUM_DIGITS))
+    ax.set_yticklabels([str(d) for d in range(NUM_DIGITS)], fontsize=8)
+    ax.set_ylabel("digit")
+
+    if held_out is not None:
+        held_out = np.asarray(held_out)
+        for digit in range(NUM_DIGITS):
+            for fg in range(NUM_FG):
+                for bg in range(NUM_BG):
+                    if held_out[digit, fg, bg]:
+                        ax.add_patch(
+                            Rectangle(
+                                (bg * NUM_FG + fg - 0.5, digit - 0.5),
+                                1,
+                                1,
+                                fill=False,
+                                edgecolor="red",
+                                linewidth=1.5,
+                            )
+                        )
+
+    ax.set_title(f"{title}   (red = held out of training)", pad=32)
+    fig.tight_layout()
+    return fig

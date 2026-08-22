@@ -48,6 +48,8 @@ train_cspn = "scripts.train_cspn:main"
 download_data = "scripts.download_data:main"
 generate_colour_mnist = "scripts.generate_colour_mnist:main"
 list_checkpoints = "scripts.list_checkpoints:main"
+probe_ae = "scripts.probe_ae:main"
+probe_cspn = "scripts.probe_cspn:main"
 
 
 [build-system]

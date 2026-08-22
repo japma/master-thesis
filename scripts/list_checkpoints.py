@@ -10,6 +10,10 @@ second by --check.
     uv run list_checkpoints --type autoencoder # one artifact type
     uv run list_checkpoints --versions 5       # more history per collection
     uv run list_checkpoints --intermediate     # include intermediate_* collections
+
+`--check` answers "does this deserialize under the current code", not "is this still
+meaningful". A CSPN trained against a retired autoencoder's latent space loads perfectly
+and is worthless; only the checkpoint's provenance tells you that.
 """
 
 import argparse

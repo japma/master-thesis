@@ -220,7 +220,9 @@ class ColourMNIST(Dataset):
     def __len__(self) -> int:
         return len(self.filenames)
 
-    def __getitem__(self, index: int) -> tuple[Image.Image, torch.Tensor]:
+    def __getitem__(
+        self, index: int
+    ) -> tuple[Image.Image | torch.Tensor, torch.Tensor]:
         img = Image.open(self.split_dir / "images" / self.filenames[index])
 
         if self.transform:
