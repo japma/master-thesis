@@ -5,8 +5,9 @@ dataset:
   num_classes: 40
 
 autoencoder:
-  name: "autoencoder_celeba"
+  name: "variational_celeba"
   external: false
+  tag: "latest"
 
 model:
   model_type: "psinet"

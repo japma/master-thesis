@@ -194,6 +194,7 @@ def main() -> None:
         autoencoder=ae,
         optimizer=optimizer,
         lr_scheduler=scheduler,
+        label_pc=label_pc,
     )
 
     rtpt = RTPT(

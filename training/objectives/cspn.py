@@ -4,6 +4,7 @@ import torch
 
 from models.autoencoder import AbstractAutoencoder
 from models.cspn.abstract_cspn import AbstractCSPN
+from models.cspn.psinet.label_pc import LabelPC
 from training.losses.spn import NLLLoss
 from training.objectives.base import AbstractObjective, Batch, StepOutput
 from utils.checkpoints import save_cspn
@@ -20,6 +21,7 @@ class CSPNObjective(AbstractObjective):
         autoencoder: AbstractAutoencoder,
         optimizer: torch.optim.Optimizer,
         lr_scheduler: torch.optim.lr_scheduler.LRScheduler,
+        label_pc: LabelPC | None = None,
     ) -> None:
         super().__init__()
         self.model = model
@@ -27,6 +29,7 @@ class CSPNObjective(AbstractObjective):
         self.autoencoder.eval()
         self.optimizer = optimizer
         self.lr_scheduler = lr_scheduler
+        self.label_pc = label_pc
         self.loss_fn = NLLLoss()
 
     def train_step(self, batch: Batch) -> StepOutput:
@@ -77,6 +80,24 @@ class CSPNObjective(AbstractObjective):
             sampled_latent: torch.Tensor = self.model.sample(samples.long())
             sampled_images: torch.Tensor = self.autoencoder.decode(sampled_latent)
         return sampled_images
+
+    @torch.no_grad()
+    def sample_from_partial(
+        self, known: dict[int, float], batch_size: int
+    ) -> torch.Tensor:
+        """Full attribute-conditioned generation in one call: fills in unspecified
+        attributes via LabelPC's exact marginal inference, then samples and decodes.
+        Each call redraws the completed attribute vector -- for a *fixed* reference
+        condition sampled repeatedly across training (e.g. periodic sample logging),
+        complete_partial() once and reuse the resulting labels with sample() instead.
+        """
+        if self.label_pc is None:
+            raise ValueError("sample_from_partial requires a LabelPC")
+        device = next(self.model.parameters()).device
+        labels = self.label_pc.complete_partial(
+            known, batch_size=batch_size, device=device
+        )
+        return self.sample(labels)
 
     def save_checkpoint(self, path: Path) -> None:
         save_cspn(self.model, path)

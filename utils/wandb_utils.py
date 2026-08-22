@@ -46,18 +46,18 @@ def load_from_wandb(ckpt_name: str, tag: str = "latest") -> Path:
     """Load a checkpoint from wandb artifacts. Uses the most recent checkpoint unless tag is provided.
 
     Works with or without an active run (no `wandb.init()` needed for standalone inference/notebook
-    use). If a run is active, uses `run.use_artifact` so the run's lineage records which artifact it
-    consumed; otherwise falls back to the plain `wandb.Api()`. Either way `.download()` (rather than
-    the old `.file()`) lands in a version-qualified directory, so downloading a different version no
-    longer overwrites an already-downloaded one on disk.
+    use). If a run is actually tracking to the server, uses `run.use_artifact` so the run's lineage
+    records which artifact it consumed; otherwise (no run, or a disabled/offline run such as
+    `--dry-run`, whose `use_artifact` is a no-op returning None) falls back to the plain
+    `wandb.Api()`. Either way `.download()` (rather than the old `.file()`) lands in a
+    version-qualified directory, so downloading a different version no longer overwrites an
+    already-downloaded one on disk.
     """
     print(f"Loading checkpoint {ckpt_name}:{tag} from Weights & Biases artifacts...")
     name = f"{ENTITY}/{PROJECT}/{ckpt_name}:{tag}"
-    artifact = (
-        wandb.run.use_artifact(name)
-        if wandb.run is not None
-        else wandb.Api().artifact(name)
-    )
+    run = wandb.run
+    tracking = run is not None and not run.disabled and not run.offline
+    artifact = run.use_artifact(name) if tracking else wandb.Api().artifact(name)
     download_dir = Path(artifact.download())
     files = [f for f in download_dir.rglob("*") if f.is_file()]
     assert len(files) == 1, (
