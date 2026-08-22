@@ -1,5 +1,6 @@
 import copy
 import math
+from collections.abc import Sequence
 from typing import Any
 
 import torch
@@ -130,6 +131,144 @@ class PsiNetCSPN(AbstractCSPN):
         samples = self.einet.sample(y=labels, std_correction=std_correction)
         assert samples is not None
         return self._denormalize(samples)
+
+    def sample_conditional(
+        self,
+        labels: torch.Tensor,
+        evidence: torch.Tensor,
+        known_mask: torch.Tensor,
+        std_correction: float = 1.0,
+    ) -> torch.Tensor:
+        """Sample p(z_unknown | z_known, labels), holding the known latent dims fixed.
+
+        This is the tractable-inference path the whole point of using a PC rests on: the
+        unknown dims are marginalized exactly rather than approximated, and the known ones
+        come back unchanged.
+
+        :param labels: conditioning labels, shape [B, ...] as accepted by the encoder.
+        :param evidence: latent values, shape [B, num_vars]. Entries where `known_mask` is
+                         False are ignored (they are marginalized), so they may hold any
+                         placeholder.
+        :param known_mask: boolean [B, num_vars], True for observed dims. Must be identical
+                           for every row — marginalization is a property of the leaf layer,
+                           not of an individual sample.
+        :return: [B, num_vars] with the observed dims equal to `evidence`.
+        """
+        if evidence.shape != known_mask.shape:
+            raise ValueError(
+                f"evidence {tuple(evidence.shape)} and known_mask "
+                f"{tuple(known_mask.shape)} must have the same shape"
+            )
+        if evidence.shape[0] != labels.shape[0]:
+            raise ValueError(
+                f"evidence batch {evidence.shape[0]} != labels batch {labels.shape[0]}"
+            )
+        if evidence.shape[1] != self.config.num_vars:
+            raise ValueError(
+                f"evidence has {evidence.shape[1]} dims, expected {self.config.num_vars}"
+            )
+        if not torch.all(known_mask == known_mask[0]):
+            raise ValueError(
+                "known_mask must be identical for every row in the batch; "
+                "call sample_conditional() separately per distinct mask pattern."
+            )
+        if bool(known_mask[0].all()):
+            raise ValueError("every dim is observed — nothing left to sample")
+
+        unknown_idx: list[int] = (~known_mask[0]).nonzero(as_tuple=True)[0].tolist()
+
+        # backtrack() runs its evidence forward pass through EinsumNetwork.forward, which
+        # knows nothing about _normalize — so the evidence has to go in already normalized.
+        # It pastes the observed dims straight back out of `x`, so _denormalize returns
+        # them bit-for-bit.
+        self.einet.set_marginalization_idx(unknown_idx)
+        try:
+            samples = self.einet.sample(
+                x=self._normalize(evidence),
+                y=labels,
+                std_correction=std_correction,
+            )
+        finally:
+            self.einet.set_marginalization_idx(None)
+
+        assert samples is not None
+        samples = self._denormalize(samples)
+
+        # backtrack() pastes the observed dims back in *normalized* space, so with
+        # normalize_latents on they come out of _denormalize a few ulps off what was
+        # passed in. Restore the caller's values so "observed" means exactly that.
+        known_idx = known_mask[0].nonzero(as_tuple=True)[0]
+        samples[:, known_idx] = evidence[:, known_idx]
+        return samples
+
+    def sample_conditional_partial(
+        self,
+        labels: torch.Tensor,
+        known: dict[int, float],
+        std_correction: float = 1.0,
+    ) -> torch.Tensor:
+        """`sample_conditional` for the common case: a sparse {latent_idx: value} spec
+        shared across the batch. Mirrors `LabelPC.complete_partial`."""
+        if not known:
+            raise ValueError(
+                "`known` is empty — use sample() for unconditional sampling"
+            )
+
+        batch_size = labels.shape[0]
+        device = labels.device
+        evidence = torch.zeros(batch_size, self.config.num_vars, device=device)
+        known_mask = torch.zeros(
+            batch_size, self.config.num_vars, dtype=torch.bool, device=device
+        )
+        for idx, value in known.items():
+            if not 0 <= idx < self.config.num_vars:
+                raise ValueError(
+                    f"latent index {idx} out of range [0, {self.config.num_vars})"
+                )
+            evidence[:, idx] = value
+            known_mask[:, idx] = True
+
+        return self.sample_conditional(
+            labels, evidence, known_mask, std_correction=std_correction
+        )
+
+    def log_marginal(
+        self,
+        z: torch.Tensor,
+        labels: torch.Tensor,
+        observed_idx: Sequence[int],
+    ) -> torch.Tensor:
+        """Exact log p(z_observed | labels), marginalizing every other latent dim.
+
+        :param z: [B, num_vars]. Entries outside `observed_idx` are ignored.
+        :param observed_idx: latent dims to evaluate. Order and duplicates don't matter.
+        :return: [B] log-densities.
+        """
+        if z.shape[1] != self.config.num_vars:
+            raise ValueError(
+                f"z has {z.shape[1]} dims, expected {self.config.num_vars}"
+            )
+        observed = sorted(set(observed_idx))
+        if not observed:
+            raise ValueError("observed_idx is empty — the marginal would be constant 1")
+        if observed[0] < 0 or observed[-1] >= self.config.num_vars:
+            raise ValueError(
+                f"observed_idx out of range [0, {self.config.num_vars}): {observed}"
+            )
+
+        unknown_idx = [i for i in range(self.config.num_vars) if i not in set(observed)]
+
+        self.einet.set_marginalization_idx(unknown_idx)
+        try:
+            log_prob = self.einet.forward(x=self._normalize(z), y=labels).squeeze(-1)
+        finally:
+            self.einet.set_marginalization_idx(None)
+
+        if self.config.normalize_latents:
+            # Unlike forward(), only the observed dims went through the change of
+            # variables — the marginalized ones contribute no Jacobian term.
+            log_prob = log_prob - self.latent_std[observed].log().sum()
+        return log_prob
 
     def mpe(self, labels: torch.Tensor) -> torch.Tensor:
         mpe_samples = self.einet.mpe(y=labels)

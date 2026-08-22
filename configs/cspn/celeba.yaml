@@ -4,8 +4,9 @@ dataset:
   name: celeba_single_attribute
 
 autoencoder:
-  name: "autoencoder_celeba"
+  name: "variational_celeba"
   external: false
+  tag: "latest"
 
 model:
   model_type: "psinet"

@@ -1,5 +1,4 @@
 from dataset_loaders import build_data_loaders
-from models.autoencoder import TinyAutoencoderWrapper
 from models.autoencoder.pretrained import PretrainedVAE
 from utils import resolve_device
 from utils.config import load_config
@@ -7,7 +6,7 @@ from utils.visualisation import show, show_comparison
 
 
 def main() -> None:
-    cfg, _ = load_config()
+    cfg, _, _ = load_config()
     dataset_cfg = cfg.dataset
 
     dataloader, _ = build_data_loaders(dataset_cfg)
