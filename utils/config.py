@@ -25,6 +25,23 @@ class CSPNEncoderType(StrEnum):
     MULTI_CATEGORICAL = "multi_categorical"
 
 
+class ConditioningType(StrEnum):
+    """How the hypernetwork maps a label to SPN parameters.
+
+    JOINT: one trunk over the whole encoded label. Every SPN parameter may depend on
+    every label factor, so nothing forces the network to compose factors it never saw
+    together during training.
+
+    FACTORIZED: one trunk per label factor, summed before the (linear) heads. Because
+    the heads are linear, additivity in the hidden representation is exactly additivity
+    in the emitted SPN parameters, so each factor's contribution is learned from every
+    example containing that factor value regardless of what it co-occurred with.
+    """
+
+    JOINT = "joint"
+    FACTORIZED = "factorized"
+
+
 class CSPNType(StrEnum):
     PSINET = "psinet"
     SPFLOW = "spflow"
@@ -111,12 +128,27 @@ class CSPNConfig(BaseModel):
     h_dims: list[int]
     encoder_config: CSPNEncoderConfig
     normalize_latents: bool = False
+    conditioning_type: ConditioningType = ConditioningType.JOINT
 
     @model_validator(mode="after")
     def valid_var_range(self) -> Self:
         if self.min_var >= self.max_var:
             raise ValueError(
                 f"min_var ({self.min_var}) must be less than max_var ({self.max_var})"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def factorized_needs_multiple_factors(self) -> Self:
+        if (
+            self.conditioning_type is ConditioningType.FACTORIZED
+            and self.encoder_config.encoder_type is CSPNEncoderType.CATEGORICAL
+        ):
+            raise ValueError(
+                "conditioning_type=factorized requires a label encoder with more than "
+                "one factor, but `categorical` encodes a single one — the factorized "
+                "and joint networks would be identical. Use multi_binary or "
+                "multi_categorical, or leave conditioning_type at its default."
             )
         return self
 

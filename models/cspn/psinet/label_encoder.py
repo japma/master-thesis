@@ -20,6 +20,17 @@ class LabelEncoder(torch.nn.Module, ABC):
         """Per-attribute index (in the raw long-label space) meaning 'unknown'."""
         ...
 
+    @property
+    @abstractmethod
+    def factor_sizes(self) -> list[int]:
+        """Width of each independently-varying factor in the encoded vector.
+
+        `forward` concatenates one block per factor, so these are the slice widths of
+        the output and must sum to `num_classes`. A conditioning network that wants to
+        treat factors separately (see FactorizedConditioningMLP) slices on these.
+        """
+        ...
+
 
 class CategoricalLabelEncoder(LabelEncoder):
     def __init__(self, num_classes: int) -> None:
@@ -33,6 +44,10 @@ class CategoricalLabelEncoder(LabelEncoder):
     @property
     def unknown_indices(self) -> list[int]:
         return [self._num_real_classes]
+
+    @property
+    def factor_sizes(self) -> list[int]:
+        return [self.num_classes]
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return F.one_hot(x, num_classes=self.num_classes).float()
@@ -53,6 +68,10 @@ class MultiBinaryLabelEncoder(LabelEncoder):
     def unknown_indices(self) -> list[int]:
         return [2] * self._num_attrs  # each attribute: 0, 1, or unknown=2
 
+    @property
+    def factor_sizes(self) -> list[int]:
+        return [3] * self._num_attrs
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         parts = [
             F.one_hot(x[:, i], num_classes=3).float() for i in range(self._num_attrs)
@@ -72,6 +91,10 @@ class MultiCategoricalLabelEncoder(LabelEncoder):
     @property
     def unknown_indices(self) -> list[int]:
         return list(self._real_cardinalities)
+
+    @property
+    def factor_sizes(self) -> list[int]:
+        return [c + 1 for c in self._real_cardinalities]
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         parts = [

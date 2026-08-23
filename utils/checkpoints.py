@@ -22,13 +22,30 @@ from utils.reproducibility import get_rng_state, set_rng_state
 # purely additive (optimizer/scheduler/epoch/RNG state for resuming a crashed run),
 # so existing model checkpoints (and code that only ever loads those) are completely
 # unaffected whether or not a sidecar exists next to them.
-def intermediate_checkpoint_path(model_type: str, dataset_name: str) -> Path:
-    name = f"intermediate_{model_type}_{dataset_name}"
+def intermediate_checkpoint_path(
+    model_type: str, dataset_name: str, variant: str = ""
+) -> Path:
+    name = f"intermediate_{model_type}_{dataset_name}{_variant_suffix(variant)}"
     return Path("checkpoints/intermediate") / f"{name}.pt"
 
 
-def final_checkpoint_path(model_type: str, dataset_name: str) -> Path:
-    return Path("checkpoints") / f"{model_type}_{dataset_name}.pt"
+def final_checkpoint_path(
+    model_type: str, dataset_name: str, variant: str = ""
+) -> Path:
+    return (
+        Path("checkpoints")
+        / f"{model_type}_{dataset_name}{_variant_suffix(variant)}.pt"
+    )
+
+
+def _variant_suffix(variant: str) -> str:
+    """Architecture-variant tag appended to a checkpoint name.
+
+    Empty for the default variant, so every pre-existing checkpoint keeps its path;
+    ablation variants get their own file instead of overwriting the baseline they are
+    meant to be compared against.
+    """
+    return f"_{variant}" if variant else ""
 
 
 def label_pc_checkpoint_path(dataset_name: str) -> Path:

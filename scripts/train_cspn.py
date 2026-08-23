@@ -20,7 +20,13 @@ from utils.checkpoints import (
     load_cspn_from_path,
     load_label_pc_from_path,
 )
-from utils.config import CSPNEncoderType, CSPNRunConfig, CSPNType, load_config
+from utils.config import (
+    ConditioningType,
+    CSPNEncoderType,
+    CSPNRunConfig,
+    CSPNType,
+    load_config,
+)
 from utils.reproducibility import resolve_device, seed_everything
 from utils.wandb_utils import init_run, load_from_wandb
 
@@ -114,7 +120,18 @@ def main() -> None:
     device = resolve_device()
     dataset_name = dataset_cfg.name
 
-    run_name = f"cspn_{dataset_name}_{cspn_cfg.model_type}"
+    # Empty for the default joint hypernetwork, so existing checkpoint paths and
+    # wandb run names are unchanged; a factorized run gets its own so it does not
+    # overwrite the baseline it is being ablated against.
+    variant = (
+        ""
+        if cspn_cfg.conditioning_type is ConditioningType.JOINT
+        else str(cspn_cfg.conditioning_type)
+    )
+
+    run_name = f"cspn_{dataset_name}_{cspn_cfg.model_type}" + (
+        f"_{variant}" if variant else ""
+    )
 
     init_run(wandb_cfg, run_name, cfg.model_dump())
 
@@ -138,7 +155,9 @@ def main() -> None:
     if cspn_cfg.model_type != CSPNType.PSINET:
         raise ValueError(f"Unknown model type {cspn_cfg.model_type}")
 
-    cspn_ckpt_path = intermediate_checkpoint_path(cspn_cfg.model_type, dataset_cfg.name)
+    cspn_ckpt_path = intermediate_checkpoint_path(
+        cspn_cfg.model_type, dataset_cfg.name, variant
+    )
     resumed_cspn = False
     if resume and cspn_ckpt_path.exists():
         cspn = load_cspn_from_path(cspn_ckpt_path, device=device).to(device)
@@ -208,7 +227,7 @@ def main() -> None:
 
     checkpoint = CheckpointSpec(
         intermediate_path=cspn_ckpt_path,
-        final_path=final_checkpoint_path(cspn_cfg.model_type, dataset_name),
+        final_path=final_checkpoint_path(cspn_cfg.model_type, dataset_name, variant),
         artifact_type="cspn",
     )
 

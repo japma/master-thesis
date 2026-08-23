@@ -89,6 +89,7 @@ class PsiNetCSPN(AbstractCSPN):
             self.einet,
             h_dims=config.h_dims,
             encoder=encoder,
+            conditioning_type=config.conditioning_type,
         )
 
         self.einet.param_nn = conditioning_network
