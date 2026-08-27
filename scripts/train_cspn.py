@@ -1,5 +1,7 @@
 """Entry point for CSPN training."""
 
+from pathlib import Path
+
 import torch
 from rtpt import RTPT
 from torchinfo import summary
@@ -58,6 +60,48 @@ def _themed_multi_binary_labels(
             vector[idx] = value
         vectors.append(vector)
     return torch.stack(vectors).to(device, non_blocking=True)
+
+
+def _load_label_pc(
+    cfg: CSPNRunConfig, dataset_name: str, device: torch.device
+) -> LabelPC | None:
+    """Load the pretrained LabelPC that completes unspecified attributes when logging
+    samples.
+
+    Tries the wandb artifact first — the autoencoder is loaded the same way, and the
+    checkpoint generally lives on whichever machine trained it rather than the one
+    running this — then falls back to a local checkpoint. Missing is not fatal: the
+    LabelPC only decorates sample logging, so training proceeds with zero-filled
+    attribute vectors instead.
+    """
+    if cfg.model.encoder_config.encoder_type != CSPNEncoderType.MULTI_BINARY:
+        return None
+
+    local_path = label_pc_checkpoint_path(dataset_name)
+    # run_training_loop logs every checkpoint under its filename stem.
+    artifact_name = cfg.label_pc.name or local_path.stem
+    tag = cfg.label_pc.tag
+
+    path: Path | None = None
+    try:
+        path = load_from_wandb(ckpt_name=artifact_name, tag=tag)
+    except Exception as error:
+        print(f"Could not load LabelPC artifact {artifact_name}:{tag} from wandb ({error})")
+        if local_path.exists():
+            path = local_path
+
+    if path is None:
+        print(
+            f"No LabelPC found (wandb {artifact_name}:{tag}, local {local_path}); "
+            "sample logging will fall back to zero-filled attributes. Run "
+            "scripts/train_label_pc.py first to enable attribute-completion sampling."
+        )
+        return None
+
+    label_pc = load_label_pc_from_path(path, device=device)
+    label_pc.eval()
+    print(f"Loaded LabelPC from {path} for attribute-completion sampling")
+    return label_pc
 
 
 def _build_sample_labels(
@@ -186,19 +230,7 @@ def main() -> None:
         assert normalizer.std is not None
         cspn.set_latent_stats(normalizer.mean, normalizer.std)
 
-    label_pc: LabelPC | None = None
-    if cspn_cfg.encoder_config.encoder_type == CSPNEncoderType.MULTI_BINARY:
-        label_pc_path = label_pc_checkpoint_path(dataset_name)
-        if label_pc_path.exists():
-            label_pc = load_label_pc_from_path(label_pc_path, device=device)
-            label_pc.eval()
-            print(f"Loaded LabelPC from {label_pc_path} for attribute-completion sampling")
-        else:
-            print(
-                f"No LabelPC checkpoint found at {label_pc_path}; sample logging will "
-                "fall back to zero-filled attributes. Run scripts/train_label_pc.py "
-                "first to enable attribute-completion sampling."
-            )
+    label_pc = _load_label_pc(cfg, dataset_name, device)
 
     print("CSPN architecture:")
     summary(cspn)

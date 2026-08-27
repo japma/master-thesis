@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Literal, Self
 
 import yaml
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class AutoencoderType(StrEnum):
@@ -237,6 +237,21 @@ class AERunConfig(BaseModel):
         return self
 
 
+class LabelPCConfig(BaseModel):
+    """Where to load the pretrained LabelPC from.
+
+    Entirely optional: the LabelPC only completes unspecified attributes for sample
+    logging, so CSPN training runs fine without one. `name` defaults to the artifact
+    `train_label_pc.py` writes for this dataset (`label_pc_{dataset}`), so the common
+    case needs no config at all — set it only to point at a differently-named run.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = None
+    tag: str = "latest"
+
+
 class CSPNRunConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -246,6 +261,7 @@ class CSPNRunConfig(BaseModel):
     autoencoder: PretrainedAutoencoderConfig
     training: CSPNTrainingConfig
     wandb: WandbConfig
+    label_pc: LabelPCConfig = Field(default_factory=LabelPCConfig)
 
 
 def _deep_merge(base: dict, override: dict) -> dict:
