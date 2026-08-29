@@ -10,10 +10,13 @@ model:
   base_channels: 64
 
 training:
+  vae_type: beta
   epochs: 200
   learning_rate: 0.0005
   batch_size: 64
   beta: 1.0
+  beta_start: 0.0
+  beta_end: 1.0
   kl_warmup_epochs: 20
 
 wandb:

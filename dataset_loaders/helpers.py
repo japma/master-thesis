@@ -10,7 +10,6 @@ from torchvision.datasets.flowers102 import Flowers102
 from torchvision.datasets.mnist import MNIST, FashionMNIST
 
 from dataset_loaders.binarymnist import BinaryMNISTDataset
-from dataset_loaders.coco import CocoDataset
 from dataset_loaders.colour_mnist import ColourMNIST
 from dataset_loaders.cub200 import Cub200Dataset
 from dataset_loaders.single_attribute_celeba import SingleAttributeCelebA
@@ -94,24 +93,6 @@ def _load_tinyimagenet(
         split=split,
         transform=transforms.Compose(
             [
-                transforms.ToTensor(),
-            ]
-        ),
-    )
-
-
-# TODO fix this, this is a not good
-def _load_coco(train: bool = True, size: tuple[int, int] = (128, 128)) -> CocoDataset:
-    root = f"./data/coco-2017/{'train' if train else 'val'}/"
-    ann_file = (
-        f"./data/coco-2017/annotations/instances_{'train' if train else 'val'}2017.json"
-    )
-    return CocoDataset(
-        root=DATA_DIR,
-        split="train" if train else "val",
-        transform=transforms.Compose(
-            [
-                transforms.Resize(size),
                 transforms.ToTensor(),
             ]
         ),
@@ -227,7 +208,6 @@ _DATASETS = {
     "fashion_mnist": _load_fashion_mnist,
     "cifar10": _load_cifar10,
     "tinyimagenet": _load_tinyimagenet,
-    "coco": _load_coco,
     "flowers102": _load_flowers102,
     "cub200": _load_cub200,
     "celeba": _load_celeba,

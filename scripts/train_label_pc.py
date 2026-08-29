@@ -30,20 +30,23 @@ def main() -> None:
     device = resolve_device()
     dataset_name = dataset_cfg.name
 
+    label_pc_cfg = cfg.label_pc
+    # Derived, not label_pc.name: that field points at an artifact to *load*, while this
+    # run *produces* one, and its checkpoint stem is what becomes the artifact name.
     run_name = f"label_pc_{dataset_name}"
 
     init_run(wandb_cfg, run_name, cfg.model_dump())
 
-    # TODO: hardcoded until LabelPC gets its own config section
-    NUM_INPUT_DISTRIBUTIONS: int = 10
-    NUM_SUMS: int = 10
-    NUM_REPETITIONS: int = 5
+    # Raises for label spaces the LabelPC cannot represent (anything non-binary),
+    # rather than failing later on a shape mismatch inside the circuit.
+    num_attributes: int = label_pc_cfg.resolve_num_attributes(
+        cfg.model.encoder_config
+    )
 
-    # TODO: assumes dataset_cfg.num_classes holds the attribute count for
-    # multi-binary label datasets (CelebA)
-    num_attributes: int = dataset_cfg.num_classes
-
-    print(f"Training LabelPC on {dataset_name} | device={device} | seed={seed}")
+    print(
+        f"Training LabelPC on {dataset_name} | {num_attributes} attributes | "
+        f"device={device} | seed={seed}"
+    )
 
     label_pc_ckpt_path = intermediate_checkpoint_path("label_pc", dataset_name)
     if resume and label_pc_ckpt_path.exists():
@@ -57,9 +60,9 @@ def main() -> None:
             )
         label_pc = LabelPC(
             num_attributes=num_attributes,
-            num_input_distributions=NUM_INPUT_DISTRIBUTIONS,
-            num_sums=NUM_SUMS,
-            num_repetitions=NUM_REPETITIONS,
+            num_input_distributions=label_pc_cfg.num_input_distributions,
+            num_sums=label_pc_cfg.num_sums,
+            num_repetitions=label_pc_cfg.num_repetitions,
         )
     label_pc = label_pc.to(device)
 

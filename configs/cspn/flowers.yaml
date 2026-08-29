@@ -6,10 +6,10 @@ dataset:
 autoencoder:
   name: "autoencoder_flowers102"
   external: false
-  latent_dim: 128
 
 model:
   model_type: "psinet"
+  num_vars: 128
   num_repetitions: 5
   num_input_distributions: 16
   num_sums: 16

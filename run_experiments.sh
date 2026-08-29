@@ -7,9 +7,9 @@ set -e
 source .venv/bin/activate
 
 configs=(
-    "cspn/mnist.yaml"
-    "cspn/flowers.yaml"
-    "cspn/cub.yaml"
+    "configs/cspn/mnist.yaml"
+    "configs/cspn/flowers.yaml"
+    "configs/cspn/cub.yaml"
 )
 
 for config in "${configs[@]}"; do

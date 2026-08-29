@@ -238,18 +238,49 @@ class AERunConfig(BaseModel):
 
 
 class LabelPCConfig(BaseModel):
-    """Where to load the pretrained LabelPC from.
+    """The LabelPC that models p(y) over the label attributes.
 
-    Entirely optional: the LabelPC only completes unspecified attributes for sample
-    logging, so CSPN training runs fine without one. `name` defaults to the artifact
-    `train_label_pc.py` writes for this dataset (`label_pc_{dataset}`), so the common
-    case needs no config at all — set it only to point at a differently-named run.
+    The LabelPC has no run config of its own — `train_label_pc.py` is driven by the
+    CSPN config for the dataset it belongs to — so this one section holds both halves:
+    the architecture `train_label_pc.py` builds, and the artifact `train_cspn.py`
+    loads. Every field has a default that reproduces the previously hardcoded
+    behaviour, so existing configs need no `label_pc:` block at all.
+
+    `name` is load-side only: it resolves which wandb artifact / local checkpoint
+    `train_cspn.py` picks up, defaulting to what `train_label_pc.py` writes for this
+    dataset (`label_pc_{dataset}`). Training always writes the derived name, so set
+    this only to consume an artifact produced under a different one.
     """
 
     model_config = ConfigDict(extra="forbid")
 
+    # Artifact resolution, read when loading a trained LabelPC.
     name: str | None = None
     tag: str = "latest"
+
+    # Architecture, read when training one.
+    num_input_distributions: int = 10
+    num_sums: int = 10
+    num_repetitions: int = 5
+    # Number of binary attributes to model. Defaults to the label encoder's attribute
+    # count (see `resolve_num_attributes`) rather than dataset.num_classes, which only
+    # coincides with it for multi-binary datasets.
+    num_attributes: int | None = None
+
+    def resolve_name(self, dataset_name: str) -> str:
+        return self.name or f"label_pc_{dataset_name}"
+
+    def resolve_num_attributes(self, encoder: "CSPNEncoderConfig") -> int:
+        if self.num_attributes is not None:
+            return self.num_attributes
+        if encoder.encoder_type is not CSPNEncoderType.MULTI_BINARY:
+            raise ValueError(
+                "LabelPC models binary attributes (its leaves are BinomialArray with "
+                f"N=1), so it cannot represent a {encoder.encoder_type} label space. "
+                "Set label_pc.num_attributes explicitly only if you know the labels are "
+                "binary; otherwise this dataset has no usable LabelPC."
+            )
+        return encoder.num_classes[0]
 
 
 class CSPNRunConfig(BaseModel):

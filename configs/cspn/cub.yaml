@@ -4,11 +4,12 @@ dataset:
   name: cub200
 
 autoencoder:
-name: "autoencoder_cub200"
-external: false
+  name: "autoencoder_cub200"
+  external: false
 
 model:
   model_type: "psinet"
+  num_vars: 256
   num_repetitions: 5
   num_input_distributions: 16
   num_sums: 16

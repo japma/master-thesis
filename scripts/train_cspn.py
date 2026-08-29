@@ -78,8 +78,9 @@ def _load_label_pc(
         return None
 
     local_path = label_pc_checkpoint_path(dataset_name)
-    # run_training_loop logs every checkpoint under its filename stem.
-    artifact_name = cfg.label_pc.name or local_path.stem
+    # run_training_loop logs every checkpoint under its filename stem, which is what
+    # resolve_name reproduces.
+    artifact_name = cfg.label_pc.resolve_name(dataset_name)
     tag = cfg.label_pc.tag
 
     path: Path | None = None

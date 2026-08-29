@@ -8,13 +8,18 @@ dataset:
 model:
   model_type: variational
   latent_dim: 128
+  base_channels: 64
   num_blocks: 4
 
 training:
+  vae_type: beta
   epochs: 150
   learning_rate: 0.0005
   batch_size: 64
   beta: 4.0
+  beta_start: 0.0
+  beta_end: 4.0
+  kl_warmup_epochs: 30
 
 wandb:
   mode: online
