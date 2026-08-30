@@ -16,12 +16,6 @@ class LabelEncoder(torch.nn.Module, ABC):
 
     @property
     @abstractmethod
-    def unknown_indices(self) -> list[int]:
-        """Per-attribute index (in the raw long-label space) meaning 'unknown'."""
-        ...
-
-    @property
-    @abstractmethod
     def factor_sizes(self) -> list[int]:
         """Width of each independently-varying factor in the encoded vector.
 
@@ -39,11 +33,7 @@ class CategoricalLabelEncoder(LabelEncoder):
 
     @property
     def num_classes(self) -> int:
-        return self._num_real_classes + 1
-
-    @property
-    def unknown_indices(self) -> list[int]:
-        return [self._num_real_classes]
+        return self._num_real_classes
 
     @property
     def factor_sizes(self) -> list[int]:
@@ -54,7 +44,7 @@ class CategoricalLabelEncoder(LabelEncoder):
 
 
 class MultiBinaryLabelEncoder(LabelEncoder):
-    """Each attribute is now a 3-way category: 0, 1, or 'unknown'."""
+    """Each attribute is a binary category: 0, 1."""
 
     def __init__(self, num_classes: int) -> None:
         super().__init__()
@@ -62,19 +52,15 @@ class MultiBinaryLabelEncoder(LabelEncoder):
 
     @property
     def num_classes(self) -> int:
-        return self._num_attrs * 3
-
-    @property
-    def unknown_indices(self) -> list[int]:
-        return [2] * self._num_attrs  # each attribute: 0, 1, or unknown=2
+        return self._num_attrs * 2
 
     @property
     def factor_sizes(self) -> list[int]:
-        return [3] * self._num_attrs
+        return [2] * self._num_attrs
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         parts = [
-            F.one_hot(x[:, i], num_classes=3).float() for i in range(self._num_attrs)
+            F.one_hot(x[:, i], num_classes=2).float() for i in range(self._num_attrs)
         ]
         return torch.cat(parts, dim=-1)
 
@@ -86,19 +72,15 @@ class MultiCategoricalLabelEncoder(LabelEncoder):
 
     @property
     def num_classes(self) -> int:
-        return sum(c + 1 for c in self._real_cardinalities)
-
-    @property
-    def unknown_indices(self) -> list[int]:
-        return list(self._real_cardinalities)
+        return sum(c for c in self._real_cardinalities)
 
     @property
     def factor_sizes(self) -> list[int]:
-        return [c + 1 for c in self._real_cardinalities]
+        return list(self._real_cardinalities)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         parts = [
-            F.one_hot(x[:, i], num_classes=c + 1).float()
+            F.one_hot(x[:, i], num_classes=c).float()
             for i, c in enumerate(self._real_cardinalities)
         ]
         return torch.cat(parts, dim=-1)
