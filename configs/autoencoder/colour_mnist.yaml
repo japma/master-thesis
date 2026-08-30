@@ -18,6 +18,7 @@ training:
   beta_start: 0.0
   beta_end: 1.0
   kl_warmup_epochs: 10
+  lambda_perceptual: 0.0
 
 wandb:
   mode: online

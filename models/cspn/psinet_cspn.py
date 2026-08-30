@@ -80,10 +80,10 @@ class PsiNetCSPN(AbstractCSPN):
             case _:
                 raise ValueError("Illegal encoder type")
 
-        self.label_dropout = LabelDropout(
-            unknown_indices=encoder.unknown_indices,
-            dropout_prob=0.15,  # TODO move to config
-        )
+        # self.label_dropout = LabelDropout(
+        #   unknown_indices=encoder.unknown_indices,
+        #  dropout_prob=config.label_dropout_prob,
+        # )
 
         conditioning_network = build_conditioning_mlp_for(
             self.einet,
@@ -120,7 +120,7 @@ class PsiNetCSPN(AbstractCSPN):
         return z * self.latent_std + self.latent_mean
 
     def forward(self, z: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
-        labels = self.label_dropout(labels)
+        # labels = self.label_dropout(labels)
         log_prob = self.einet.forward(x=self._normalize(z), y=labels).squeeze(-1)
         if self.config.normalize_latents:
             # change of variables for z_norm = (z - mean) / std:
