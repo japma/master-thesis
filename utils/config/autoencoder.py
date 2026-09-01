@@ -3,7 +3,7 @@
 from enum import StrEnum
 from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from utils.config.common import (
     BaseTrainingConfig,
@@ -91,7 +91,7 @@ class AERunConfig(BaseModel):
     dataset: DatasetConfig
     model: AutoencoderConfig
     training: AutoencoderTrainingConfig
-    wandb: WandbConfig
+    wandb: WandbConfig = Field(default_factory=WandbConfig)
 
     @model_validator(mode="after")
     def inject_image_size(self) -> Self:

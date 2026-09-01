@@ -21,8 +21,3 @@ training:
   tcvae_alpha: 1.0
   tcvae_beta: 6.0
   tcvae_gamma: 1.0
-
-wandb:
-  mode: online
-  project: master-thesis
-  entity: jmartini-tu-darmstadt

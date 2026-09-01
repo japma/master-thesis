@@ -3,10 +3,9 @@ from pathlib import Path
 import torch
 
 import wandb
+from utils.config import WANDB_ENTITY as ENTITY
+from utils.config import WANDB_PROJECT as PROJECT
 from utils.config import WandbConfig
-
-ENTITY = "jmartini-tu-darmstadt"
-PROJECT = "master-thesis"
 
 
 def init_run(wandb_cfg: WandbConfig, run_name: str, config: dict) -> None:

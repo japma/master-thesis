@@ -7,6 +7,7 @@ import yaml
 
 from utils.config.autoencoder import AERunConfig
 from utils.config.cspn import CSPNRunConfig
+from utils.config.label_pc import LabelPCRunConfig
 from utils.config.neural_baseline import NeuralBaselineRunConfig
 
 
@@ -44,7 +45,11 @@ def _apply_dataset_defaults(raw: dict) -> dict:
 
 
 def load_config() -> (
-    tuple[AERunConfig | CSPNRunConfig | NeuralBaselineRunConfig, int | None, bool]
+    tuple[
+        AERunConfig | CSPNRunConfig | LabelPCRunConfig | NeuralBaselineRunConfig,
+        int | None,
+        bool,
+    ]
 ):
     parser = argparse.ArgumentParser()
     parser.add_argument("config_file", type=Path)
@@ -82,7 +87,7 @@ def load_config() -> (
     run_type = raw.get("type")
     if dry_run:
         raw["training"]["epochs"] = 1
-        raw["wandb"]["mode"] = "disabled"
+        raw.setdefault("wandb", {})["mode"] = "disabled"
     if args.compile:
         raw["training"]["compile"] = True
 
@@ -90,6 +95,8 @@ def load_config() -> (
         return AERunConfig.model_validate(raw), seed, resume
     elif run_type == "cspn":
         return CSPNRunConfig.model_validate(raw), seed, resume
+    elif run_type == "label_pc":
+        return LabelPCRunConfig.model_validate(raw), seed, resume
     elif run_type == "nn_baseline":
         return NeuralBaselineRunConfig.model_validate(raw), seed, resume
     else:

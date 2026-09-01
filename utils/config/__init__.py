@@ -12,6 +12,8 @@ from utils.config.autoencoder import (
     VAETrainingType,
 )
 from utils.config.common import (
+    WANDB_ENTITY,
+    WANDB_PROJECT,
     BaseTrainingConfig,
     DatasetConfig,
     PretrainedAutoencoderConfig,
@@ -25,7 +27,11 @@ from utils.config.cspn import (
     CSPNRunConfig,
     CSPNTrainingConfig,
     CSPNType,
+    PretrainedLabelPCConfig,
+)
+from utils.config.label_pc import (
     LabelPCConfig,
+    LabelPCRunConfig,
 )
 from utils.config.loading import load_config
 from utils.config.neural_baseline import (
@@ -46,6 +52,8 @@ for _enum in (
 
 
 __all__ = [
+    "WANDB_ENTITY",
+    "WANDB_PROJECT",
     "AERunConfig",
     "AutoencoderConfig",
     "AutoencoderTrainingConfig",
@@ -60,10 +68,12 @@ __all__ = [
     "ConditioningType",
     "DatasetConfig",
     "LabelPCConfig",
+    "LabelPCRunConfig",
     "NeuralBaselineConfig",
     "NeuralBaselineRunConfig",
     "NeuralBaselineType",
     "PretrainedAutoencoderConfig",
+    "PretrainedLabelPCConfig",
     "VAETrainingType",
     "WandbConfig",
     "load_config",

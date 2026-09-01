@@ -3,7 +3,7 @@
 from enum import StrEnum
 from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from utils.config.common import (
     DatasetConfig,
@@ -64,4 +64,4 @@ class NeuralBaselineRunConfig(BaseModel):
     model: NeuralBaselineConfig
     autoencoder: PretrainedAutoencoderConfig
     training: CSPNTrainingConfig
-    wandb: WandbConfig
+    wandb: WandbConfig = Field(default_factory=WandbConfig)

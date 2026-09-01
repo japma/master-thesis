@@ -24,8 +24,3 @@ training:
   lambda_adversarial: 0.1
   adversarial_warmup_steps: 2000
   free_bits: 0.1
-
-wandb:
-  mode: online
-  project: master-thesis
-  entity: jmartini-tu-darmstadt

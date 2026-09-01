@@ -104,36 +104,19 @@ class CSPNTrainingConfig(BaseTrainingConfig):
     early_stopping_min_delta: float = 0.01
 
 
-class LabelPCConfig(BaseModel):
+class PretrainedLabelPCConfig(BaseModel):
+    """Which trained LabelPC artifact a CSPN run should load, if any.
+
+    Architecture lives in `LabelPCConfig`, which only a LabelPC run reads.
+    """
+
     model_config = ConfigDict(extra="forbid")
 
-    # Artifact resolution, read when loading a trained LabelPC.
     name: str | None = None
     tag: str = "latest"
 
-    # Architecture, read when training one.
-    num_input_distributions: int = 10
-    num_sums: int = 10
-    num_repetitions: int = 5
-    # Number of binary attributes to model. Defaults to the label encoder's attribute
-    # count (see `resolve_num_attributes`) rather than dataset.num_classes, which only
-    # coincides with it for multi-binary datasets.
-    num_attributes: int | None = None
-
     def resolve_name(self, dataset_name: str) -> str:
         return self.name or f"label_pc_{dataset_name}"
-
-    def resolve_num_attributes(self, encoder: "CSPNEncoderConfig") -> int:
-        if self.num_attributes is not None:
-            return self.num_attributes
-        if encoder.encoder_type is not CSPNEncoderType.MULTI_BINARY:
-            raise ValueError(
-                "LabelPC models binary attributes (its leaves are BinomialArray with "
-                f"N=1), so it cannot represent a {encoder.encoder_type} label space. "
-                "Set label_pc.num_attributes explicitly only if you know the labels are "
-                "binary; otherwise this dataset has no usable LabelPC."
-            )
-        return encoder.num_classes[0]
 
 
 class CSPNRunConfig(BaseModel):
@@ -144,5 +127,7 @@ class CSPNRunConfig(BaseModel):
     model: CSPNConfig
     autoencoder: PretrainedAutoencoderConfig
     training: CSPNTrainingConfig
-    wandb: WandbConfig
-    label_pc: LabelPCConfig = Field(default_factory=LabelPCConfig)
+    wandb: WandbConfig = Field(default_factory=WandbConfig)
+    label_pc: PretrainedLabelPCConfig = Field(
+        default_factory=PretrainedLabelPCConfig
+    )

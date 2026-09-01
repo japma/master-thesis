@@ -15,14 +15,14 @@ from utils.checkpoints import (
     load_label_pc_from_path,
 )
 from utils.compilation import maybe_compile
-from utils.config import CSPNRunConfig, load_config
+from utils.config import LabelPCRunConfig, load_config
 from utils.reproducibility import resolve_device, seed_everything
 from utils.wandb_utils import init_run
 
 
 def main() -> None:
     cfg, cfg_seed, resume = load_config()
-    assert isinstance(cfg, CSPNRunConfig)
+    assert isinstance(cfg, LabelPCRunConfig)
     dataset_cfg = cfg.dataset
     training_cfg = cfg.training
     wandb_cfg = cfg.wandb
@@ -31,18 +31,14 @@ def main() -> None:
     device = resolve_device()
     dataset_name = dataset_cfg.name
 
-    label_pc_cfg = cfg.label_pc
-    # Derived, not label_pc.name: that field points at an artifact to *load*, while this
-    # run *produces* one, and its checkpoint stem is what becomes the artifact name.
+    label_pc_cfg = cfg.model
+    # Matches PretrainedLabelPCConfig.resolve_name on the CSPN side: this run's
+    # checkpoint stem is what becomes the artifact a CSPN run later loads.
     run_name = f"label_pc_{dataset_name}"
 
     init_run(wandb_cfg, run_name, cfg.model_dump())
 
-    # Raises for label spaces the LabelPC cannot represent (anything non-binary),
-    # rather than failing later on a shape mismatch inside the circuit.
-    num_attributes: int = label_pc_cfg.resolve_num_attributes(
-        cfg.model.encoder_config
-    )
+    num_attributes: int = label_pc_cfg.num_attributes
 
     print(
         f"Training LabelPC on {dataset_name} | {num_attributes} attributes | "
