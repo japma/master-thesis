@@ -26,7 +26,6 @@ import torch
 
 from dataset_loaders.colour_mnist import (
     NUM_DIGITS,
-    load_train_weight_table,
     seen_mask,
 )
 from utils import resolve_device
@@ -54,7 +53,7 @@ def main() -> None:
     )
     ae = load_ae_from_path(load_from_wandb(args.ae, args.tag), device=device).to(device)
 
-    seen = seen_mask(load_train_weight_table(DATA_DIR))
+    seen = seen_mask(DATA_DIR)
     counts = np.full(seen.shape, float(args.samples))
 
     print(

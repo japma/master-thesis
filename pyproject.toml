@@ -18,6 +18,8 @@ dependencies = [
     "matplotlib>=3.10.9",
     "networkx>=3.6.1",
     "numpy>=2.5.2",
+    "pandas>=3.0.5",
+    "pandas-stubs>=3.0.5.260730",
     "pillow>=12.2.0",
     "pycocotools==2.0.11",
     "pydantic>=2.13.4",
@@ -31,6 +33,8 @@ dependencies = [
     "torchvision>=0.27.0",
     "tqdm>=4.67.3",
     "transformers>=5.9.0",
+    "types-pyyaml>=6.0.12.20260815",
+    "types-tqdm>=4.70.0.20260827",
     "umap-learn>=0.5.12",
     "wandb>=0.27.0",
 ]

@@ -33,7 +33,6 @@ from torchvision import transforms
 from dataset_loaders.colour_mnist import (
     NUM_DIGITS,
     ColourMNIST,
-    load_train_weight_table,
     seen_mask,
 )
 from utils import resolve_device
@@ -86,8 +85,7 @@ def main() -> None:
     )
     loader = DataLoader(dataset, batch_size=args.batch_size, num_workers=0)
 
-    weights = load_train_weight_table(DATA_ROOT / "colour-mnist")
-    seen = seen_mask(weights)
+    seen = seen_mask(DATA_ROOT / "colour-mnist")
 
     print(
         f"\n{args.name}:{args.tag} on '{args.split}' | {len(dataset)} images | "
