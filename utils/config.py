@@ -26,20 +26,13 @@ class CSPNEncoderType(StrEnum):
 
 
 class ConditioningType(StrEnum):
-    """How the hypernetwork maps a label to SPN parameters.
-
-    JOINT: one trunk over the whole encoded label. Every SPN parameter may depend on
-    every label factor, so nothing forces the network to compose factors it never saw
-    together during training.
-
-    FACTORIZED: one trunk per label factor, summed before the (linear) heads. Because
-    the heads are linear, additivity in the hidden representation is exactly additivity
-    in the emitted SPN parameters, so each factor's contribution is learned from every
-    example containing that factor value regardless of what it co-occurred with.
-    """
-
     JOINT = "joint"
     FACTORIZED = "factorized"
+
+
+class NeuralBaselineType(StrEnum):
+    DETERMINISTIC = "deterministic"
+    MIXTURE = "mixture"
 
 
 class CSPNType(StrEnum):
@@ -112,6 +105,44 @@ class CSPNEncoderConfig(BaseModel):
             case _:
                 raise ValueError("Unknown encoder type")
 
+        return self
+
+
+class NeuralBaselineConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    model_type: NeuralBaselineType
+    num_vars: int
+    h_dims: list[int]
+    encoder_config: CSPNEncoderConfig
+    num_components: int = 1
+    min_std: float = 0.001
+    max_std: float = 2.0
+    # DETERMINISTIC only: the fixed sigma that turns NLL into MSE.
+    fixed_std: float = 1.0
+
+    @model_validator(mode="after")
+    def valid_std_range(self) -> Self:
+        if self.min_std >= self.max_std:
+            raise ValueError(
+                f"min_std ({self.min_std}) must be less than max_std ({self.max_std})"
+            )
+        if not self.min_std > 0.0:
+            raise ValueError(f"min_std ({self.min_std}) must be positive")
+        return self
+
+    @model_validator(mode="after")
+    def components_match_variant(self) -> Self:
+        if (
+            self.model_type is NeuralBaselineType.DETERMINISTIC
+            and self.num_components != 1
+        ):
+            raise ValueError(
+                "model_type=deterministic has no mixture to weight, so num_components "
+                f"must be 1 (got {self.num_components}). Use mixture for more."
+            )
+        if self.num_components < 1:
+            raise ValueError(f"num_components must be >= 1 (got {self.num_components})")
         return self
 
 
@@ -238,20 +269,6 @@ class AERunConfig(BaseModel):
 
 
 class LabelPCConfig(BaseModel):
-    """The LabelPC that models p(y) over the label attributes.
-
-    The LabelPC has no run config of its own — `train_label_pc.py` is driven by the
-    CSPN config for the dataset it belongs to — so this one section holds both halves:
-    the architecture `train_label_pc.py` builds, and the artifact `train_cspn.py`
-    loads. Every field has a default that reproduces the previously hardcoded
-    behaviour, so existing configs need no `label_pc:` block at all.
-
-    `name` is load-side only: it resolves which wandb artifact / local checkpoint
-    `train_cspn.py` picks up, defaulting to what `train_label_pc.py` writes for this
-    dataset (`label_pc_{dataset}`). Training always writes the derived name, so set
-    this only to consume an artifact produced under a different one.
-    """
-
     model_config = ConfigDict(extra="forbid")
 
     # Artifact resolution, read when loading a trained LabelPC.
@@ -295,6 +312,17 @@ class CSPNRunConfig(BaseModel):
     label_pc: LabelPCConfig = Field(default_factory=LabelPCConfig)
 
 
+class NeuralBaselineRunConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["nn_baseline"]
+    dataset: DatasetConfig
+    model: NeuralBaselineConfig
+    autoencoder: PretrainedAutoencoderConfig
+    training: CSPNTrainingConfig
+    wandb: WandbConfig
+
+
 def _deep_merge(base: dict, override: dict) -> dict:
     """override's keys win; nested dicts are merged recursively rather than replaced
     wholesale, so e.g. a config only needs to state the dataset fields that diverge
@@ -328,7 +356,9 @@ def _apply_dataset_defaults(raw: dict) -> dict:
     return raw
 
 
-def load_config() -> tuple[AERunConfig | CSPNRunConfig, int | None, bool]:
+def load_config() -> (
+    tuple[AERunConfig | CSPNRunConfig | NeuralBaselineRunConfig, int | None, bool]
+):
     parser = argparse.ArgumentParser()
     parser.add_argument("config_file", type=Path)
     parser.add_argument("--seed", type=int)
@@ -366,5 +396,7 @@ def load_config() -> tuple[AERunConfig | CSPNRunConfig, int | None, bool]:
         return AERunConfig.model_validate(raw), seed, resume
     elif run_type == "cspn":
         return CSPNRunConfig.model_validate(raw), seed, resume
+    elif run_type == "nn_baseline":
+        return NeuralBaselineRunConfig.model_validate(raw), seed, resume
     else:
         raise ValueError(f"Unknown or missing run type: {run_type!r}")

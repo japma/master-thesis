@@ -1,4 +1,3 @@
-from models.cspn.psinet.label_pc import LabelPC
 from pathlib import Path
 
 import networkx
@@ -12,8 +11,17 @@ from models.autoencoder import (
 )
 from models.cspn.abstract_cspn import AbstractCSPN
 from models.cspn.psinet.graph import DistributionVector, EiNetAddress, Product
+from models.cspn.psinet.label_pc import LabelPC
 from models.cspn.psinet_cspn import PsiNetCSPN
-from utils.config import AutoencoderConfig, AutoencoderType, CSPNConfig, CSPNType
+from models.neural_baseline import AbstractNeuralBaseline, build_neural_baseline
+from utils.config import (
+    AutoencoderConfig,
+    AutoencoderType,
+    CSPNConfig,
+    CSPNType,
+    NeuralBaselineConfig,
+    NeuralBaselineType,
+)
 from utils.reproducibility import get_rng_state, set_rng_state
 
 
@@ -168,6 +176,26 @@ def load_cspn_from_path(path: Path, device=None) -> AbstractCSPN:
     model = _create_cspn_from_checkpoint(cfg, graph=ckpt["graph"])
     model.load_state_dict(ckpt["model_state"])
     return model
+
+
+# --- Neural baseline ---
+def save_nn_baseline(model: AbstractNeuralBaseline, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    torch.save(
+        {"model_cfg": model.get_config(), "model_state": model.state_dict()},
+        path,
+    )
+    print("Saved neural baseline checkpoint to", path)
+
+
+def load_nn_baseline_from_path(path: Path, device=None) -> AbstractNeuralBaseline:
+    with torch.serialization.safe_globals([NeuralBaselineType]):
+        ckpt = torch.load(path, map_location=device, weights_only=False)
+
+    cfg = NeuralBaselineConfig.model_validate(ckpt["model_cfg"])
+    model = build_neural_baseline(cfg)
+    model.load_state_dict(ckpt["model_state"])
+    return model.to(device) if device is not None else model
 
 
 # --- LabelPC ---

@@ -5,6 +5,8 @@ from abc import ABC, abstractmethod
 import torch
 import torch.nn.functional as F
 
+from utils.config import CSPNEncoderConfig
+
 
 class LabelEncoder(torch.nn.Module, ABC):
     @abstractmethod
@@ -114,3 +116,17 @@ class LabelDropout(torch.nn.Module):
         labels_out: torch.Tensor = torch.where(drop_mask, unknown_broadcast, labels_2d)
 
         return labels_out if is_multi else labels_out.squeeze(-1)
+
+
+def build_label_encoder(config: CSPNEncoderConfig) -> LabelEncoder:
+    from utils.config import CSPNEncoderType
+
+    match config.encoder_type:
+        case CSPNEncoderType.CATEGORICAL:
+            return CategoricalLabelEncoder(config.num_classes[0])
+        case CSPNEncoderType.MULTI_BINARY:
+            return MultiBinaryLabelEncoder(config.num_classes[0])
+        case CSPNEncoderType.MULTI_CATEGORICAL:
+            return MultiCategoricalLabelEncoder(config.num_classes)
+        case _:
+            raise ValueError(f"Illegal encoder type {config.encoder_type!r}")

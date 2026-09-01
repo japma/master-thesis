@@ -11,13 +11,8 @@ from models.cspn.psinet.conditioning_nn import build_conditioning_mlp_for
 from models.cspn.psinet.einsum_network import Args, EinsumNetwork
 from models.cspn.psinet.exponential_family_array import NormalArray
 from models.cspn.psinet.graph import random_binary_trees
-from models.cspn.psinet.label_encoder import (
-    CategoricalLabelEncoder,
-    LabelDropout,
-    MultiBinaryLabelEncoder,
-    MultiCategoricalLabelEncoder,
-)
-from utils.config import CSPNConfig, CSPNEncoderType
+from models.cspn.psinet.label_encoder import build_label_encoder
+from utils.config import CSPNConfig
 
 
 class PsiNetCSPN(AbstractCSPN):
@@ -68,17 +63,7 @@ class PsiNetCSPN(AbstractCSPN):
         )
         self.einet.initialize()
 
-        match config.encoder_config.encoder_type:
-            case CSPNEncoderType.CATEGORICAL:
-                encoder = CategoricalLabelEncoder(config.encoder_config.num_classes[0])
-            case CSPNEncoderType.MULTI_BINARY:
-                encoder = MultiBinaryLabelEncoder(config.encoder_config.num_classes[0])
-            case CSPNEncoderType.MULTI_CATEGORICAL:
-                encoder = MultiCategoricalLabelEncoder(
-                    config.encoder_config.num_classes,
-                )
-            case _:
-                raise ValueError("Illegal encoder type")
+        encoder = build_label_encoder(config.encoder_config)
 
         # self.label_dropout = LabelDropout(
         #   unknown_indices=encoder.unknown_indices,
