@@ -51,6 +51,11 @@ def load_config() -> (
     parser.add_argument("--seed", type=int)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument(
+        "--compile",
+        action="store_true",
+        help="torch.compile the trained model, overriding training.compile",
+    )
+    parser.add_argument(
         "--resume",
         action="store_true",
         help=(
@@ -78,6 +83,8 @@ def load_config() -> (
     if dry_run:
         raw["training"]["epochs"] = 1
         raw["wandb"]["mode"] = "disabled"
+    if args.compile:
+        raw["training"]["compile"] = True
 
     if run_type == "ae":
         return AERunConfig.model_validate(raw), seed, resume

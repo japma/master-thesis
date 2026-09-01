@@ -20,6 +20,7 @@ from utils.checkpoints import (
     intermediate_checkpoint_path,
     load_ae_from_path,
 )
+from utils.compilation import maybe_compile
 from utils.config import AERunConfig, VAETrainingType, load_config
 from utils.reproducibility import resolve_device, seed_everything
 from utils.wandb_utils import init_run, log_images
@@ -82,6 +83,8 @@ def main() -> None:
         max_iterations=max(training_cfg.epochs, 1),
     )
     rtpt.start()
+
+    ae = maybe_compile(ae, training_cfg.compile, training_cfg.compile_mode)
 
     if training_cfg.vae_type == VAETrainingType.BETA:
         beta_scheduler = BetaAnnealingScheduler(

@@ -14,6 +14,7 @@ from utils.checkpoints import (
     label_pc_checkpoint_path,
     load_label_pc_from_path,
 )
+from utils.compilation import maybe_compile
 from utils.config import CSPNRunConfig, load_config
 from utils.reproducibility import resolve_device, seed_everything
 from utils.wandb_utils import init_run
@@ -77,6 +78,8 @@ def main() -> None:
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer, T_max=training_cfg.epochs
     )
+
+    label_pc = maybe_compile(label_pc, training_cfg.compile, training_cfg.compile_mode)
 
     objective = LabelPCObjective(
         model=label_pc,

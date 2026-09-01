@@ -22,6 +22,7 @@ from utils.checkpoints import (
     load_cspn_from_path,
     load_label_pc_from_path,
 )
+from utils.compilation import maybe_compile
 from utils.config import (
     ConditioningType,
     CSPNEncoderType,
@@ -240,6 +241,8 @@ def main() -> None:
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer, T_max=training_cfg.epochs
     )
+
+    cspn = maybe_compile(cspn, training_cfg.compile, training_cfg.compile_mode)
 
     objective = CSPNObjective(
         model=cspn,

@@ -34,6 +34,9 @@ class BaseTrainingConfig(BaseModel):
     epochs: int
     learning_rate: float
     batch_size: int
+    # torch.compile the trained model; `--compile` on the CLI forces this on.
+    compile: bool = False
+    compile_mode: Literal["default", "reduce-overhead", "max-autotune"] = "default"
 
 
 class WandbConfig(BaseModel):

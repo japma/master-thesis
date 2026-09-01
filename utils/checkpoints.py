@@ -14,6 +14,7 @@ from models.cspn.psinet.graph import DistributionVector, EiNetAddress, Product
 from models.cspn.psinet.label_pc import LabelPC
 from models.cspn.psinet_cspn import PsiNetCSPN
 from models.neural_baseline import AbstractNeuralBaseline, build_neural_baseline
+from utils.compilation import uncompiled
 from utils.config import (
     AutoencoderConfig,
     AutoencoderType,
@@ -107,6 +108,7 @@ def restore_train_state(
 
 # --- Autoencoder ---
 def save_autoencoder(model: AbstractAutoencoder, path: Path) -> None:
+    model = uncompiled(model)
     path.parent.mkdir(parents=True, exist_ok=True)
     torch.save(
         {
@@ -133,6 +135,7 @@ def load_ae_from_path(path: Path, device=None) -> AbstractAutoencoder:
 
 # --- CSPN ---
 def save_cspn(model: AbstractCSPN, path: Path) -> None:
+    model = uncompiled(model)
     path.parent.mkdir(parents=True, exist_ok=True)
     graph = getattr(model, "graph", None)
     if graph is None:
@@ -180,6 +183,7 @@ def load_cspn_from_path(path: Path, device=None) -> AbstractCSPN:
 
 # --- Neural baseline ---
 def save_nn_baseline(model: AbstractNeuralBaseline, path: Path) -> None:
+    model = uncompiled(model)
     path.parent.mkdir(parents=True, exist_ok=True)
     torch.save(
         {"model_cfg": model.get_config(), "model_state": model.state_dict()},
@@ -200,6 +204,7 @@ def load_nn_baseline_from_path(path: Path, device=None) -> AbstractNeuralBaselin
 
 # --- LabelPC ---
 def save_label_pc(model: LabelPC, path: Path) -> None:
+    model = uncompiled(model)
     path.parent.mkdir(parents=True, exist_ok=True)
     torch.save(
         {

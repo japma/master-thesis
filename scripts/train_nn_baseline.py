@@ -16,6 +16,7 @@ from utils.checkpoints import (
     load_ae_from_path,
     load_nn_baseline_from_path,
 )
+from utils.compilation import maybe_compile
 from utils.config import NeuralBaselineRunConfig, load_config
 from utils.reproducibility import resolve_device, seed_everything
 from utils.wandb_utils import init_run, load_from_wandb
@@ -78,6 +79,8 @@ def main() -> None:
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer, T_max=training_cfg.epochs
     )
+
+    model = maybe_compile(model, training_cfg.compile, training_cfg.compile_mode)
 
     objective = NeuralBaselineObjective(
         model=model,
