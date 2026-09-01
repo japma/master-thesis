@@ -331,11 +331,12 @@ class BinomialArray(ExponentialFamilyArray):
 
     def __init__(self, num_var, num_dims, array_shape, N) -> None:
         super().__init__(num_var, num_dims, array_shape, num_dims)
-        self.N = torch.tensor(float(N))
+        self.num_trials = float(N)
+        self.N = torch.tensor(self.num_trials)
 
     def reparam_function(self):
         def reparam(params) -> Tensor:
-            return torch.sigmoid(params * 0.1) * float(self.N)
+            return torch.sigmoid(params * 0.1) * self.num_trials
 
         return reparam
 
@@ -357,7 +358,7 @@ class BinomialArray(ExponentialFamilyArray):
         return torch.sum(self.N * torch.nn.functional.softplus(theta), -1)
 
     def log_h(self, x) -> Tensor:
-        if self.N == 1:
+        if self.num_trials == 1:
             return torch.zeros([], device=x.device)
         else:
             log_h = (
