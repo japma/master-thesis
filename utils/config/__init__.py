@@ -34,6 +34,17 @@ from utils.config.neural_baseline import (
     NeuralBaselineType,
 )
 
+for _enum in (
+    AutoencoderType,
+    VAETrainingType,
+    CSPNType,
+    CSPNEncoderType,
+    ConditioningType,
+    NeuralBaselineType,
+):
+    _enum.__module__ = __name__
+
+
 __all__ = [
     "AERunConfig",
     "AutoencoderConfig",

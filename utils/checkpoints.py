@@ -106,6 +106,11 @@ def restore_train_state(
     return state["epoch"] + 1
 
 
+_LEGACY_CONFIG_GLOBALS: list = [
+    (AutoencoderType, "utils.config.autoencoder.AutoencoderType"),
+]
+
+
 # --- Autoencoder ---
 def save_autoencoder(model: AbstractAutoencoder, path: Path) -> None:
     model = uncompiled(model)
@@ -125,7 +130,7 @@ def _create_autoencoder_from_checkpoint(cfg: AutoencoderConfig) -> AbstractAutoe
 
 
 def load_ae_from_path(path: Path, device=None) -> AbstractAutoencoder:
-    with torch.serialization.safe_globals([AutoencoderType]):
+    with torch.serialization.safe_globals([AutoencoderType, *_LEGACY_CONFIG_GLOBALS]):
         ckpt = torch.load(path, map_location=device, weights_only=True)
     cfg = AutoencoderConfig.model_validate(ckpt["model_cfg"])
     model = _create_autoencoder_from_checkpoint(cfg)
