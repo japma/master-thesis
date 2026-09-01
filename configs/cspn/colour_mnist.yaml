@@ -1,10 +1,10 @@
 type: cspn
 
 dataset:
-  name: colour_mnist
+  name: colour_mnist_uniform
 
 autoencoder:
-  name: "variational_colour_mnist"
+  name: "variational_colour_mnist_uniform"
   external: false
   tag: "latest"
 

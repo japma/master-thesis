@@ -1,4 +1,5 @@
 import os
+from functools import partial
 from pathlib import Path
 
 import torch
@@ -10,7 +11,7 @@ from torchvision.datasets.flowers102 import Flowers102
 from torchvision.datasets.mnist import MNIST, FashionMNIST
 
 from dataset_loaders.binarymnist import BinaryMNISTDataset
-from dataset_loaders.colour_mnist import ColourMNIST
+from dataset_loaders.colour_mnist import DEFAULT_VARIANT, ColourMNIST
 from dataset_loaders.cub200 import Cub200Dataset
 from dataset_loaders.single_attribute_celeba import SingleAttributeCelebA
 from dataset_loaders.tinyimagenet import TinyImageNetDataset
@@ -184,7 +185,9 @@ def _load_celeba_single_attribute(
 
 
 def _load_colour_mnist(
-    train: bool = True, size: tuple[int, int] = (28, 28)
+    train: bool = True,
+    size: tuple[int, int] = (28, 28),
+    variant: str = DEFAULT_VARIANT,
 ) -> ColourMNIST:
     transform = transforms.Compose(
         [
@@ -198,6 +201,7 @@ def _load_colour_mnist(
     return ColourMNIST(
         root=DATA_DIR,
         split="train" if train else "val",
+        variant=variant,
         transform=transform,
     )
 
@@ -212,7 +216,10 @@ _DATASETS = {
     "cub200": _load_cub200,
     "celeba": _load_celeba,
     "celeba_single_attribute": _load_celeba_single_attribute,
-    "colour_mnist": _load_colour_mnist,
+    # One entry per generated colour-MNIST variant; add a row for each new weight table.
+    "colour_mnist_uniform": partial(_load_colour_mnist, variant="uniform"),
+    "colour_mnist_skewed": partial(_load_colour_mnist, variant="skewed"),
+    "colour_mnist_rgb": partial(_load_colour_mnist, variant="rgb"),
 }
 
 

@@ -1,7 +1,7 @@
 type: ae
 
 dataset:
-  name: colour_mnist
+  name: colour_mnist_uniform
 
 model:
   model_type: variational

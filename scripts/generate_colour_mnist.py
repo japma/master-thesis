@@ -13,14 +13,14 @@ from tqdm import tqdm
 
 from dataset_loaders.colour_mnist import (
     BG_COLOURS,
-    DATASET_DIR_NAME,
     FG_COLOURS,
     LABELS_FILENAME,
     NUM_DIGITS,
+    variant_root,
 )
 
 DATA_ROOT: Path = Path("data")
-DEFAULT_WEIGHTS: Path = Path("configs/colour_mnist/default.csv")
+DEFAULT_WEIGHTS: Path = Path("configs/colour_mnist/uniform.csv")
 
 SEED: int = 42
 VAL_FRACTION: float = 0.1
@@ -158,7 +158,9 @@ def main() -> None:
 
     if not args.weights.exists():
         raise FileNotFoundError(f"No weight table found at {args.weights}")
-    generate(args.weights, DATA_ROOT / DATASET_DIR_NAME)
+    # The weight table names the variant, so variants sit side by side instead of
+    # overwriting each other.
+    generate(args.weights, variant_root(DATA_ROOT, args.weights.stem))
 
 
 if __name__ == "__main__":

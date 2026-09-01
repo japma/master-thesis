@@ -21,7 +21,7 @@ from matplotlib.figure import Figure
 
 from dataset_loaders.colour_mnist import (
     BG_TO_IDX,
-    DATASET_DIR_NAME,
+    DEFAULT_VARIANT,
     FG_TO_IDX,
     IDX_TO_BG,
     IDX_TO_FG,
@@ -30,6 +30,7 @@ from dataset_loaders.colour_mnist import (
     NUM_DIGITS,
     NUM_FG,
     SPLITS,
+    variant_root,
 )
 
 N_LABELS: int = NUM_DIGITS
@@ -37,7 +38,7 @@ N_FG: int = NUM_FG
 N_BG: int = NUM_BG
 N_COLS: int = N_FG * N_BG  # 18
 
-DATA_ROOT: Path = Path("data") / DATASET_DIR_NAME
+DATA_ROOT: Path = Path("data")
 
 
 def column_index(fg_colour: str, bg_colour: str) -> int:
@@ -125,9 +126,10 @@ def build_grid_figure(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--split", default="train", choices=SPLITS)
+    parser.add_argument("--variant", default=DEFAULT_VARIANT)
     args = parser.parse_args()
 
-    split_dir: Path = DATA_ROOT / args.split
+    split_dir: Path = variant_root(DATA_ROOT, args.variant) / args.split
     df: pd.DataFrame = pd.read_csv(split_dir / LABELS_FILENAME)
     build_grid_figure(df, split_dir / "images")
     plt.show()

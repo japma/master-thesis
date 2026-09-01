@@ -25,6 +25,7 @@ import numpy as np
 import torch
 
 from dataset_loaders.colour_mnist import (
+    DEFAULT_VARIANT,
     NUM_DIGITS,
     seen_mask,
 )
@@ -34,7 +35,7 @@ from utils.probes import run_generation_probe, weighted_mean
 from utils.visualisation import plot_combination_heatmap, show
 from utils.wandb_utils import load_from_wandb
 
-DATA_DIR = "data/colour-mnist"
+DATA_ROOT = "data"
 
 
 def main() -> None:
@@ -43,6 +44,7 @@ def main() -> None:
     parser.add_argument("--ae", default="variational_colour_mnist")
     parser.add_argument("--tag", default="latest")
     parser.add_argument("--samples", type=int, default=64)
+    parser.add_argument("--variant", default=DEFAULT_VARIANT)
     parser.add_argument("--std-correction", type=float, default=1.0)
     parser.add_argument("--no-figures", action="store_true")
     args = parser.parse_args()
@@ -53,7 +55,7 @@ def main() -> None:
     )
     ae = load_ae_from_path(load_from_wandb(args.ae, args.tag), device=device).to(device)
 
-    seen = seen_mask(DATA_DIR)
+    seen = seen_mask(DATA_ROOT, args.variant)
     counts = np.full(seen.shape, float(args.samples))
 
     print(

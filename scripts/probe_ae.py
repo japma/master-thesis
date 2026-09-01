@@ -31,6 +31,7 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 
 from dataset_loaders.colour_mnist import (
+    DEFAULT_VARIANT,
     NUM_DIGITS,
     ColourMNIST,
     seen_mask,
@@ -69,6 +70,7 @@ def main() -> None:
     parser.add_argument("--name", default="variational_colour_mnist")
     parser.add_argument("--tag", default="latest")
     parser.add_argument("--split", default="test")
+    parser.add_argument("--variant", default=DEFAULT_VARIANT)
     parser.add_argument("--batch-size", type=int, default=256)
     parser.add_argument("--no-figures", action="store_true")
     args = parser.parse_args()
@@ -81,14 +83,16 @@ def main() -> None:
     dataset = ColourMNIST(
         root=DATA_ROOT,
         split=args.split,
+        variant=args.variant,
         transform=transforms.Compose([transforms.ToTensor()]),
     )
     loader = DataLoader(dataset, batch_size=args.batch_size, num_workers=0)
 
-    seen = seen_mask(DATA_ROOT / "colour-mnist")
+    seen = seen_mask(DATA_ROOT, args.variant)
 
     print(
-        f"\n{args.name}:{args.tag} on '{args.split}' | {len(dataset)} images | "
+        f"\n{args.name}:{args.tag} on '{args.variant}/{args.split}' | "
+        f"{len(dataset)} images | "
         f"device={device}\n{int(seen.sum())}/{seen.size} combinations were trained on\n"
     )
 

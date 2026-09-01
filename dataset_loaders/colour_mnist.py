@@ -44,14 +44,23 @@ LABELS_FILENAME: str = "labels.csv"
 
 SPLITS: tuple[str, ...] = ("train", "val", "test")
 
+# Each weight table generates its own variant, kept side by side so switching between
+# them is a config change rather than a regeneration.
+DEFAULT_VARIANT: str = "uniform"
 
-def seen_mask(dataset_root: str | Path) -> np.ndarray:
+
+def variant_root(root: str | Path, variant: str = DEFAULT_VARIANT) -> Path:
+    """Directory holding one generated colour-MNIST variant."""
+    return Path(root) / DATASET_DIR_NAME / variant
+
+
+def seen_mask(root: str | Path, variant: str = DEFAULT_VARIANT) -> np.ndarray:
     """Boolean `(digit, fg, bg)` mask of the combinations present in the train split.
 
     Combinations the generation weights zeroed out never appear, so this is what the
     model was actually trained on.
     """
-    frame = pd.read_csv(Path(dataset_root) / "train" / LABELS_FILENAME)
+    frame = pd.read_csv(variant_root(root, variant) / "train" / LABELS_FILENAME)
     mask = np.zeros(TABLE_SHAPE, dtype=bool)
     mask[
         frame["label"].to_numpy(dtype=np.int64),
@@ -72,24 +81,30 @@ class ColourMNIST(Dataset):
         root: str | Path,
         split: str = "train",
         transform: Callable | None = None,
-        dataset_dir: str = DATASET_DIR_NAME,
+        variant: str = DEFAULT_VARIANT,
     ):
-        self.root = Path(root) / dataset_dir
+        self.root = variant_root(root, variant)
         self.transform = transform
         self.split = split
         self.split_dir = self.root / split
         self.csv_path = self.split_dir / LABELS_FILENAME
 
         if not self.csv_path.exists():
-            available = (
-                sorted(p.name for p in self.root.iterdir() if p.is_dir())
-                if self.root.exists()
-                else []
-            )
+            if self.root.exists():
+                found = sorted(p.name for p in self.root.iterdir() if p.is_dir())
+                detail = f"variant {variant!r} has splits {found or 'none'}"
+            else:
+                base = Path(root) / DATASET_DIR_NAME
+                found = (
+                    sorted(p.name for p in base.iterdir() if p.is_dir())
+                    if base.exists()
+                    else []
+                )
+                detail = f"no variant {variant!r}; generated variants: {found or 'none'}"
             raise FileNotFoundError(
-                f"No colour-MNIST split {split!r} at {self.csv_path}. "
-                f"Available splits: {available or 'none'}. "
-                "Regenerate with `uv run generate_colour_mnist <config>`."
+                f"No colour-MNIST split {split!r} at {self.csv_path} — {detail}. "
+                "Generate one with "
+                "`uv run generate_colour_mnist configs/colour_mnist/<name>.csv`."
             )
 
         frame = pd.read_csv(self.csv_path)
