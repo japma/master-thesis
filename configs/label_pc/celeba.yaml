@@ -1,0 +1,47 @@
+# LabelPC over CelebA's 40 binary attributes, consumed by scripts/train_label_pc.py.
+#
+# Only `dataset`, `training`, `wandb`, `model.encoder_config` and `label_pc` are read;
+# `model` and `autoencoder` are required by the shared CSPNRunConfig schema and otherwise
+# inert here. `dataset.name` decides the artifact name (`label_pc_celeba`), which is what
+# train_cspn looks up, so it has to stay `celeba`.
+type: cspn
+
+dataset:
+  name: celeba
+  num_classes: 40
+
+autoencoder:
+  name: "variational_celeba"
+  external: false
+  tag: "latest"
+
+model:
+  model_type: "psinet"
+  num_vars: 128
+  num_repetitions: 2
+  num_input_distributions: 6
+  num_sums: 8
+  min_var: 0.001
+  max_var: 4.0
+  h_dims: [ 512, 256 ]
+  # The only part of `model` this run reads: a LabelPC is representable only for a
+  # multi_binary label space, and its attribute count comes from here.
+  encoder_config:
+    encoder_type: multi_binary
+    num_classes: [ 40 ]
+
+label_pc:
+  num_input_distributions: 10
+  num_sums: 10
+  num_repetitions: 5
+
+training:
+  # run_training_loop has no early stopping, so this is the exact number of epochs run.
+  epochs: 50
+  learning_rate: 0.001
+  batch_size: 512
+
+wandb:
+  mode: online
+  project: master-thesis
+  entity: jmartini-tu-darmstadt
