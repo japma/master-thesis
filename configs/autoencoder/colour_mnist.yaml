@@ -11,7 +11,7 @@ model:
 
 training:
   vae_type: beta
-  epochs: 50
+  epochs: 100
   learning_rate: 0.0005
   batch_size: 128
   beta: 1.0
