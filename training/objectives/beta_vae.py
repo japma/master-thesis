@@ -1,10 +1,10 @@
-from training.losses.base import kl_per_dimension
 from pathlib import Path
 
 import torch
 
 from models import VariationalAutoencoder
 from models.autoencoder.variational_autoencoder import VAEForwardOutput
+from training.losses.base import kl_per_dimension
 from training.losses.vae import VAELoss, VAELossOutput
 from training.objectives.base import AbstractObjective, Batch, StepOutput
 from training.schedulers import BetaAnnealingScheduler

@@ -6,10 +6,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from models.cspn.psinet.factorized_leaf_layer import FactorizedLeafLayer
 from models.cspn.psinet.label_encoder import LabelEncoder
 from models.cspn.psinet.param_shapes import derive_layer_param_shapes
-from models.cspn.psinet.sum_layer import EinsumLayer, EinsumMixingLayer
 from utils.config import ConditioningType
 
 

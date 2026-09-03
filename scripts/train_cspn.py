@@ -88,7 +88,9 @@ def _load_label_pc(
     try:
         path = load_from_wandb(ckpt_name=artifact_name, tag=tag)
     except Exception as error:
-        print(f"Could not load LabelPC artifact {artifact_name}:{tag} from wandb ({error})")
+        print(
+            f"Could not load LabelPC artifact {artifact_name}:{tag} from wandb ({error})"
+        )
         if local_path.exists():
             path = local_path
 
@@ -166,9 +168,6 @@ def main() -> None:
     device = resolve_device()
     dataset_name = dataset_cfg.name
 
-    # Empty for the default joint hypernetwork, so existing checkpoint paths and
-    # wandb run names are unchanged; a factorized run gets its own so it does not
-    # overwrite the baseline it is being ablated against.
     variant = (
         ""
         if cspn_cfg.conditioning_type is ConditioningType.JOINT
@@ -222,9 +221,6 @@ def main() -> None:
         dataset_cfg, batch_size=training_cfg.batch_size
     )
 
-    # Skipped when resuming: latent_mean/latent_std were already restored from the
-    # checkpoint's state dict above, and re-fitting would just redundantly recompute
-    # the same (deterministic) statistics from the same train loader.
     if cspn_cfg.normalize_latents and not resumed_cspn:
         normalizer = LatentNormalizer()
         normalizer.fit(ae, train_loader, device)

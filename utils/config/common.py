@@ -39,17 +39,12 @@ class BaseTrainingConfig(BaseModel):
     compile_mode: Literal["default", "reduce-overhead", "max-autotune"] = "default"
 
 
-# Single source of truth for the wandb destination; utils.wandb_utils reads these too.
 WANDB_ENTITY: str = "jmartini-tu-darmstadt"
 WANDB_PROJECT: str = "master-thesis"
 
 
 class WandbConfig(BaseModel):
-    """Defaulted throughout, so a run config only mentions wandb to override it.
-
-    `mode` is normally driven by `--dry-run`, which forces it to "disabled"; setting it
-    here is still how you'd ask for "offline".
-    """
+    """Defaulted throughout, so a run config only mentions wandb to override it."""
 
     model_config = ConfigDict(extra="forbid")
 

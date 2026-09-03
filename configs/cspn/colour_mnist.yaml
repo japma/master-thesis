@@ -17,6 +17,7 @@ model:
   min_var: 0.001
   max_var: 4.0
   h_dims: [ 256, 128 ]
+  normalize_latents: true
   encoder_config:
     encoder_type: multi_categorical
     # classes, fg colours, bg colours
