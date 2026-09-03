@@ -392,3 +392,16 @@ def plot_combination_heatmap(
     ax.set_title(f"{title}   (red = held out of training)", pad=32)
     fig.tight_layout()
     return fig
+
+
+def stack_images(dataset, indices) -> torch.Tensor:
+    """Stack a few dataset images as a batch, whatever the dataset's transform returns."""
+    from torchvision.transforms import functional as visual
+
+    items = [dataset[int(i)][0] for i in indices]
+    return torch.stack(
+        [
+            item if isinstance(item, torch.Tensor) else visual.to_tensor(item)
+            for item in items
+        ]
+    )

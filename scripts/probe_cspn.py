@@ -29,9 +29,9 @@ from dataset_loaders.colour_mnist import (
     NUM_DIGITS,
     seen_mask,
 )
+from evaluation import run_generation_probe, weighted_mean
 from utils import resolve_device
 from utils.checkpoints import load_ae_from_path, load_cspn_from_path
-from utils.probes import run_generation_probe, weighted_mean
 from utils.visualisation import plot_combination_heatmap, show
 from utils.wandb_utils import load_from_wandb
 

@@ -36,17 +36,20 @@ from dataset_loaders.colour_mnist import (
     ColourMNIST,
     seen_mask,
 )
-from utils import resolve_device
-from utils.checkpoints import load_ae_from_path
-from utils.probes import (
+from evaluation import (
     latent_mahalanobis,
     marginals,
     per_image_seen,
     run_combination_probe,
-    stack_images,
     weighted_mean,
 )
-from utils.visualisation import plot_combination_heatmap, show_comparison
+from utils import resolve_device
+from utils.checkpoints import load_ae_from_path
+from utils.visualisation import (
+    plot_combination_heatmap,
+    show_comparison,
+    stack_images,
+)
 from utils.wandb_utils import load_from_wandb
 
 DATA_ROOT = Path("data")
