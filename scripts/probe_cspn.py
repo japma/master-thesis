@@ -31,11 +31,24 @@ from dataset_loaders.colour_mnist import (
 )
 from evaluation import run_generation_probe, weighted_mean
 from utils import resolve_device
-from utils.checkpoints import load_ae_from_path, load_cspn_from_path
+from utils.checkpoints import (
+    load_ae_from_path,
+    load_cspn_from_path,
+    load_joint_pc_from_path,
+    load_nn_baseline_from_path,
+)
 from utils.visualisation import plot_combination_heatmap, show
 from utils.wandb_utils import load_from_wandb
 
 DATA_ROOT = "data"
+
+# Every one of these exposes sample(labels, std_correction) over the same latent space,
+# so the probe treats them interchangeably.
+MODEL_LOADERS = {
+    "cspn": load_cspn_from_path,
+    "joint_pc": load_joint_pc_from_path,
+    "nn_baseline": load_nn_baseline_from_path,
+}
 
 
 def main() -> None:
@@ -47,20 +60,26 @@ def main() -> None:
     parser.add_argument("--variant", default=DEFAULT_VARIANT)
     parser.add_argument("--std-correction", type=float, default=1.0)
     parser.add_argument("--no-figures", action="store_true")
+    parser.add_argument(
+        "--model-type",
+        default="cspn",
+        choices=sorted(MODEL_LOADERS),
+        help="which checkpoint format --cspn names; all are probed identically",
+    )
     args = parser.parse_args()
 
     device = resolve_device()
-    cspn = load_cspn_from_path(load_from_wandb(args.cspn, args.tag), device=device).to(
-        device
-    )
+    load_model = MODEL_LOADERS[args.model_type]
+    cspn = load_model(load_from_wandb(args.cspn, args.tag), device=device).to(device)
     ae = load_ae_from_path(load_from_wandb(args.ae, args.tag), device=device).to(device)
 
     seen = seen_mask(DATA_ROOT, args.variant)
     counts = np.full(seen.shape, float(args.samples))
 
     print(
-        f"\n{args.cspn}:{args.tag} -> {args.ae}:{args.tag} | {args.samples} samples per "
-        f"combination | std_correction={args.std_correction} | device={device}\n"
+        f"\n{args.model_type} {args.cspn}:{args.tag} -> {args.ae}:{args.tag} | "
+        f"{args.samples} samples per combination | "
+        f"std_correction={args.std_correction} | device={device}\n"
     )
 
     probe = run_generation_probe(

@@ -1,6 +1,7 @@
 import torch
 from torch._C import dtype
 from torch._tensor import Tensor
+from torch.nn.functional import pad
 
 from models.cspn.psinet.utils import one_hot
 
@@ -309,7 +310,7 @@ class NormalArray(ExponentialFamilyArray):
     def log_h(self, x):
         return -0.5 * self.log_2pi * self.num_dims
 
-    def _sample(self, num_samples, params, std_correction: float = 1.0):
+    def _sample(self, num_samples, params, std_correction: float = 1.0, **kwargs):
         with torch.no_grad():
             mu = params[..., 0 : self.num_dims]
             var = params[..., self.num_dims :] - mu**2
@@ -376,6 +377,7 @@ class BinomialArray(ExponentialFamilyArray):
         params,
         dtype: dtype = torch.float32,
         memory_efficient_binomial_sampling: bool = True,
+        **kwargs,
     ):
         with torch.no_grad():
             params = params / self.N
@@ -395,7 +397,7 @@ class BinomialArray(ExponentialFamilyArray):
                 samples = torch.sum(rand < params.unsqueeze(-1), -1).type(dtype)
             return shift_last_axis_to(samples, 2)
 
-    def _argmax(self, params, dtype: dtype = torch.float32):
+    def _argmax(self, params, dtype: dtype = torch.float32, **kwargs):
         with torch.no_grad():
             params = params / self.N
             mode = torch.clamp(torch.floor((self.N + 1.0) * params), 0.0, self.N).type(
@@ -421,18 +423,18 @@ class CategoricalArray(ExponentialFamilyArray):
         if len(x.shape) == 2:
             stats = one_hot(x.long(), self.K)
         elif len(x.shape) == 3:
-            stats = one_hot(x.long(), self.K).reshape(-1, self.num_dims * self.K)
+            stats = one_hot(x.long(), self.K).reshape(
+                *x.shape[:2], self.num_dims * self.K
+            )
         else:
             raise AssertionError("Input must be 2 or 3 dimensional tensor.")
         return stats
 
     def expectation_to_natural(self, phi) -> Tensor:
         theta = torch.clamp(phi, 1e-12, 1.0)
-        theta = theta.reshape(self.num_var, *self.array_shape, self.num_dims, self.K)
-        theta /= theta.sum(-1, keepdim=True)
-        theta = theta.reshape(self.num_var, *self.array_shape, self.num_dims * self.K)
-        theta = torch.log(theta)
-        return theta
+        theta = theta.reshape(*phi.shape[:-1], self.num_dims, self.K)
+        theta = theta / theta.sum(-1, keepdim=True)
+        return torch.log(theta).reshape(phi.shape)
 
     def log_normalizer(self, theta) -> float:
         return 0.0
@@ -440,11 +442,9 @@ class CategoricalArray(ExponentialFamilyArray):
     def log_h(self, x) -> Tensor:
         return torch.zeros([], device=x.device)
 
-    def _sample(self, num_samples, params, dtype: dtype = torch.float32):
+    def _sample(self, num_samples, params, dtype: dtype = torch.float32, **kwargs):
         with torch.no_grad():
-            dist = params.reshape(
-                self.num_var, *self.array_shape, self.num_dims, self.K
-            )
+            dist = params.reshape(*params.shape[:-1], self.num_dims, self.K)
             cum_sum = torch.cumsum(dist[..., 0:-1], -1)
             rand = torch.rand(
                 (num_samples,) + cum_sum.shape[0:-1] + (1,), device=cum_sum.device
@@ -452,10 +452,120 @@ class CategoricalArray(ExponentialFamilyArray):
             samples = torch.sum(rand > cum_sum, -1).type(dtype)
             return shift_last_axis_to(samples, 2)
 
-    def _argmax(self, params, dtype: dtype = torch.float32):
+    def _argmax(self, params, dtype: dtype = torch.float32, **kwargs):
         with torch.no_grad():
-            dist = params.reshape(
-                self.num_var, *self.array_shape, self.num_dims, self.K
-            )
+            dist = params.reshape(*params.shape[:-1], self.num_dims, self.K)
             mode = torch.argmax(dist, -1).type(dtype)
             return shift_last_axis_to(mode, 1)
+
+
+class MixedFamilyArray(ExponentialFamilyArray):
+    """A leaf array whose variables are split into contiguous blocks, each with its own
+    exponential family -- e.g. Normal latents followed by categorical labels.
+
+    Blocks are given in variable order as `(num_var, family, args)` and must tile
+    `[0, num_var)`. All parameters live in one padded tensor of width
+    `max(block.num_stats)`; every block reads only its own leading slice, so the
+    enclosing EinsumNetwork keeps treating the leaves as a single parameter source.
+    """
+
+    def __init__(self, num_var, num_dims, array_shape, blocks) -> None:
+        arrays = []
+        spans: list[tuple[int, int]] = []
+        start = 0
+        for block_num_var, family, args in blocks:
+            arrays.append(
+                family(block_num_var, num_dims, array_shape, **(args or {}))
+            )
+            spans.append((start, start + block_num_var))
+            start += block_num_var
+
+        if start != num_var:
+            raise AssertionError(
+                f"blocks cover {start} variables but num_var is {num_var}"
+            )
+
+        super().__init__(
+            num_var, num_dims, array_shape, max(a.num_stats for a in arrays)
+        )
+        self.arrays = torch.nn.ModuleList(arrays)
+        self.spans = spans
+
+    def _blocks(self):
+        return zip(self.arrays, self.spans, strict=True)
+
+    def reparam_function(self):
+        def reparam(params) -> Tensor:
+            out = []
+            for array, (start, stop) in self._blocks():
+                phi = array.reparam(params[:, start:stop, ..., : array.num_stats])
+                out.append(pad(phi, (0, self.num_stats - array.num_stats)))
+            return torch.cat(out, 1)
+
+        return reparam
+
+    def forward(self, x, params) -> Tensor:
+        return torch.cat(
+            [
+                array(x[:, start:stop], params[:, start:stop, ..., : array.num_stats])
+                for array, (start, stop) in self._blocks()
+            ],
+            1,
+        )
+
+    def _block_rows(self, scope, start: int, stop: int) -> list[int]:
+        return [row for row, var in enumerate(scope) if start <= var < stop]
+
+    def _sample(self, num_samples, params, scope=None, **kwargs) -> Tensor:
+        if scope is None:
+            raise AssertionError("MixedFamilyArray needs the scope to pick a family")
+        with torch.no_grad():
+            out: Tensor | None = None
+            for array, (start, stop) in self._blocks():
+                rows = self._block_rows(scope, start, stop)
+                if not rows:
+                    continue
+                index = torch.tensor(rows, device=params.device)
+                block = array._sample(
+                    num_samples, params[index][..., : array.num_stats], **kwargs
+                )
+                if out is None:
+                    out = torch.zeros(
+                        (num_samples, len(scope), *block.shape[2:]),
+                        dtype=block.dtype,
+                        device=block.device,
+                    )
+                out[:, index] = block
+            assert out is not None
+            return out
+
+    def _argmax(self, params, scope=None, **kwargs) -> Tensor:
+        if scope is None:
+            raise AssertionError("MixedFamilyArray needs the scope to pick a family")
+        with torch.no_grad():
+            out: Tensor | None = None
+            for array, (start, stop) in self._blocks():
+                rows = self._block_rows(scope, start, stop)
+                if not rows:
+                    continue
+                index = torch.tensor(rows, device=params.device)
+                block = array._argmax(params[index][..., : array.num_stats], **kwargs)
+                if out is None:
+                    out = torch.zeros(
+                        (len(scope), *block.shape[1:]),
+                        dtype=block.dtype,
+                        device=block.device,
+                    )
+                out[index] = block
+            assert out is not None
+            return out
+
+    def set_marginalization_idx(self, idx) -> None:
+        """Split the global marginalization indices into each block's local ones."""
+        self.marginalization_idx = idx
+        for array, (start, stop) in self._blocks():
+            array.set_marginalization_idx(
+                None
+                if idx is None
+                else [i - start for i in idx if start <= i < stop]
+            )

@@ -40,8 +40,12 @@ class DeterministicBaseline(AbstractNeuralBaseline):
         return (-0.5 * (normalized**2 + math.log(2 * math.pi)) - self.log_std).sum(-1)
 
     @torch.no_grad()
-    def sample(self, labels: torch.Tensor) -> torch.Tensor:
-        """Predicted latent per label row, shape [B, num_vars]."""
+    def sample(self, labels: torch.Tensor, std_correction: float = 1.0) -> torch.Tensor:
+        """Predicted latent per label row, shape [B, num_vars].
+
+        This baseline is a point predictor, so every row for a given label is identical
+        and `std_correction` has nothing to scale -- it exists for interface parity.
+        """
         return self._mean(labels)
 
     def get_config(self) -> dict:

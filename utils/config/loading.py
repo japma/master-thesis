@@ -7,6 +7,7 @@ import yaml
 
 from utils.config.autoencoder import AERunConfig
 from utils.config.cspn import CSPNRunConfig
+from utils.config.joint_pc import JointPCRunConfig
 from utils.config.label_pc import LabelPCRunConfig
 from utils.config.neural_baseline import NeuralBaselineRunConfig
 
@@ -46,7 +47,11 @@ def _apply_dataset_defaults(raw: dict) -> dict:
 
 def load_config() -> (
     tuple[
-        AERunConfig | CSPNRunConfig | LabelPCRunConfig | NeuralBaselineRunConfig,
+        AERunConfig
+        | CSPNRunConfig
+        | JointPCRunConfig
+        | LabelPCRunConfig
+        | NeuralBaselineRunConfig,
         int | None,
         bool,
     ]
@@ -95,6 +100,8 @@ def load_config() -> (
         return AERunConfig.model_validate(raw), seed, resume
     elif run_type == "cspn":
         return CSPNRunConfig.model_validate(raw), seed, resume
+    elif run_type == "joint_pc":
+        return JointPCRunConfig.model_validate(raw), seed, resume
     elif run_type == "label_pc":
         return LabelPCRunConfig.model_validate(raw), seed, resume
     elif run_type == "nn_baseline":

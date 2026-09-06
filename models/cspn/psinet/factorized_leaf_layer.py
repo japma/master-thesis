@@ -146,10 +146,14 @@ class FactorizedLeafLayer(Layer):
                     phi_selected = phi_selected.unsqueeze(1).unsqueeze(1)
 
                     if mode == "sample":
-                        sample = self.ef_array._sample(1, phi_selected, **kwargs)
+                        sample = self.ef_array._sample(
+                            1, phi_selected, scope=scope, **kwargs
+                        )
                         cur_value[scope, :] = sample[0, :, :, 0, 0]
                     elif mode == "argmax":
-                        argmax = self.ef_array._argmax(phi_selected, **kwargs)
+                        argmax = self.ef_array._argmax(
+                            phi_selected, scope=scope, **kwargs
+                        )
                         cur_value[scope, :] = argmax[:, :, 0, 0]
                     else:
                         raise AssertionError(f"Unknown backtracking mode {mode}")

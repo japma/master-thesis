@@ -49,8 +49,11 @@ dev = [
 [project.scripts]
 train_ae = "scripts.train_ae:main"
 train_cspn = "scripts.train_cspn:main"
+train_joint_pc = "scripts.train_joint_pc:main"
 train_label_pc = "scripts.train_label_pc:main"
 train_nn_baseline = "scripts.train_nn_baseline:main"
+eval_model = "scripts.eval_model:main"
+train_digit_classifier = "scripts.train_digit_classifier:main"
 download_data = "scripts.download_data:main"
 generate_colour_mnist = "scripts.generate_colour_mnist:main"
 list_checkpoints = "scripts.list_checkpoints:main"

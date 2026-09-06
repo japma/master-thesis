@@ -1,7 +1,10 @@
 import torch
 from torch._tensor import Tensor
 
-from models.cspn.psinet.exponential_family_array import NormalArray
+from models.cspn.psinet.exponential_family_array import (
+    ExponentialFamilyArray,
+    NormalArray,
+)
 from models.cspn.psinet.factorized_leaf_layer import FactorizedLeafLayer
 from models.cspn.psinet.graph import (
     check_graph,
@@ -34,7 +37,7 @@ class Args:
         num_input_distributions: int = 10,
         num_sums: int = 10,
         num_classes: int = 1,
-        exponential_family: type[NormalArray]=NormalArray,
+        exponential_family: type[ExponentialFamilyArray] = NormalArray,
         exponential_family_args=None,
     ) -> None:
         self.num_var = num_var
@@ -333,7 +336,7 @@ class EinsumNetwork(torch.nn.Module):
                     samples = torch.squeeze(samples, 2)
 
                 if x is not None:
-                    marg_idx = layer.get_marginalization_idx()
+                    marg_idx = set(layer.get_marginalization_idx() or [])
                     keep_idx = [
                         i for i in range(self.args.num_var) if i not in marg_idx
                     ]

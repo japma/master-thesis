@@ -29,6 +29,10 @@ from utils.config.cspn import (
     CSPNType,
     PretrainedLabelPCConfig,
 )
+from utils.config.joint_pc import (
+    JointPCConfig,
+    JointPCRunConfig,
+)
 from utils.config.label_pc import (
     LabelPCConfig,
     LabelPCRunConfig,
@@ -67,6 +71,8 @@ __all__ = [
     "CSPNType",
     "ConditioningType",
     "DatasetConfig",
+    "JointPCConfig",
+    "JointPCRunConfig",
     "LabelPCConfig",
     "LabelPCRunConfig",
     "NeuralBaselineConfig",

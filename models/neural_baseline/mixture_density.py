@@ -31,8 +31,8 @@ class MixtureDensityBaseline(AbstractNeuralBaseline):
         self.log_std_head = nn.Linear(in_dim, out_dim)
         self.logit_head = nn.Linear(in_dim, self.num_components)
 
-        self.min_log_std = math.log(config.min_std)
-        self.max_log_std = math.log(config.max_std)
+        self.min_std = config.min_std
+        self.max_std = config.max_std
 
     def _params(
         self, labels: torch.Tensor
@@ -43,12 +43,12 @@ class MixtureDensityBaseline(AbstractNeuralBaseline):
 
         logits = torch.log_softmax(self.logit_head(features), dim=-1)
         means = self.mean_head(features).view(shape)
-        log_stds = (
-            self.log_std_head(features)
-            .view(shape)
-            .clamp(min=self.min_log_std, max=self.max_log_std)
-        )
-        return logits, means, log_stds
+        # Squashed rather than clamped: clamp has exactly zero gradient outside the
+        # range, so a component that collapses below min_std can never recover.
+        stds = self.min_std + torch.sigmoid(
+            self.log_std_head(features).view(shape)
+        ) * (self.max_std - self.min_std)
+        return logits, means, stds.log()
 
     def forward(self, z: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
         logits, means, log_stds = self._params(labels)
@@ -61,14 +61,14 @@ class MixtureDensityBaseline(AbstractNeuralBaseline):
         return torch.logsumexp(logits + component_log_prob, dim=-1)
 
     @torch.no_grad()
-    def sample(self, labels: torch.Tensor) -> torch.Tensor:
+    def sample(self, labels: torch.Tensor, std_correction: float = 1.0) -> torch.Tensor:
         logits, means, log_stds = self._params(labels)
 
         chosen = torch.distributions.Categorical(logits=logits).sample()
         index = chosen.view(-1, 1, 1).expand(-1, 1, self.num_vars)
         mean = means.gather(1, index).squeeze(1)
         log_std = log_stds.gather(1, index).squeeze(1)
-        return mean + torch.randn_like(mean) * log_std.exp()
+        return mean + std_correction * torch.randn_like(mean) * log_std.exp()
 
     def get_config(self) -> dict:
         return self.config.model_dump(mode="json")

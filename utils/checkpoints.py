@@ -10,6 +10,7 @@ from models.autoencoder import (
     VariationalAutoencoder,
 )
 from models.cspn.abstract_cspn import AbstractCSPN
+from models.cspn.joint_pc import JointPC
 from models.cspn.psinet.graph import DistributionVector, EiNetAddress, Product
 from models.cspn.psinet.label_pc import LabelPC
 from models.cspn.psinet_cspn import PsiNetCSPN
@@ -20,6 +21,7 @@ from utils.config import (
     AutoencoderType,
     CSPNConfig,
     CSPNType,
+    JointPCConfig,
     NeuralBaselineConfig,
     NeuralBaselineType,
 )
@@ -247,5 +249,47 @@ def load_label_pc_from_path(path: Path, device=None) -> LabelPC:
         raise AssertionError(f"Checkpoint at {path} has no saved `graph` entry")
 
     model = _create_label_pc_from_checkpoint(ckpt["model_cfg"], graph=ckpt["graph"])
+    model.load_state_dict(ckpt["model_state"])
+    return model.to(device) if device is not None else model
+
+
+# --- Joint latent+label PC ---
+def joint_pc_checkpoint_path(dataset_name: str) -> Path:
+    return Path("checkpoints") / f"joint_pc_{dataset_name}.pt"
+
+
+def save_joint_pc(model: AbstractCSPN, path: Path) -> None:
+    model = uncompiled(model)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    if not isinstance(model, JointPC):
+        raise AssertionError("model is not a JointPC")
+    torch.save(
+        {
+            "model_cfg": model.get_config(),
+            "model_state": model.state_dict(),
+            "graph": model.get_graph(),
+        },
+        path,
+    )
+    print("Saved JointPC checkpoint to", path)
+
+
+def load_joint_pc_from_path(path: Path, device=None) -> JointPC:
+    with (
+        torch.serialization.safe_globals([networkx.classes.digraph.DiGraph]),
+        torch.serialization.safe_globals([DistributionVector]),
+        torch.serialization.safe_globals([EiNetAddress]),
+        torch.serialization.safe_globals([Product]),
+        torch.serialization.safe_globals([numpy._core.multiarray.scalar]),
+        torch.serialization.safe_globals([numpy.dtype]),
+    ):
+        ckpt = torch.load(path, map_location=device, weights_only=False)
+
+    if "graph" not in ckpt:
+        raise AssertionError(f"Checkpoint at {path} has no saved `graph` entry")
+
+    cfg = JointPCConfig.model_validate(ckpt["model_cfg"])
+    model = JointPC(config=cfg, graph=ckpt["graph"])
     model.load_state_dict(ckpt["model_state"])
     return model.to(device) if device is not None else model
