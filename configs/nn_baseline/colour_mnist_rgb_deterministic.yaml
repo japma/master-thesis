@@ -1,0 +1,44 @@
+# colour-MNIST, rgb variant.
+#
+# Only red, green and blue foregrounds are ever generated -- cyan, yellow and pink have no
+# training data at all. The label space is still six foregrounds, so the model has to learn
+# roughly zero mass on the three it never sees.
+#
+# Note for evaluation: the "held-out" half of an eval table is unseen *values*, not unseen
+# combinations of seen values. No model can be expected to render cyan, so this variant
+# measures a different thing from a held-out-combination design.
+
+type: nn_baseline
+
+dataset:
+  name: colour_mnist_rgb
+
+autoencoder:
+  name: "variational_colour_mnist_rgb"
+  external: false
+  tag: "latest"
+
+model:
+  model_type: deterministic
+  num_vars: 16
+  h_dims: [ 256, 128 ]
+  num_components: 1
+  # The width of the Gaussian around the predicted mean. At 1.0 the NLL is MSE plus a
+  # constant; it also sets how this model's NLL compares to the mixture's, so it is
+  # worth matching to the residual scale rather than leaving it arbitrary.
+  fixed_std: 1.0
+  encoder_config:
+    encoder_type: multi_categorical
+    num_classes: [ 10, 6, 3 ]
+
+training:
+  epochs: 200
+  learning_rate: 0.0003
+  batch_size: 128
+  # Watches val `total`. min_delta is an absolute improvement in nats, and for the
+  # deterministic model 14.7 of its ~18 is the fixed_std=1.0 Gaussian constant -- only
+  # ~3.3 nats is the fit -- so 0.01 is ~0.3% of the range that can actually move, not
+  # 0.06% of 18. Patience 15 rather than 10 because the cosine schedule decays smoothly
+  # and a plateau at epoch 60 can still break once the LR drops.
+  early_stopping_patience: 15
+  early_stopping_min_delta: 0.01

@@ -19,7 +19,7 @@ class EarlyStopping:
         self.best_epoch: int = 0
         self._counter: int = 0
 
-    def step(self, val_loss: float, model: nn.Module) -> bool:
+    def step(self, val_loss: float, model: nn.Module, epoch: int) -> bool:
         """
         Call once per epoch after validation.
 
@@ -27,7 +27,7 @@ class EarlyStopping:
         """
         if val_loss < self.best_loss - self.min_delta:
             self.best_loss = val_loss
-            self.best_epoch = self._counter  # overwritten below with real epoch
+            self.best_epoch = epoch
             self.best_weights = copy.deepcopy(model.state_dict())
             self._counter = 0
         else:
@@ -35,9 +35,14 @@ class EarlyStopping:
 
         return self._counter >= self.patience
 
-    def restore_best_weights(self, model: nn.Module) -> None:
-        """Load the best weights back into the model after training ends."""
-        if self.best_weights is not None:
-            model.load_state_dict(self.best_weights)
-        else:
-            raise RuntimeError("No best weights saved — was step() ever called?")
+    @property
+    def epochs_without_improvement(self) -> int:
+        return self._counter
+
+    def restore_best_weights(self, model: nn.Module) -> bool:
+        """Load the best weights back into the model. False if there are none, which
+        only happens when step() was never called."""
+        if self.best_weights is None:
+            return False
+        model.load_state_dict(self.best_weights)
+        return True

@@ -42,6 +42,7 @@ class Batch:
 
 
 class AbstractObjective(ABC):
+    model: torch.nn.Module
     optimizer: torch.optim.Optimizer
     lr_scheduler: torch.optim.lr_scheduler.LRScheduler
 

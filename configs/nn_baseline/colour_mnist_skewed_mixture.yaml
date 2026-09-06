@@ -1,0 +1,41 @@
+# colour-MNIST, skewed variant.
+#
+# All 180 combinations appear, but digit 0 is red 45% of the time (weight 4x versus the
+# other foregrounds); every other digit stays uniform. It asks whether a model picks up a
+# colour prior nobody told it about.
+#
+# Note for evaluation: no combination has zero weight, so `seen_mask` is all-True and the
+# held-out column of an eval report is empty here by design.
+
+type: nn_baseline
+
+dataset:
+  name: colour_mnist_skewed
+
+autoencoder:
+  name: "variational_colour_mnist_skewed"
+  external: false
+  tag: "latest"
+
+model:
+  model_type: mixture
+  num_vars: 16
+  h_dims: [ 256, 128 ]
+  num_components: 16
+  min_std: 0.001
+  max_std: 2.0
+  encoder_config:
+    encoder_type: multi_categorical
+    num_classes: [ 10, 6, 3 ]
+
+training:
+  epochs: 200
+  learning_rate: 0.0003
+  batch_size: 128
+  # Watches val `total`. min_delta is an absolute improvement in nats, which needs no
+  # rescaling between the two baselines even though they sit at very different losses --
+  # this model learns its component widths, so it has no fixed normalizer constant and
+  # its loss runs far below the deterministic one's. Patience 15 rather than 10 because
+  # the cosine schedule decays smoothly and a plateau can still break once the LR drops.
+  early_stopping_patience: 15
+  early_stopping_min_delta: 0.01

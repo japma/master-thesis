@@ -1,0 +1,41 @@
+# colour-MNIST, rgb variant.
+#
+# Only red, green and blue foregrounds are ever generated -- cyan, yellow and pink have no
+# training data at all. The label space is still six foregrounds, so the model has to learn
+# roughly zero mass on the three it never sees.
+#
+# Note for evaluation: the "held-out" half of an eval table is unseen *values*, not unseen
+# combinations of seen values. No model can be expected to render cyan, so this variant
+# measures a different thing from a held-out-combination design.
+
+# Joint PC over p(z, y): no conditioning hypernetwork, so the label-latent dependence
+# has to come from mixture structure -- hence the larger sums/repetitions than
+# the matching configs/cspn config.
+
+type: joint_pc
+
+dataset:
+  name: colour_mnist_rgb
+
+autoencoder:
+  name: "variational_colour_mnist_rgb"
+  external: false
+  tag: "latest"
+
+model:
+  num_latents: 16
+  # digit, fg colour, bg colour
+  label_cardinalities: [ 10, 6, 3 ]
+  num_repetitions: 8
+  num_input_distributions: 32
+  num_sums: 32
+  min_var: 0.0001
+  max_var: 4.0
+  normalize_latents: true
+
+training:
+  epochs: 200
+  learning_rate: 0.001
+  batch_size: 128
+  early_stopping_patience: 10
+  early_stopping_min_delta: 0.01

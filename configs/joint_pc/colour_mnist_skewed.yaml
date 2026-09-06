@@ -1,0 +1,40 @@
+# colour-MNIST, skewed variant.
+#
+# All 180 combinations appear, but digit 0 is red 45% of the time (weight 4x versus the
+# other foregrounds); every other digit stays uniform. It asks whether a model picks up a
+# colour prior nobody told it about.
+#
+# Note for evaluation: no combination has zero weight, so `seen_mask` is all-True and the
+# held-out column of an eval report is empty here by design.
+
+# Joint PC over p(z, y): no conditioning hypernetwork, so the label-latent dependence
+# has to come from mixture structure -- hence the larger sums/repetitions than
+# the matching configs/cspn config.
+
+type: joint_pc
+
+dataset:
+  name: colour_mnist_skewed
+
+autoencoder:
+  name: "variational_colour_mnist_skewed"
+  external: false
+  tag: "latest"
+
+model:
+  num_latents: 16
+  # digit, fg colour, bg colour
+  label_cardinalities: [ 10, 6, 3 ]
+  num_repetitions: 8
+  num_input_distributions: 32
+  num_sums: 32
+  min_var: 0.0001
+  max_var: 4.0
+  normalize_latents: true
+
+training:
+  epochs: 200
+  learning_rate: 0.001
+  batch_size: 128
+  early_stopping_patience: 10
+  early_stopping_min_delta: 0.01

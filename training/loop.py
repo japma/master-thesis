@@ -7,6 +7,7 @@ import torch
 import tqdm
 from rtpt import RTPT
 
+from training.early_stopping import EarlyStopping
 from training.metrics import MetricsCollector
 from training.objectives.base import AbstractObjective, Batch
 from utils.checkpoints import train_state_path
@@ -34,7 +35,12 @@ def run_training_loop(
     log_sample_every: int = 10,
     checkpoint_every: int = 25,
     needs_images: bool = True,
+    early_stopping: EarlyStopping | None = None,
+    early_stopping_metric: str = "total",
 ) -> None:
+    """`early_stopping` also turns the final checkpoint into the *best* one rather than
+    the last: the weights it kept are restored before the final save, so stopping early
+    never costs you the epochs that came before the plateau."""
     intermediate_trainstate_path = train_state_path(checkpoint.intermediate_path)
 
     start_epoch = 0
@@ -81,6 +87,17 @@ def run_training_loop(
         train_metrics.reset()
         val_metrics.reset()
 
+        stop = False
+        if early_stopping is not None:
+            if early_stopping_metric not in avg_val_loss:
+                raise KeyError(
+                    f"early stopping watches {early_stopping_metric!r}, which this "
+                    f"objective does not report; it has {sorted(avg_val_loss)}"
+                )
+            stop = early_stopping.step(
+                float(avg_val_loss[early_stopping_metric]), objective.model, epoch
+            )
+
         if sample_probe is not None and epoch % log_sample_every == 0:
             samples = objective.sample(sample_probe)
             log_images(sample_log_key, samples, step=epoch)
@@ -99,6 +116,24 @@ def run_training_loop(
 
         objective.on_epoch_end()
         rtpt.step(subtitle=f"{epoch + 1}/{epochs}")
+
+        if stop:
+            assert early_stopping is not None
+            print(
+                f"Early stopping at epoch {epoch + 1}: no improvement in "
+                f"{early_stopping_metric} for {early_stopping.patience} epochs "
+                f"(best {early_stopping.best_loss:.4f} at epoch "
+                f"{early_stopping.best_epoch + 1})"
+            )
+            break
+
+    if early_stopping is not None and early_stopping.restore_best_weights(
+        objective.model
+    ):
+        print(
+            f"Restored weights from epoch {early_stopping.best_epoch + 1} "
+            f"({early_stopping_metric} {early_stopping.best_loss:.4f})"
+        )
 
     if sample_probe is not None:
         final_samples = objective.sample(sample_probe)

@@ -41,7 +41,9 @@ _DEFAULT_LIMIT = 12
 _LOADERS = {
     "autoencoder": "load_ae_from_path",
     "cspn": "load_cspn_from_path",
+    "joint_pc": "load_joint_pc_from_path",
     "label_pc": "load_label_pc_from_path",
+    "nn_baseline": "load_nn_baseline_from_path",
 }
 
 

@@ -7,11 +7,11 @@ set -e
 source .venv/bin/activate
 
 ae_configs=(
-    "configs/autoencoder/colour_mnist.yaml"
+    "configs/autoencoder/colour_mnist_uniform.yaml"
 )
 
 cspn_configs=(
-    "configs/cspn/colour_mnist.yaml"
+    "configs/cspn/colour_mnist_uniform.yaml"
 )
 
 for config in "${ae_configs[@]}"; do

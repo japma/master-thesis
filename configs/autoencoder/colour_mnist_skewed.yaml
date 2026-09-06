@@ -1,0 +1,30 @@
+# colour-MNIST, skewed variant.
+#
+# All 180 combinations appear, but digit 0 is red 45% of the time (weight 4x versus the
+# other foregrounds); every other digit stays uniform. It asks whether a model picks up a
+# colour prior nobody told it about.
+#
+# Note for evaluation: no combination has zero weight, so `seen_mask` is all-True and the
+# held-out column of an eval report is empty here by design.
+
+type: ae
+
+dataset:
+  name: colour_mnist_skewed
+
+model:
+  model_type: variational
+  latent_dim: 16
+  num_blocks: 2
+  base_channels: 32
+
+training:
+  vae_type: beta
+  epochs: 100
+  learning_rate: 0.0005
+  batch_size: 128
+  beta: 1.0
+  beta_start: 0.0
+  beta_end: 1.0
+  kl_warmup_epochs: 10
+  lambda_perceptual: 0.0

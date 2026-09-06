@@ -1,6 +1,6 @@
 # Joint PC over p(z, y): no conditioning hypernetwork, so the label-latent dependence
 # has to come from mixture structure -- hence the larger sums/repetitions than
-# configs/cspn/colour_mnist.yaml.
+# the matching configs/cspn config.
 
 type: joint_pc
 

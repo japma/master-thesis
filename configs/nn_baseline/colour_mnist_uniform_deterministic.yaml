@@ -6,7 +6,7 @@ dataset:
 autoencoder:
   name: "variational_colour_mnist_uniform"
   external: false
-  tag: "best"
+  tag: "latest"
 
 model:
   model_type: deterministic
@@ -25,5 +25,10 @@ training:
   epochs: 200
   learning_rate: 0.0003
   batch_size: 128
-  early_stopping_patience: 10
+  # Watches val `total`. min_delta is an absolute improvement in nats, and for the
+  # deterministic model 14.7 of its ~18 is the fixed_std=1.0 Gaussian constant -- only
+  # ~3.3 nats is the fit -- so 0.01 is ~0.3% of the range that can actually move, not
+  # 0.06% of 18. Patience 15 rather than 10 because the cosine schedule decays smoothly
+  # and a plateau at epoch 60 can still break once the LR drops.
+  early_stopping_patience: 15
   early_stopping_min_delta: 0.01
