@@ -7,6 +7,7 @@ from networkx.classes import DiGraph
 
 from models.autoencoder import (
     AbstractAutoencoder,
+    SupervisedVAE,
     VariationalAutoencoder,
 )
 from models.cspn.abstract_cspn import AbstractCSPN
@@ -128,7 +129,13 @@ def save_autoencoder(model: AbstractAutoencoder, path: Path) -> None:
 
 
 def _create_autoencoder_from_checkpoint(cfg: AutoencoderConfig) -> AbstractAutoencoder:
-    return VariationalAutoencoder(config=cfg)
+    """Dispatches on model_type: a supervised checkpoint carries classification head
+    weights a plain VariationalAutoencoder has nowhere to put."""
+    match cfg.model_type:
+        case AutoencoderType.SUPERVISED:
+            return SupervisedVAE(config=cfg)
+        case _:
+            return VariationalAutoencoder(config=cfg)
 
 
 def load_ae_from_path(path: Path, device=None) -> AbstractAutoencoder:

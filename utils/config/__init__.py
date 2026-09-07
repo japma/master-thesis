@@ -9,6 +9,7 @@ from utils.config.autoencoder import (
     AutoencoderConfig,
     AutoencoderTrainingConfig,
     AutoencoderType,
+    SupervisionConfig,
     VAETrainingType,
 )
 from utils.config.common import (
@@ -80,6 +81,7 @@ __all__ = [
     "NeuralBaselineType",
     "PretrainedAutoencoderConfig",
     "PretrainedLabelPCConfig",
+    "SupervisionConfig",
     "VAETrainingType",
     "WandbConfig",
     "load_config",

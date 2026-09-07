@@ -1,0 +1,32 @@
+type: ae
+
+dataset:
+  name: colour_mnist_uniform
+
+model:
+  model_type: supervised
+  latent_dim: 16
+  num_blocks: 2
+  base_channels: 32
+  # Targets are [digit, fg, bg]; 6 of the 16 dimensions stay free for style.
+  supervision:
+    names: [digit, fg, bg]
+    dims: [5, 3, 2]
+    cardinalities: [10, 6, 3]
+
+training:
+  vae_type: beta
+  epochs: 100
+  learning_rate: 0.0005
+  batch_size: 128
+  beta: 1.0
+  beta_start: 0.0
+  beta_end: 1.0
+  kl_warmup_epochs: 10
+  lambda_perceptual: 0.0
+  # Recon is a per-image BCE sum (hundreds); a cross-entropy starts near 2.3, so the
+  # classification term only bites once gamma is well above 1. Tune against the
+  # per-factor accuracies in wandb.
+  gamma_start: 0.0
+  gamma_end: 10.0
+  classifier_warmup_epochs: 10

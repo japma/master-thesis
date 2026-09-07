@@ -8,11 +8,13 @@ from torchinfo import summary
 
 import wandb
 from dataset_loaders import build_data_loaders
-from models import VariationalAutoencoder
+from models import SupervisedVAE, VariationalAutoencoder
 from training.loop import CheckpointSpec, run_training_loop
+from training.losses.supervised_vae import SupervisedVAELoss
 from training.losses.tcvae import BetaTCVAELoss
 from training.losses.vae import VAELoss
 from training.objectives.beta_vae import BetaVAEObjective
+from training.objectives.supervised_vae import SupervisedVAEObjective
 from training.objectives.tcvae import TCVAEObjective
 from training.schedulers import BetaAnnealingScheduler
 from utils.checkpoints import (
@@ -21,7 +23,12 @@ from utils.checkpoints import (
     load_ae_from_path,
 )
 from utils.compilation import maybe_compile
-from utils.config import AERunConfig, VAETrainingType, load_config
+from utils.config import (
+    AERunConfig,
+    AutoencoderType,
+    VAETrainingType,
+    load_config,
+)
 from utils.reproducibility import resolve_device, seed_everything
 from utils.wandb_utils import init_run, log_images
 
@@ -34,12 +41,21 @@ def main() -> None:
     training_cfg = cfg.training
     wandb_cfg = cfg.wandb
 
+    supervised = autoencoder_cfg.model_type is AutoencoderType.SUPERVISED
+    if supervised and training_cfg.vae_type is not VAETrainingType.BETA:
+        raise ValueError(
+            f"model_type=supervised is only wired up for vae_type=beta, got "
+            f"{training_cfg.vae_type}"
+        )
+
     seed = seed_everything(cfg_seed)
     beta = training_cfg.beta
     device = resolve_device()
     dataset_name = dataset_cfg.name
     model_name = f"autoencoder_{dataset_name}"
     run_name = f"{model_name}_{training_cfg.vae_type}"
+    if supervised:
+        run_name = f"{run_name}_supervised"
 
     init_run(wandb_cfg, run_name, cfg.model_dump())
 
@@ -57,8 +73,13 @@ def main() -> None:
                 f"--resume given but no checkpoint found at {ae_ckpt_path}; "
                 "starting from scratch"
             )
-        ae = VariationalAutoencoder(config=autoencoder_cfg).to(device)
+        ae = (
+            SupervisedVAE(config=autoencoder_cfg)
+            if supervised
+            else VariationalAutoencoder(config=autoencoder_cfg)
+        ).to(device)
     assert isinstance(ae, VariationalAutoencoder)
+    assert not supervised or isinstance(ae, SupervisedVAE)
     print("Autoencoder Architecture:")
     summary(ae)
 
@@ -99,13 +120,36 @@ def main() -> None:
             lambda_perceptual=training_cfg.lambda_perceptual,
         ).to(device)
 
-        objective = BetaVAEObjective(
-            model=ae,
-            optimizer=optimizer,
-            lr_scheduler=lr_scheduler,
-            loss_fn=loss_fn,
-            beta_scheduler=beta_scheduler,
-        )
+        if supervised:
+            supervision = autoencoder_cfg.supervision
+            assert supervision is not None
+            # Held at gamma_start until the KL warmup is over, so the heads only start
+            # pulling on a latent that already means something.
+            gamma_scheduler = BetaAnnealingScheduler(
+                beta_start=training_cfg.gamma_start,
+                beta_end=training_cfg.gamma_end,
+                num_steps=len(train_loader) * training_cfg.classifier_warmup_epochs,
+                delay_steps=len(train_loader) * training_cfg.kl_warmup_epochs,
+            )
+            objective = SupervisedVAEObjective(
+                model=ae,
+                optimizer=optimizer,
+                lr_scheduler=lr_scheduler,
+                loss_fn=SupervisedVAELoss(
+                    loss_fn, gamma=training_cfg.gamma_end
+                ).to(device),
+                beta_scheduler=beta_scheduler,
+                gamma_scheduler=gamma_scheduler,
+                factor_names=supervision.factor_names,
+            )
+        else:
+            objective = BetaVAEObjective(
+                model=ae,
+                optimizer=optimizer,
+                lr_scheduler=lr_scheduler,
+                loss_fn=loss_fn,
+                beta_scheduler=beta_scheduler,
+            )
     elif training_cfg.vae_type == VAETrainingType.TCVAE:
         assert training_cfg.tcvae_alpha is not None
         assert training_cfg.tcvae_beta is not None
