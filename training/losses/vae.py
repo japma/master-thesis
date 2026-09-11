@@ -17,7 +17,11 @@ class VAELossOutput(LossOutput):
 
 
 class VAELoss(nn.Module):
-    """VAE training loss: recon + KL + perceptual."""
+    """VAE training loss: recon + KL + perceptual.
+
+    `kl_mask` restricts the KL to a subset of the latent dimensions, for models that
+    give the rest a prior of their own.
+    """
 
     def __init__(
         self,
@@ -36,6 +40,7 @@ class VAELoss(nn.Module):
         images: torch.Tensor,
         model_outputs: VAEForwardOutput,
         beta: float | None = None,
+        kl_mask: torch.Tensor | None = None,
     ) -> VAELossOutput:
 
         recon_loss = (
@@ -48,7 +53,10 @@ class VAELoss(nn.Module):
         )
 
         kl_loss = kl_loss_fn(
-            model_outputs.mu, model_outputs.log_var, free_bits=self.free_bits
+            model_outputs.mu,
+            model_outputs.log_var,
+            free_bits=self.free_bits,
+            mask=kl_mask,
         )
 
         recon_img = torch.sigmoid(model_outputs.reconstructed)

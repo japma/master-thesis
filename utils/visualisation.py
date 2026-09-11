@@ -405,3 +405,140 @@ def stack_images(dataset, indices) -> torch.Tensor:
             for item in items
         ]
     )
+
+
+def plot_image_rows(
+    rows: dict[str, Tensor],
+    title: str | None = None,
+    col_labels: list[str] | None = None,
+    dpi: int = 150,
+    scale: float = 0.9,
+):
+    """One labelled strip of images per row -- the shape of every model comparison here.
+
+    Rows must all hold the same number of images, so a column means the same thing all
+    the way down (the same input reconstructed, or the same label sampled).
+    """
+    if not rows:
+        raise ValueError("nothing to plot")
+    widths = {name: images.shape[0] for name, images in rows.items()}
+    if len(set(widths.values())) != 1:
+        raise ValueError(f"rows must be the same length, got {widths}")
+
+    count = next(iter(widths.values()))
+    figure, axes = plt.subplots(
+        len(rows),
+        count,
+        figsize=(count * scale, len(rows) * scale + 0.4),
+        dpi=dpi,
+        squeeze=False,
+    )
+
+    for row, (name, images) in enumerate(rows.items()):
+        for column in range(count):
+            ax = axes[row][column]
+            ax.imshow(images[column].detach().cpu().clamp(0, 1).permute(1, 2, 0).numpy())
+            ax.set_xticks([])
+            ax.set_yticks([])
+            for spine in ax.spines.values():
+                spine.set_visible(False)
+            if column == 0:
+                ax.set_ylabel(
+                    name, rotation=0, ha="right", va="center", fontsize=9, labelpad=8
+                )
+            if row == 0 and col_labels is not None:
+                ax.set_title(str(col_labels[column]), fontsize=8, pad=4)
+
+    if title:
+        figure.suptitle(title, fontsize=11)
+    figure.tight_layout()
+    return figure
+
+
+def plot_combination_grid(
+    images: Tensor,
+    title: str = "",
+    dpi: int = 150,
+    held_out=None,
+    pad: int = 2,
+):
+    """Every (digit, fg, bg) combination as one picture: digits down, colours across.
+
+    Takes the `(10, 6, 3, C, H, W)` tensor `sample_combination_grid` returns and lays it
+    out exactly like `plot_combination_heatmap`, so a suspicious cell in the heatmap can
+    be looked at here without recounting columns.
+    """
+    import numpy as np
+    from matplotlib.patches import Rectangle
+
+    from dataset_loaders.colour_mnist import (
+        BG_NAMES,
+        FG_NAMES,
+        NUM_BG,
+        NUM_DIGITS,
+        NUM_FG,
+    )
+
+    images = images.detach().cpu().clamp(0, 1)
+    _, _, _, channels, height, width = images.shape
+    columns = NUM_FG * NUM_BG
+
+    canvas = np.ones(
+        (
+            NUM_DIGITS * (height + pad) + pad,
+            columns * (width + pad) + pad,
+            channels,
+        ),
+        dtype=np.float32,
+    )
+    for digit in range(NUM_DIGITS):
+        for fg in range(NUM_FG):
+            for bg in range(NUM_BG):
+                column = bg * NUM_FG + fg
+                top = pad + digit * (height + pad)
+                left = pad + column * (width + pad)
+                canvas[top : top + height, left : left + width] = (
+                    images[digit, fg, bg].permute(1, 2, 0).numpy()
+                )
+
+    figure, ax = plt.subplots(figsize=(columns * 0.42, NUM_DIGITS * 0.46), dpi=dpi)
+    ax.imshow(canvas)
+
+    ax.set_xticks([pad + c * (width + pad) + width / 2 for c in range(columns)])
+    ax.set_xticklabels(
+        [FG_NAMES[c % NUM_FG][:2] for c in range(columns)], fontsize=6
+    )
+    ax.set_yticks([pad + d * (height + pad) + height / 2 for d in range(NUM_DIGITS)])
+    ax.set_yticklabels([str(d) for d in range(NUM_DIGITS)], fontsize=7)
+    ax.set_ylabel("digit")
+    ax.tick_params(length=0)
+
+    for bg in range(NUM_BG):
+        centre = pad + (bg * NUM_FG + (NUM_FG - 1) / 2) * (width + pad) + width / 2
+        ax.text(centre, -0.06 * canvas.shape[0], BG_NAMES[bg], ha="center", fontsize=9)
+
+    if held_out is not None:
+        held_out = np.asarray(held_out)
+        for digit in range(NUM_DIGITS):
+            for fg in range(NUM_FG):
+                for bg in range(NUM_BG):
+                    if held_out[digit, fg, bg]:
+                        column = bg * NUM_FG + fg
+                        ax.add_patch(
+                            Rectangle(
+                                (
+                                    pad + column * (width + pad) - 0.5,
+                                    pad + digit * (height + pad) - 0.5,
+                                ),
+                                width,
+                                height,
+                                fill=False,
+                                edgecolor="red",
+                                linewidth=1.2,
+                            )
+                        )
+
+    if title:
+        ax.set_title(title, pad=26)
+    figure.tight_layout()
+    return figure

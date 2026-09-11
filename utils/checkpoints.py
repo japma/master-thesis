@@ -7,6 +7,7 @@ from networkx.classes import DiGraph
 
 from models.autoencoder import (
     AbstractAutoencoder,
+    AnchoredVAE,
     SupervisedVAE,
     VariationalAutoencoder,
 )
@@ -18,6 +19,7 @@ from models.cspn.psinet_cspn import PsiNetCSPN
 from models.neural_baseline import AbstractNeuralBaseline, build_neural_baseline
 from utils.compilation import uncompiled
 from utils.config import (
+    AnchorScheme,
     AutoencoderConfig,
     AutoencoderType,
     CSPNConfig,
@@ -129,17 +131,21 @@ def save_autoencoder(model: AbstractAutoencoder, path: Path) -> None:
 
 
 def _create_autoencoder_from_checkpoint(cfg: AutoencoderConfig) -> AbstractAutoencoder:
-    """Dispatches on model_type: a supervised checkpoint carries classification head
-    weights a plain VariationalAutoencoder has nowhere to put."""
+    """Dispatches on model_type: a supervised or anchored checkpoint carries
+    classification head weights a plain VariationalAutoencoder has nowhere to put."""
     match cfg.model_type:
         case AutoencoderType.SUPERVISED:
             return SupervisedVAE(config=cfg)
+        case AutoencoderType.ANCHORED:
+            return AnchoredVAE(config=cfg)
         case _:
             return VariationalAutoencoder(config=cfg)
 
 
 def load_ae_from_path(path: Path, device=None) -> AbstractAutoencoder:
-    with torch.serialization.safe_globals([AutoencoderType, *_LEGACY_CONFIG_GLOBALS]):
+    with torch.serialization.safe_globals(
+        [AnchorScheme, AutoencoderType, *_LEGACY_CONFIG_GLOBALS]
+    ):
         ckpt = torch.load(path, map_location=device, weights_only=True)
     cfg = AutoencoderConfig.model_validate(ckpt["model_cfg"])
     model = _create_autoencoder_from_checkpoint(cfg)

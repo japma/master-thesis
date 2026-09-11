@@ -1,0 +1,47 @@
+# Colours anchored, digit left to a classification head.
+#
+# The fg block *is* an RGB coordinate (red = (1,0,0)) and the bg block is the same
+# palette's grey diagonal (black = 0, grey = 0.502, white = 1), so a colour the training
+# set never contained is still a point in the block rather than a class that does not
+# exist. The digit keeps cross-entropy: with no ordering over the ten classes, pinning
+# them to coordinates imposes a metric the data does not have -- see
+# colour_mnist_uniform_anchored_digit.yaml for the variant that does it anyway.
+
+type: ae
+
+dataset:
+  name: colour_mnist_uniform
+
+model:
+  model_type: anchored
+  latent_dim: 16
+  num_blocks: 2
+  base_channels: 32
+  # Targets are [digit, fg, bg]; 5 of the 16 dimensions stay free for style.
+  supervision:
+    names: [digit, fg, bg]
+    dims: [5, 3, 3]
+    cardinalities: [10, 6, 3]
+    anchors: [none, colour_mnist_fg, colour_mnist_bg]
+    # Anchors sit 0.5-1.0 apart, so this is a tight clamp: the classes are ~5-10 std
+    # apart and the decoder sees a narrow band around each. Raise it to trade clamping
+    # for coverage of the values *between* anchors.
+    anchor_std: 0.1
+
+training:
+  vae_type: beta
+  epochs: 100
+  learning_rate: 0.0005
+  batch_size: 128
+  beta: 1.0
+  beta_start: 0.0
+  beta_end: 1.0
+  kl_warmup_epochs: 10
+  lambda_perceptual: 0.0
+  # gamma is set by the cross-entropy, which only bites well above 1; the anchor KL
+  # opens near 50 nats per dimension, so anchor_weight scales it back to roughly the
+  # same footing. Tune against acc/digit and anchor_rmse/{fg,bg} in wandb.
+  gamma_start: 0.0
+  gamma_end: 10.0
+  anchor_weight: 0.1
+  classifier_warmup_epochs: 10

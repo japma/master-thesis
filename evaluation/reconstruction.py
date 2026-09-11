@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
 from dataset_loaders.colour_mnist import TABLE_SHAPE
@@ -15,7 +16,7 @@ from evaluation.colour import (
     foreground_colour,
     nearest_palette_index,
 )
-from models.autoencoder import AbstractAutoencoder
+from models.autoencoder import AbstractAutoencoder, VariationalAutoencoder
 
 
 @dataclass
@@ -113,3 +114,65 @@ def run_combination_probe(
         bg_drift=bg_drift,
         fg_drift=fg_drift,
     )
+
+
+@torch.no_grad()
+def reconstruction_summary(
+    ae: AbstractAutoencoder,
+    loader: DataLoader,
+    device: torch.device,
+    classifier=None,
+) -> dict[str, float]:
+    """The cost side of the comparison: what an autoencoder gives up, in one pass.
+
+    The ELBO terms are the same quantities training logs (`recon` is a per-image BCE sum,
+    `kl` is in nats), so a number here is comparable with a wandb curve. `digit/real` is
+    the judge's accuracy on the *inputs*, i.e. the ceiling `digit/recon` is chasing.
+    """
+    ae.eval()
+    totals: dict[str, float] = dict.fromkeys(
+        ("mse", "bce", "kl", "bg_accuracy", "fg_accuracy", "digit_recon", "digit_real"),
+        0.0,
+    )
+    seen = 0
+
+    for images, targets in loader:
+        images = images.to(device, non_blocking=True)
+        digits = targets[:, 0].to(device) if targets.ndim > 1 else targets.to(device)
+
+        if isinstance(ae, VariationalAutoencoder):
+            mu, log_var = ae.encode_distribution(images)
+            totals["kl"] += float(
+                (-0.5 * (1 + log_var - mu.pow(2) - log_var.exp())).sum(dim=1).sum()
+            )
+        else:
+            mu = ae.encode(images)
+        recon = ae.decode(mu)
+
+        totals["mse"] += float((recon - images).pow(2).mean(dim=(1, 2, 3)).sum())
+        totals["bce"] += float(
+            F.binary_cross_entropy(recon, images, reduction="none")
+            .flatten(1)
+            .sum(dim=1)
+            .sum()
+        )
+        totals["bg_accuracy"] += float(
+            (nearest_palette_index(border_colour(recon), BG_PALETTE) == targets[:, 2].numpy()).sum()
+        )
+        totals["fg_accuracy"] += float(
+            (
+                nearest_palette_index(foreground_colour(images, recon), FG_PALETTE)
+                == targets[:, 1].numpy()
+            ).sum()
+        )
+        if classifier is not None:
+            totals["digit_recon"] += float((classifier.predict(recon) == digits).sum())
+            totals["digit_real"] += float((classifier.predict(images) == digits).sum())
+        seen += images.shape[0]
+
+    summary = {key: value / seen for key, value in totals.items()}
+    summary["elbo"] = summary["bce"] + summary["kl"]
+    if classifier is None:
+        summary["digit_recon"] = float("nan")
+        summary["digit_real"] = float("nan")
+    return summary

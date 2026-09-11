@@ -14,7 +14,10 @@ from torch.utils.data import DataLoader
 
 from dataset_loaders.colour_mnist import NUM_DIGITS
 
-CLASSIFIER_PATH = Path("checkpoints") / "digit_classifier_colour_mnist.pt"
+# Anchored to the project root, not the working directory: the judge is loaded from
+# scripts (run from the root) and from notebooks (run from notebooks/) alike.
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+CLASSIFIER_PATH = PROJECT_ROOT / "checkpoints" / "digit_classifier_colour_mnist.pt"
 
 
 class DigitClassifier(nn.Module):

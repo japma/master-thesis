@@ -8,11 +8,13 @@ from torchinfo import summary
 
 import wandb
 from dataset_loaders import build_data_loaders
-from models import SupervisedVAE, VariationalAutoencoder
+from models import AnchoredVAE, SupervisedVAE, VariationalAutoencoder
 from training.loop import CheckpointSpec, run_training_loop
+from training.losses.anchored_vae import AnchoredVAELoss
 from training.losses.supervised_vae import SupervisedVAELoss
 from training.losses.tcvae import BetaTCVAELoss
 from training.losses.vae import VAELoss
+from training.objectives.anchored_vae import AnchoredVAEObjective
 from training.objectives.beta_vae import BetaVAEObjective
 from training.objectives.supervised_vae import SupervisedVAEObjective
 from training.objectives.tcvae import TCVAEObjective
@@ -42,10 +44,11 @@ def main() -> None:
     wandb_cfg = cfg.wandb
 
     supervised = autoencoder_cfg.model_type is AutoencoderType.SUPERVISED
-    if supervised and training_cfg.vae_type is not VAETrainingType.BETA:
+    anchored = autoencoder_cfg.model_type is AutoencoderType.ANCHORED
+    if (supervised or anchored) and training_cfg.vae_type is not VAETrainingType.BETA:
         raise ValueError(
-            f"model_type=supervised is only wired up for vae_type=beta, got "
-            f"{training_cfg.vae_type}"
+            f"model_type={autoencoder_cfg.model_type} is only wired up for "
+            f"vae_type=beta, got {training_cfg.vae_type}"
         )
 
     seed = seed_everything(cfg_seed)
@@ -54,8 +57,8 @@ def main() -> None:
     dataset_name = dataset_cfg.name
     model_name = f"autoencoder_{dataset_name}"
     run_name = f"{model_name}_{training_cfg.vae_type}"
-    if supervised:
-        run_name = f"{run_name}_supervised"
+    if supervised or anchored:
+        run_name = f"{run_name}_{autoencoder_cfg.model_type}"
 
     init_run(wandb_cfg, run_name, cfg.model_dump())
 
@@ -73,13 +76,15 @@ def main() -> None:
                 f"--resume given but no checkpoint found at {ae_ckpt_path}; "
                 "starting from scratch"
             )
-        ae = (
-            SupervisedVAE(config=autoencoder_cfg)
-            if supervised
-            else VariationalAutoencoder(config=autoencoder_cfg)
-        ).to(device)
+        if supervised:
+            ae = SupervisedVAE(config=autoencoder_cfg).to(device)
+        elif anchored:
+            ae = AnchoredVAE(config=autoencoder_cfg).to(device)
+        else:
+            ae = VariationalAutoencoder(config=autoencoder_cfg).to(device)
     assert isinstance(ae, VariationalAutoencoder)
     assert not supervised or isinstance(ae, SupervisedVAE)
+    assert not anchored or isinstance(ae, AnchoredVAE)
     print("Autoencoder Architecture:")
     summary(ae)
 
@@ -120,28 +125,47 @@ def main() -> None:
             lambda_perceptual=training_cfg.lambda_perceptual,
         ).to(device)
 
-        if supervised:
+        if supervised or anchored:
             supervision = autoencoder_cfg.supervision
             assert supervision is not None
-            # Held at gamma_start until the KL warmup is over, so the heads only start
-            # pulling on a latent that already means something.
+            # Held at gamma_start until the KL warmup is over, so supervision only
+            # starts pulling on a latent that already means something.
             gamma_scheduler = BetaAnnealingScheduler(
                 beta_start=training_cfg.gamma_start,
                 beta_end=training_cfg.gamma_end,
                 num_steps=len(train_loader) * training_cfg.classifier_warmup_epochs,
                 delay_steps=len(train_loader) * training_cfg.kl_warmup_epochs,
             )
-            objective = SupervisedVAEObjective(
-                model=ae,
-                optimizer=optimizer,
-                lr_scheduler=lr_scheduler,
-                loss_fn=SupervisedVAELoss(
-                    loss_fn, gamma=training_cfg.gamma_end
-                ).to(device),
-                beta_scheduler=beta_scheduler,
-                gamma_scheduler=gamma_scheduler,
-                factor_names=supervision.factor_names,
-            )
+            if anchored:
+                assert isinstance(ae, AnchoredVAE)
+                objective = AnchoredVAEObjective(
+                    model=ae,
+                    optimizer=optimizer,
+                    lr_scheduler=lr_scheduler,
+                    loss_fn=AnchoredVAELoss(
+                        loss_fn,
+                        supervision=supervision,
+                        latent_dim=autoencoder_cfg.latent_dim,
+                        gamma=training_cfg.gamma_end,
+                        anchor_weight=training_cfg.anchor_weight,
+                    ).to(device),
+                    beta_scheduler=beta_scheduler,
+                    gamma_scheduler=gamma_scheduler,
+                    factor_names=supervision.factor_names,
+                )
+            else:
+                assert isinstance(ae, SupervisedVAE)
+                objective = SupervisedVAEObjective(
+                    model=ae,
+                    optimizer=optimizer,
+                    lr_scheduler=lr_scheduler,
+                    loss_fn=SupervisedVAELoss(
+                        loss_fn, gamma=training_cfg.gamma_end
+                    ).to(device),
+                    beta_scheduler=beta_scheduler,
+                    gamma_scheduler=gamma_scheduler,
+                    factor_names=supervision.factor_names,
+                )
         else:
             objective = BetaVAEObjective(
                 model=ae,

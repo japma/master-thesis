@@ -1,0 +1,45 @@
+# Every factor anchored, digits included.
+#
+# Digits get a one-hot block: ten classes on ten mutually orthogonal unit vectors, which
+# is the anchor geometry that does *not* claim 3 sits between 2 and 4. It costs
+# dimensions -- hence latent_dim 20 rather than the 16 the other colour-MNIST
+# autoencoders use, so that 4 stay free for style -- and it is the variant to watch for
+# the failure mode anchoring invites: a block so tightly clamped that the decoder snaps
+# to the ten codes it saw and anything between them is noise.
+#
+# Note the latent_dim difference when comparing against colour_mnist_uniform_anchored:
+# the colour blocks are identical, the digit block and the style budget are not.
+
+type: ae
+
+dataset:
+  name: colour_mnist_uniform
+
+model:
+  model_type: anchored
+  latent_dim: 20
+  num_blocks: 2
+  base_channels: 32
+  # Targets are [digit, fg, bg]; 4 of the 20 dimensions stay free for style.
+  supervision:
+    names: [digit, fg, bg]
+    dims: [10, 3, 3]
+    cardinalities: [10, 6, 3]
+    anchors: [onehot, colour_mnist_fg, colour_mnist_bg]
+    anchor_std: 0.1
+
+training:
+  vae_type: beta
+  epochs: 100
+  learning_rate: 0.0005
+  batch_size: 128
+  beta: 1.0
+  beta_start: 0.0
+  beta_end: 1.0
+  kl_warmup_epochs: 10
+  lambda_perceptual: 0.0
+  # No cross-entropy left to balance against, so gamma weights the anchor KL directly.
+  gamma_start: 0.0
+  gamma_end: 1.0
+  anchor_weight: 1.0
+  classifier_warmup_epochs: 10

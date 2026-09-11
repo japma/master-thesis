@@ -6,6 +6,7 @@ regardless of which module `X` lives in.
 
 from utils.config.autoencoder import (
     AERunConfig,
+    AnchorScheme,
     AutoencoderConfig,
     AutoencoderTrainingConfig,
     AutoencoderType,
@@ -60,6 +61,7 @@ __all__ = [
     "WANDB_ENTITY",
     "WANDB_PROJECT",
     "AERunConfig",
+    "AnchorScheme",
     "AutoencoderConfig",
     "AutoencoderTrainingConfig",
     "AutoencoderType",
