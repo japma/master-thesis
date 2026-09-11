@@ -20,7 +20,7 @@ from utils.checkpoints import (
 from utils.compilation import maybe_compile
 from utils.config import JointPCRunConfig, load_config
 from utils.reproducibility import resolve_device, seed_everything
-from utils.wandb_utils import init_run, load_from_wandb
+from utils.wandb_utils import download_artifact, init_run
 
 
 def _build_sample_labels(
@@ -48,14 +48,14 @@ def main() -> None:
     init_run(cfg.wandb, run_name, cfg.model_dump())
 
     ae_cfg = cfg.autoencoder
+    ae_artifact: str | None = None
     if ae_cfg.external:
         ae = PretrainedVAE(
             name=ae_cfg.name, height=dataset_cfg.height, width=dataset_cfg.width
         )
     else:
-        ae = load_ae_from_path(
-            load_from_wandb(ckpt_name=ae_cfg.name, tag=ae_cfg.tag), device=device
-        )
+        ae_path, ae_artifact = download_artifact(ckpt_name=ae_cfg.name, tag=ae_cfg.tag)
+        ae = load_ae_from_path(ae_path, device=device)
     ae = ae.to(device)
 
     if ae.get_latent_dim().numel() != model_cfg.num_latents:
@@ -112,6 +112,7 @@ def main() -> None:
         autoencoder=ae,
         optimizer=optimizer,
         lr_scheduler=scheduler,
+        source_artifact=ae_artifact,
     )
 
     rtpt = RTPT(

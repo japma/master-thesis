@@ -22,6 +22,7 @@ class CSPNObjective(AbstractObjective):
         optimizer: torch.optim.Optimizer,
         lr_scheduler: torch.optim.lr_scheduler.LRScheduler,
         label_pc: LabelPC | None = None,
+        source_artifact: str | None = None,
     ) -> None:
         super().__init__()
         self.model = model
@@ -30,6 +31,9 @@ class CSPNObjective(AbstractObjective):
         self.optimizer = optimizer
         self.lr_scheduler = lr_scheduler
         self.label_pc = label_pc
+        # Recorded in the checkpoint so the pairing outlives wandb; see
+        # utils.checkpoints.SOURCE_ARTIFACT_KEY.
+        self.source_artifact = source_artifact
         self.loss_fn = NLLLoss()
 
     def train_step(self, batch: Batch) -> StepOutput:
@@ -100,4 +104,4 @@ class CSPNObjective(AbstractObjective):
         return self.sample(labels)
 
     def save_checkpoint(self, path: Path) -> None:
-        save_cspn(self.model, path)
+        save_cspn(self.model, path, source_artifact=self.source_artifact)

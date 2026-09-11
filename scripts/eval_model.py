@@ -39,8 +39,9 @@ from utils.checkpoints import (
     load_cspn_from_path,
     load_joint_pc_from_path,
     load_nn_baseline_from_path,
+    read_source_artifact,
 )
-from utils.wandb_utils import load_from_wandb
+from utils.wandb_utils import download_artifact, load_from_wandb, trained_with
 
 DATA_ROOT = "data"
 
@@ -75,7 +76,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", required=True, choices=sorted(MODEL_LOADERS))
     parser.add_argument("--name", required=True, help="checkpoint artifact name")
-    parser.add_argument("--ae", default="variational_colour_mnist_uniform")
+    parser.add_argument(
+        "--ae",
+        default=None,
+        help="autoencoder artifact; by default the one this model was trained with, "
+        "resolved from wandb lineage and then from the checkpoint itself",
+    )
     parser.add_argument("--tag", default="latest")
     parser.add_argument("--variant", default=DEFAULT_VARIANT)
     parser.add_argument("--split", default="test")
@@ -97,10 +103,26 @@ def main() -> None:
     device = resolve_device()
     wanted = [m for m in ALL_METRICS if m not in args.skip]
 
-    model = MODEL_LOADERS[args.model](
-        load_from_wandb(args.name, args.tag), device=device
+    model_path, _ = download_artifact(args.name, args.tag)
+    model = MODEL_LOADERS[args.model](model_path, device=device).to(device)
+
+    # Scoring a model against an autoencoder other than the one that produced its
+    # training latents is silent -- the latent dims still line up -- so the pairing is
+    # looked up rather than defaulted.
+    ae_artifact = (
+        args.ae
+        or trained_with(args.name, args.tag)
+        or read_source_artifact(model_path)
+    )
+    if ae_artifact is None:
+        parser.error(
+            f"could not work out which autoencoder {args.name}:{args.tag} was trained "
+            "with -- pass --ae explicitly"
+        )
+    print(f"Autoencoder: {ae_artifact}")
+    ae = load_ae_from_path(
+        load_from_wandb(ae_artifact, args.tag), device=device
     ).to(device)
-    ae = load_ae_from_path(load_from_wandb(args.ae, args.tag), device=device).to(device)
 
     test_loader = build_loader(args.variant, args.split, args.batch_size)
 
@@ -124,7 +146,7 @@ def main() -> None:
         density_metrics.append(LabelDiscrimination())
 
     print(
-        f"\n{args.model} {args.name}:{args.tag} -> {args.ae}:{args.tag} | "
+        f"\n{args.model} {args.name}:{args.tag} -> {ae_artifact} | "
         f"{args.variant}/{args.split} | {args.samples} samples per combination | "
         f"std_correction={args.std_correction} | device={device}\n"
     )

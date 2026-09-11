@@ -41,8 +41,21 @@ def log_images(key: str, images: torch.Tensor, step: int) -> None:
     wandb.log({key: [wandb.Image(img) for img in images_u8]}, step=step)
 
 
-def load_from_wandb(ckpt_name: str, tag: str = "latest") -> Path:
-    """Load a checkpoint from wandb artifacts. Uses the most recent checkpoint unless tag is provided.
+def _qualified(ckpt_name: str, tag: str) -> str:
+    """Full artifact path. A `ckpt_name` that already names a version (`foo:v3`) keeps
+    it, so a reference resolved from lineage survives a round trip through here."""
+    name = ckpt_name if ":" in ckpt_name else f"{ckpt_name}:{tag}"
+    return f"{ENTITY}/{PROJECT}/{name}"
+
+
+def artifact_ref(artifact) -> str:
+    """`name:version` -- the version-pinned reference, never `:latest`."""
+    name = str(artifact.name)
+    return name if ":" in name else f"{name}:{artifact.version}"
+
+
+def download_artifact(ckpt_name: str, tag: str = "latest") -> tuple[Path, str]:
+    """The downloaded checkpoint file and the exact `name:version` it came from.
 
     Works with or without an active run (no `wandb.init()` needed for standalone inference/notebook
     use). If a run is actually tracking to the server, uses `run.use_artifact` so the run's lineage
@@ -53,7 +66,7 @@ def load_from_wandb(ckpt_name: str, tag: str = "latest") -> Path:
     already-downloaded one on disk.
     """
     print(f"Loading checkpoint {ckpt_name}:{tag} from Weights & Biases artifacts...")
-    name = f"{ENTITY}/{PROJECT}/{ckpt_name}:{tag}"
+    name = _qualified(ckpt_name, tag)
     run = wandb.run
     if run is not None and not run.disabled and not run.offline:
         artifact = run.use_artifact(name)
@@ -66,4 +79,57 @@ def load_from_wandb(ckpt_name: str, tag: str = "latest") -> Path:
     )
     file = files[0]
     print(f"Loaded {file} from Weights & Biases artifact {name}")
-    return file
+    return file, artifact_ref(artifact)
+
+
+def load_from_wandb(ckpt_name: str, tag: str = "latest") -> Path:
+    """Load a checkpoint from wandb artifacts. Uses the most recent checkpoint unless tag is provided."""
+    return download_artifact(ckpt_name, tag)[0]
+
+
+def trained_with(
+    ckpt_name: str, tag: str = "latest", artifact_type: str = "autoencoder"
+) -> str | None:
+    """The `name:version` of the `artifact_type` artifact that `ckpt_name:tag` was
+    trained against, or None if it cannot be established.
+
+    A training run consumes its autoencoder through `download_artifact`, which records
+    the dependency via `run.use_artifact`, so the run that logged a PC checkpoint knows
+    exactly which autoencoder version produced its latents. Falls back to the run's
+    stored config, which names the autoencoder but not the version it resolved to --
+    the caller is told which of the two answered.
+    """
+    try:
+        artifact = wandb.Api().artifact(_qualified(ckpt_name, tag))
+        run = artifact.logged_by()
+    except Exception as error:  # offline, deleted run, no such artifact
+        print(f"Could not reach the wandb lineage for {ckpt_name}:{tag}: {error}")
+        return None
+
+    if run is None:
+        print(f"Artifact {ckpt_name}:{tag} has no run to trace its inputs to")
+        return None
+
+    used = [a for a in run.used_artifacts() if a.type == artifact_type]
+    if len(used) > 1:
+        print(
+            f"Run {run.name} consumed {len(used)} {artifact_type} artifacts "
+            f"({', '.join(artifact_ref(a) for a in used)}); taking the first"
+        )
+    if used:
+        ref = artifact_ref(used[0])
+        print(f"{ckpt_name}:{tag} was trained with {ref} (wandb lineage)")
+        return ref
+
+    # Runs from before the dependency was recorded, and the `external: true`
+    # autoencoders that never become artifacts at all.
+    configured = run.config.get(artifact_type, {})
+    name = configured.get("name") if isinstance(configured, dict) else None
+    if name is None:
+        print(f"Run {run.name} records no {artifact_type} input or config entry")
+        return None
+    print(
+        f"{ckpt_name}:{tag} names {name} in its run config, but did not record which "
+        "version it used -- falling back to the configured tag"
+    )
+    return str(name)

@@ -31,7 +31,7 @@ from utils.config import (
     load_config,
 )
 from utils.reproducibility import resolve_device, seed_everything
-from utils.wandb_utils import init_run, load_from_wandb
+from utils.wandb_utils import download_artifact, init_run
 
 
 def _themed_multi_binary_labels(
@@ -86,7 +86,7 @@ def _load_label_pc(
 
     path: Path | None = None
     try:
-        path = load_from_wandb(ckpt_name=artifact_name, tag=tag)
+        path, _ = download_artifact(ckpt_name=artifact_name, tag=tag)
     except Exception as error:
         print(
             f"Could not load LabelPC artifact {artifact_name}:{tag} from wandb ({error})"
@@ -181,12 +181,13 @@ def main() -> None:
     init_run(wandb_cfg, run_name, cfg.model_dump())
 
     ae_cfg = cfg.autoencoder
+    ae_artifact: str | None = None
     if ae_cfg.external:
         ae = PretrainedVAE(
             name=ae_cfg.name, height=dataset_cfg.height, width=dataset_cfg.width
         )
     else:
-        ae_path = load_from_wandb(ckpt_name=ae_cfg.name, tag=ae_cfg.tag)
+        ae_path, ae_artifact = download_artifact(ckpt_name=ae_cfg.name, tag=ae_cfg.tag)
         ae = load_ae_from_path(ae_path, device=device)
     ae = ae.to(device)
 
@@ -246,6 +247,7 @@ def main() -> None:
         optimizer=optimizer,
         lr_scheduler=scheduler,
         label_pc=label_pc,
+        source_artifact=ae_artifact,
     )
 
     rtpt = RTPT(

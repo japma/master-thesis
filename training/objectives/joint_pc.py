@@ -9,4 +9,4 @@ class JointPCObjective(CSPNObjective):
     the encoded batch -- so only the checkpoint format differs."""
 
     def save_checkpoint(self, path: Path) -> None:
-        save_joint_pc(self.model, path)
+        save_joint_pc(self.model, path, source_artifact=self.source_artifact)

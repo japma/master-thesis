@@ -16,6 +16,7 @@ class NeuralBaselineObjective(AbstractObjective):
         autoencoder: AbstractAutoencoder,
         optimizer: torch.optim.Optimizer,
         lr_scheduler: torch.optim.lr_scheduler.LRScheduler,
+        source_artifact: str | None = None,
     ) -> None:
         super().__init__()
         self.model = model
@@ -23,6 +24,9 @@ class NeuralBaselineObjective(AbstractObjective):
         self.autoencoder.eval()
         self.optimizer = optimizer
         self.lr_scheduler = lr_scheduler
+        # Recorded in the checkpoint so the pairing outlives wandb; see
+        # utils.checkpoints.SOURCE_ARTIFACT_KEY.
+        self.source_artifact = source_artifact
         self.loss_fn = NLLLoss()
 
     def train_step(self, batch: Batch) -> StepOutput:
@@ -62,4 +66,4 @@ class NeuralBaselineObjective(AbstractObjective):
         return self.autoencoder.decode(self.model.sample(samples.long()))
 
     def save_checkpoint(self, path: Path) -> None:
-        save_nn_baseline(self.model, path)
+        save_nn_baseline(self.model, path, source_artifact=self.source_artifact)

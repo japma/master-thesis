@@ -147,7 +147,7 @@ if [[ ${#FAILED[@]} -eq 0 ]]; then
     echo "All runs finished."
     echo
     echo "Next: uv run eval_model --model cspn --name psinet_colour_mnist_<variant> \\"
-    echo "         --ae variational_colour_mnist_<variant> --variant <variant>"
+    echo "         --variant <variant>   # --ae is resolved from the run's lineage"
 else
     echo "${#FAILED[@]} run(s) failed:"
     printf '  %s\n' "${FAILED[@]}"

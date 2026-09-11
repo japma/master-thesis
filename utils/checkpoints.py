@@ -154,7 +154,34 @@ def load_ae_from_path(path: Path, device=None) -> AbstractAutoencoder:
 
 
 # --- CSPN ---
-def save_cspn(model: AbstractCSPN, path: Path) -> None:
+# The autoencoder artifact a latent-space model was trained against, stored inside its
+# own checkpoint so the pairing survives without wandb -- a local file, an offline box,
+# a run whose lineage was never recorded. `utils.wandb_utils.trained_with` is the same
+# answer read off the server instead.
+SOURCE_ARTIFACT_KEY = "source_artifact"
+
+
+def read_source_artifact(path: Path) -> str | None:
+    """The `name:version` of the autoencoder `path` was trained with, if it recorded
+    one. Checkpoints written before this existed simply have no entry."""
+    with torch.serialization.safe_globals(
+        [
+            networkx.classes.digraph.DiGraph,
+            DistributionVector,
+            EiNetAddress,
+            Product,
+            numpy._core.multiarray.scalar,
+            numpy.dtype,
+        ]
+    ):
+        ckpt = torch.load(path, map_location="cpu", weights_only=False)
+    source = ckpt.get(SOURCE_ARTIFACT_KEY)
+    return str(source) if source else None
+
+
+def save_cspn(
+    model: AbstractCSPN, path: Path, source_artifact: str | None = None
+) -> None:
     model = uncompiled(model)
     path.parent.mkdir(parents=True, exist_ok=True)
     graph = getattr(model, "graph", None)
@@ -169,6 +196,7 @@ def save_cspn(model: AbstractCSPN, path: Path) -> None:
             "model_cfg": model.get_config(),
             "model_state": model.state_dict(),
             "graph": model.get_graph(),
+            SOURCE_ARTIFACT_KEY: source_artifact,
         },
         path,
     )
@@ -202,11 +230,17 @@ def load_cspn_from_path(path: Path, device=None) -> AbstractCSPN:
 
 
 # --- Neural baseline ---
-def save_nn_baseline(model: AbstractNeuralBaseline, path: Path) -> None:
+def save_nn_baseline(
+    model: AbstractNeuralBaseline, path: Path, source_artifact: str | None = None
+) -> None:
     model = uncompiled(model)
     path.parent.mkdir(parents=True, exist_ok=True)
     torch.save(
-        {"model_cfg": model.get_config(), "model_state": model.state_dict()},
+        {
+            "model_cfg": model.get_config(),
+            "model_state": model.state_dict(),
+            SOURCE_ARTIFACT_KEY: source_artifact,
+        },
         path,
     )
     print("Saved neural baseline checkpoint to", path)
@@ -271,7 +305,9 @@ def joint_pc_checkpoint_path(dataset_name: str) -> Path:
     return Path("checkpoints") / f"joint_pc_{dataset_name}.pt"
 
 
-def save_joint_pc(model: AbstractCSPN, path: Path) -> None:
+def save_joint_pc(
+    model: AbstractCSPN, path: Path, source_artifact: str | None = None
+) -> None:
     model = uncompiled(model)
     path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -282,6 +318,7 @@ def save_joint_pc(model: AbstractCSPN, path: Path) -> None:
             "model_cfg": model.get_config(),
             "model_state": model.state_dict(),
             "graph": model.get_graph(),
+            SOURCE_ARTIFACT_KEY: source_artifact,
         },
         path,
     )
