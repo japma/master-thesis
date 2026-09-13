@@ -22,8 +22,8 @@ from evaluation import (
     all_combinations,
     run_eval_suite,
 )
+from evaluation.batch import EvalBatch
 from evaluation.classifier import DigitClassifier
-from evaluation.harness import DensityBatch, SampleBatch
 
 NUM_LATENTS = 4
 NUM_COMBINATIONS = 180
@@ -85,8 +85,8 @@ class PaintingDecoder(nn.Module):
         raise NotImplementedError
 
 
-def sample_batch(labels: torch.Tensor, jitter: float = 0.0) -> SampleBatch:
-    return SampleBatch(
+def sample_batch(labels: torch.Tensor, jitter: float = 0.0) -> EvalBatch:
+    return EvalBatch(
         images=painted(labels, noise=jitter),
         latents=labels.float(),
         labels=labels,
@@ -111,7 +111,7 @@ def test_colour_fidelity_catches_a_swapped_palette() -> None:
 
     metric = ColourFidelity()
     metric.update(
-        SampleBatch(images=painted(wrong), latents=labels.float(), labels=labels)
+        EvalBatch(images=painted(wrong), latents=labels.float(), labels=labels)
     )
     assert np.nanmax(metric.compute().tables["bg_accuracy"]) == 0.0
 
@@ -128,7 +128,7 @@ def test_diversity_is_zero_for_a_point_predictor_and_positive_otherwise() -> Non
     torch.manual_seed(0)
     varied = SampleDiversity(samples_per_combination=4)
     varied.update(
-        SampleBatch(
+        EvalBatch(
             images=painted(labels, noise=0.2),
             latents=labels.float() + torch.randn(labels.shape[0], 3),
             labels=labels,
@@ -186,11 +186,11 @@ def test_latent_plausibility_grows_with_distance_from_the_reference() -> None:
     near = torch.zeros(6, NUM_LATENTS)
     far = torch.full((6, NUM_LATENTS), 8.0)
 
-    metric.update(SampleBatch(images=painted(labels), latents=near, labels=labels))
+    metric.update(EvalBatch(images=painted(labels), latents=near, labels=labels))
     close = np.nanmean(metric.compute().tables["mahalanobis"])
 
     metric = LatentPlausibility(reference)
-    metric.update(SampleBatch(images=painted(labels), latents=far, labels=labels))
+    metric.update(EvalBatch(images=painted(labels), latents=far, labels=labels))
     distant = np.nanmean(metric.compute().tables["mahalanobis"])
 
     assert distant > close
@@ -201,7 +201,7 @@ def test_test_log_likelihood_reports_the_negative_log_prob() -> None:
     labels = all_combinations()[:6]
     metric = NegativeLogLikelihood()
     metric.update(
-        DensityBatch(
+        EvalBatch(
             latents=torch.zeros(6, NUM_LATENTS),
             labels=labels,
             log_prob=torch.full((6,), -2.5),
@@ -219,7 +219,7 @@ def test_label_discrimination_is_perfect_when_the_density_identifies_the_label()
 
     metric = LabelDiscrimination()
     metric.update(
-        DensityBatch(
+        EvalBatch(
             latents=latents,
             labels=labels,
             log_prob=model(latents, labels),
@@ -235,7 +235,7 @@ def test_label_discrimination_is_at_chance_for_an_unconditional_density() -> Non
     labels = all_combinations()
     metric = LabelDiscrimination()
     metric.update(
-        DensityBatch(
+        EvalBatch(
             latents=torch.zeros(len(labels), NUM_LATENTS),
             labels=labels,
             log_prob=torch.zeros(len(labels)),

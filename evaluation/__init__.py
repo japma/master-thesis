@@ -7,6 +7,7 @@ from evaluation.aggregate import (
     per_image_seen,
     weighted_mean,
 )
+from evaluation.batch import EvalBatch
 from evaluation.classifier import (
     DigitClassifier,
     load_digit_classifier,
@@ -21,16 +22,13 @@ from evaluation.colour import (
 )
 from evaluation.generation import GenerationProbe, run_generation_probe
 from evaluation.harness import (
-    DensityBatch,
-    DensityMetric,
     EvalReport,
+    Metric,
     MetricResult,
-    SampleBatch,
-    SampleMetric,
-    all_combinations,
-    run_density_metrics,
+    Pass,
+    PerCombination,
     run_eval_suite,
-    run_sample_metrics,
+    run_suite,
 )
 from evaluation.latent_probe import (
     FactorProbe,
@@ -60,27 +58,40 @@ from evaluation.samples import (
     sample_combination_grid,
     sample_for_label,
 )
+from evaluation.sources import (
+    DensitySource,
+    RealSource,
+    ReconstructionSource,
+    SampleSource,
+    Source,
+    all_combinations,
+)
 
 __all__ = [
     "BG_PALETTE",
     "FG_PALETTE",
     "ColourFidelity",
     "CombinationProbe",
-    "DensityBatch",
-    "DensityMetric",
+    "DensitySource",
     "DigitAccuracy",
     "DigitClassifier",
+    "EvalBatch",
     "EvalReport",
     "FactorProbe",
     "GenerationProbe",
     "LabelDiscrimination",
     "LatentPlausibility",
     "LatentReport",
+    "Metric",
     "MetricResult",
     "NegativeLogLikelihood",
-    "SampleBatch",
+    "Pass",
+    "PerCombination",
+    "RealSource",
+    "ReconstructionSource",
     "SampleDiversity",
-    "SampleMetric",
+    "SampleSource",
+    "Source",
     "all_combinations",
     "blocks_for",
     "border_colour",
@@ -99,10 +110,9 @@ __all__ = [
     "reconstruct",
     "reconstruction_summary",
     "run_combination_probe",
-    "run_density_metrics",
     "run_eval_suite",
     "run_generation_probe",
-    "run_sample_metrics",
+    "run_suite",
     "sample_combination_grid",
     "sample_for_label",
     "train_digit_classifier",

@@ -23,13 +23,12 @@ from torchvision import transforms
 from dataset_loaders.colour_mnist import DEFAULT_VARIANT, ColourMNIST, seen_mask
 from evaluation import (
     ColourFidelity,
-    DensityMetric,
     DigitAccuracy,
     LabelDiscrimination,
     LatentPlausibility,
+    Metric,
     NegativeLogLikelihood,
     SampleDiversity,
-    SampleMetric,
     load_digit_classifier,
     run_eval_suite,
 )
@@ -126,7 +125,7 @@ def main() -> None:
 
     test_loader = build_loader(args.variant, args.split, args.batch_size)
 
-    sample_metrics: list[SampleMetric] = []
+    sample_metrics: list[Metric] = []
     if "colour" in wanted:
         sample_metrics.append(ColourFidelity())
     if "digit" in wanted:
@@ -139,7 +138,7 @@ def main() -> None:
             LatentPlausibility(reference_latents(ae, train_loader, device))
         )
 
-    density_metrics: list[DensityMetric] = []
+    density_metrics: list[Metric] = []
     if "nll" in wanted:
         density_metrics.append(NegativeLogLikelihood())
     if "discrimination" in wanted:

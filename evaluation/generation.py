@@ -9,8 +9,9 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 
-from evaluation.harness import run_sample_metrics
+from evaluation.harness import Pass, run_suite
 from evaluation.metrics import ColourFidelity
+from evaluation.sources import SampleSource
 from models.autoencoder import AbstractAutoencoder
 
 
@@ -38,15 +39,22 @@ def run_generation_probe(
     combinations_per_chunk: int = 32,
 ) -> GenerationProbe:
     """Sample every (digit, fg, bg) combination and check the colours."""
-    tables, _, _ = run_sample_metrics(
-        model,
-        ae,
-        [ColourFidelity()],
-        device,
-        samples_per_combination=samples_per_combination,
-        std_correction=std_correction,
-        combinations_per_chunk=combinations_per_chunk,
+    report = run_suite(
+        [
+            Pass(
+                source=SampleSource(
+                    model,
+                    ae,
+                    device,
+                    samples_per_combination=samples_per_combination,
+                    std_correction=std_correction,
+                    combinations_per_chunk=combinations_per_chunk,
+                ),
+                metrics=[ColourFidelity()],
+            )
+        ]
     )
+    tables = report.tables
 
     return GenerationProbe(
         bg_accuracy=tables["colour/bg_accuracy"],
