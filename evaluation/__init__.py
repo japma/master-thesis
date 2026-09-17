@@ -1,4 +1,8 @@
-"""Everything that produces a number for the results section."""
+"""Everything that produces a number for the results section.
+
+    metrics.py   the math: tensors in, one value per image out
+    collect.py   the loops: run models, call metrics, return DataFrames
+"""
 
 from evaluation.aggregate import (
     combination_mean,
@@ -7,11 +11,25 @@ from evaluation.aggregate import (
     per_image_seen,
     weighted_mean,
 )
-from evaluation.batch import EvalBatch
 from evaluation.classifier import (
     DigitClassifier,
     load_digit_classifier,
     train_digit_classifier,
+)
+from evaluation.collect import (
+    ImageSet,
+    ModelEvaluation,
+    combination_table,
+    encode_images,
+    evaluate_model,
+    fit_latent_gaussian,
+    mark_seen,
+    predicted_digit_entropy,
+    reconstruct_images,
+    sample_images,
+    score_density,
+    score_images,
+    spread_by_combination,
 )
 from evaluation.colour import (
     BG_PALETTE,
@@ -20,16 +38,6 @@ from evaluation.colour import (
     foreground_colour,
     nearest_palette_index,
 )
-from evaluation.generation import GenerationProbe, run_generation_probe
-from evaluation.harness import (
-    EvalReport,
-    Metric,
-    MetricResult,
-    Pass,
-    PerCombination,
-    run_eval_suite,
-    run_suite,
-)
 from evaluation.latent_probe import (
     FactorProbe,
     LatentReport,
@@ -37,14 +45,6 @@ from evaluation.latent_probe import (
     encode_dataset,
     probe_factor,
     probe_latents,
-)
-from evaluation.metrics import (
-    ColourFidelity,
-    DigitAccuracy,
-    LabelDiscrimination,
-    LatentPlausibility,
-    NegativeLogLikelihood,
-    SampleDiversity,
 )
 from evaluation.reconstruction import (
     CombinationProbe,
@@ -58,63 +58,46 @@ from evaluation.samples import (
     sample_combination_grid,
     sample_for_label,
 )
-from evaluation.sources import (
-    DensitySource,
-    RealSource,
-    ReconstructionSource,
-    SampleSource,
-    Source,
-    all_combinations,
-)
 
 __all__ = [
     "BG_PALETTE",
     "FG_PALETTE",
-    "ColourFidelity",
     "CombinationProbe",
-    "DensitySource",
-    "DigitAccuracy",
     "DigitClassifier",
-    "EvalBatch",
-    "EvalReport",
     "FactorProbe",
-    "GenerationProbe",
-    "LabelDiscrimination",
-    "LatentPlausibility",
+    "ImageSet",
     "LatentReport",
-    "Metric",
-    "MetricResult",
-    "NegativeLogLikelihood",
-    "Pass",
-    "PerCombination",
-    "RealSource",
-    "ReconstructionSource",
-    "SampleDiversity",
-    "SampleSource",
-    "Source",
-    "all_combinations",
+    "ModelEvaluation",
     "blocks_for",
     "border_colour",
     "combination_mean",
+    "combination_table",
     "decode_samples",
     "encode_dataset",
+    "encode_images",
+    "evaluate_model",
+    "fit_latent_gaussian",
     "foreground_colour",
     "latent_mahalanobis",
     "latent_traversal",
     "load_digit_classifier",
     "marginals",
+    "mark_seen",
     "nearest_palette_index",
     "per_image_seen",
+    "predicted_digit_entropy",
     "probe_factor",
     "probe_latents",
     "reconstruct",
+    "reconstruct_images",
     "reconstruction_summary",
     "run_combination_probe",
-    "run_eval_suite",
-    "run_generation_probe",
-    "run_suite",
     "sample_combination_grid",
     "sample_for_label",
+    "sample_images",
+    "score_density",
+    "score_images",
+    "spread_by_combination",
     "train_digit_classifier",
     "weighted_mean",
 ]

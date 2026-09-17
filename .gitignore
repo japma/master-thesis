@@ -6,6 +6,7 @@ dist/
 wheels/
 *.egg-info
 results/
+eval_runs/
 /data/
 artifacts
 outputs/

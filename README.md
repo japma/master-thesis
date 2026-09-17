@@ -32,6 +32,33 @@ python train_cspn.py
 python visualize.py
 ```
 
+### Evaluation
+
+Two stages that communicate through `eval_runs/`. Stage 1 writes latents, labels and a
+manifest per run; stage 2 decodes them and upserts `results/metrics.csv`, one row per
+`(model, dataset, checkpoint, seed, metric_name, value)`. New metrics never need new samples.
+
+```bash
+# 1. the reference: real test images encoded through the VAE
+uv run generate_run real --variant uniform --split test \
+    --vae variational_colour_mnist_uniform:v1
+
+# 2. a model, sampled for exactly the reference's labels
+uv run generate_run model --model-type cspn --checkpoint psinet_colour_mnist_uniform:v1 \
+    --model-name cspn_std0.6 --std-correction 0.6 --seed 0 \
+    --vae variational_colour_mnist_uniform:v1 \
+    --reference eval_runs/colour_mnist_uniform_test__real__seed0
+
+# 3. metrics
+uv run evaluate_run --run eval_runs/colour_mnist_uniform_test__cspn_std0.6__seed0 \
+    --reference eval_runs/colour_mnist_uniform_test__real__seed0 --metrics fid
+```
+
+Checkpoints are always wandb artifacts (`name` or `name:version`); manifests record the
+exact version they resolved to. FID uses torchmetrics 1.9.0 with
+torch-fidelity 0.4.0's `inception-v3-compat` weights
+(`weights-inception-2015-12-05-6726825d.pth`), downloaded to `$TORCH_HOME` on first use.
+
 ## Configuration
 
 All configuration is handled through YAML files located in `configs/`:

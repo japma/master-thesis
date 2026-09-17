@@ -70,6 +70,24 @@ def seen_mask(root: str | Path, variant: str = DEFAULT_VARIANT) -> np.ndarray:
     return mask
 
 
+def all_combinations() -> torch.Tensor:
+    """Every (digit, fg, bg) triple, shape `(180, 3)`, in the order `TABLE_SHAPE` flattens."""
+    return torch.tensor(
+        [
+            [digit, fg, bg]
+            for digit in range(NUM_DIGITS)
+            for fg in range(NUM_FG)
+            for bg in range(NUM_BG)
+        ],
+        dtype=torch.long,
+    )
+
+
+def combination_index(labels: torch.Tensor) -> torch.Tensor:
+    """Row of each `(digit, fg, bg)` label in `all_combinations()`."""
+    return labels[:, 0] * NUM_FG * NUM_BG + labels[:, 1] * NUM_BG + labels[:, 2]
+
+
 class ColourMNIST(Dataset):
     """MNIST digits tinted with a (foreground, background) colour pair.
 

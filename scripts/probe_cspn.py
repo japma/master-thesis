@@ -23,13 +23,22 @@ import argparse
 
 import numpy as np
 import torch
+from torch.utils.data import DataLoader
+from torchvision import transforms
 
 from dataset_loaders.colour_mnist import (
     DEFAULT_VARIANT,
     NUM_DIGITS,
+    ColourMNIST,
     seen_mask,
 )
-from evaluation import run_generation_probe, weighted_mean
+from evaluation import (
+    combination_table,
+    fit_latent_gaussian,
+    load_digit_classifier,
+    sample_images,
+    score_images,
+)
 from utils import resolve_device
 from utils.checkpoints import (
     load_ae_from_path,
@@ -92,7 +101,13 @@ def main() -> None:
     ).to(device)
 
     seen = seen_mask(DATA_ROOT, args.variant)
-    counts = np.full(seen.shape, float(args.samples))
+    train = ColourMNIST(
+        root=DATA_ROOT,
+        split="train",
+        variant=args.variant,
+        transform=transforms.Compose([transforms.ToTensor()]),
+    )
+    latent_gaussian = fit_latent_gaussian(ae, DataLoader(train, batch_size=256), device)
 
     print(
         f"\n{args.model_type} {args.cspn}:{args.tag} -> {ae_artifact} | "
@@ -100,13 +115,19 @@ def main() -> None:
         f"std_correction={args.std_correction} | device={device}\n"
     )
 
-    probe = run_generation_probe(
+    samples = sample_images(
         cspn,
         ae,
         device,
         samples_per_combination=args.samples,
         std_correction=args.std_correction,
     )
+    frame = score_images(
+        samples, load_digit_classifier(device=device), latent_gaussian, device
+    )
+    bg_accuracy = combination_table(frame, "bg_accuracy")
+    fg_accuracy = combination_table(frame, "fg_accuracy")
+    contrast = combination_table(frame, "contrast")
 
     print("within-digit: generated held-out combinations vs that digit's trained ones")
     for digit in range(NUM_DIGITS):
@@ -114,12 +135,12 @@ def main() -> None:
         if not held.any():
             continue
         for label, table in (
-            ("background correct", probe.bg_accuracy[digit]),
-            ("foreground correct", probe.fg_accuracy[digit]),
-            ("fg/bg contrast", probe.contrast_table[digit]),
+            ("background correct", bg_accuracy[digit]),
+            ("foreground correct", fg_accuracy[digit]),
+            ("fg/bg contrast", contrast[digit]),
         ):
-            trained_value = weighted_mean(table, seen[digit], counts[digit])
-            held_value = weighted_mean(table, held, counts[digit])
+            trained_value = table[seen[digit]].mean()
+            held_value = table[held].mean()
             print(
                 f"  digit {digit}  {label:20s} trained {trained_value:7.3f}   "
                 f"held-out {held_value:7.3f}   ratio {held_value / trained_value:6.2f}x"
@@ -128,27 +149,23 @@ def main() -> None:
 
     print("reference: digits with no holdout, every combination trained")
     for label, table in (
-        ("background correct", probe.bg_accuracy),
-        ("foreground correct", probe.fg_accuracy),
-        ("fg/bg contrast", probe.contrast_table),
+        ("background correct", bg_accuracy),
+        ("foreground correct", fg_accuracy),
+        ("fg/bg contrast", contrast),
     ):
-        values = [
-            weighted_mean(table[d], seen[d], counts[d])
-            for d in range(NUM_DIGITS)
-            if seen[d].all()
-        ]
+        values = [table[d].mean() for d in range(NUM_DIGITS) if seen[d].all()]
         print(f"  {label:20s} {min(values):.3f} - {max(values):.3f}")
 
     print("\nworst generated combinations by background accuracy")
-    order = np.argsort(probe.bg_accuracy, axis=None)
+    order = np.argsort(bg_accuracy, axis=None)
     for flat in order[:10]:
-        digit, fg, bg = np.unravel_index(flat, probe.bg_accuracy.shape)
+        digit, fg, bg = np.unravel_index(flat, bg_accuracy.shape)
         mark = "held-out" if not seen[digit, fg, bg] else "trained "
         print(
             f"  digit {digit}  fg {fg}  bg {bg}  [{mark}]  "
-            f"bg {probe.bg_accuracy[digit, fg, bg]:.2f}  "
-            f"fg {probe.fg_accuracy[digit, fg, bg]:.2f}  "
-            f"contrast {probe.contrast_table[digit, fg, bg]:.3f}"
+            f"bg {bg_accuracy[digit, fg, bg]:.2f}  "
+            f"fg {fg_accuracy[digit, fg, bg]:.2f}  "
+            f"contrast {contrast[digit, fg, bg]:.3f}"
         )
 
     if args.no_figures:
@@ -157,12 +174,12 @@ def main() -> None:
     import matplotlib.pyplot as plt
 
     plot_combination_heatmap(
-        probe.bg_accuracy, ~seen, "generated background correct", vmin=0.0, vmax=1.0
+        bg_accuracy, ~seen, "generated background correct", vmin=0.0, vmax=1.0
     )
     plot_combination_heatmap(
-        probe.fg_accuracy, ~seen, "generated foreground correct", vmin=0.0, vmax=1.0
+        fg_accuracy, ~seen, "generated foreground correct", vmin=0.0, vmax=1.0
     )
-    plot_combination_heatmap(probe.contrast_table, ~seen, "generated fg/bg contrast")
+    plot_combination_heatmap(contrast, ~seen, "generated fg/bg contrast")
 
     with torch.no_grad():
         held = np.argwhere(~seen)

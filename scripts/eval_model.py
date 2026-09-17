@@ -1,4 +1,4 @@
-"""Run the evaluation suite on any latent-space model.
+"""Run the evaluation on any latent-space model.
 
 Anything exposing `sample(labels, std_correction)` and `forward(z, labels)` is fair
 game -- CSPN, JointPC, and both neural baselines -- so the numbers are comparable
@@ -7,31 +7,22 @@ across model families by construction.
     uv run eval_model --model cspn --name psinet_colour_mnist
     uv run eval_model --model nn_baseline --name nn_baseline_colour_mnist_uniform_mixture
     uv run eval_model --model joint_pc --name joint_pc_colour_mnist --variant skewed
-    uv run eval_model --model cspn --name X --skip digit   # no classifier trained yet
+    uv run eval_model --model cspn --name X --output results/X   # also write the frames
 
-Reads the held-out mask from the variant's train split, so every table is reported
-split into the combinations the model saw and the ones it never did.
+Samples are printed next to real test images (the reference) and their reconstructions
+(the ceiling the autoencoder allows).
 """
 
 import argparse
+from pathlib import Path
 
-import numpy as np
+import pandas as pd
 import torch
 from torch.utils.data import DataLoader
 from torchvision import transforms
 
 from dataset_loaders.colour_mnist import DEFAULT_VARIANT, ColourMNIST, seen_mask
-from evaluation import (
-    ColourFidelity,
-    DigitAccuracy,
-    LabelDiscrimination,
-    LatentPlausibility,
-    Metric,
-    NegativeLogLikelihood,
-    SampleDiversity,
-    load_digit_classifier,
-    run_eval_suite,
-)
+from evaluation import evaluate_model, load_digit_classifier, predicted_digit_entropy
 from utils import resolve_device
 from utils.checkpoints import (
     load_ae_from_path,
@@ -50,7 +41,26 @@ MODEL_LOADERS = {
     "nn_baseline": load_nn_baseline_from_path,
 }
 
-ALL_METRICS = ("colour", "digit", "diversity", "latent", "nll", "discrimination")
+IMAGE_COLUMNS = [
+    "bg_accuracy",
+    "fg_accuracy",
+    "bg_drift",
+    "fg_drift",
+    "contrast",
+    "digit_accuracy",
+    "digit_confidence",
+    "digit_entropy",
+    "mahalanobis",
+]
+SPREAD_COLUMNS = ["pixel_std", "latent_std"]
+DENSITY_COLUMNS = [
+    "nll",
+    "joint_label_accuracy",
+    "digit_label_accuracy",
+    "fg_label_accuracy",
+    "bg_label_accuracy",
+]
+SOURCES = ["sample", "reconstruction", "real"]
 
 
 def build_loader(variant: str, split: str, batch_size: int) -> DataLoader:
@@ -61,14 +71,6 @@ def build_loader(variant: str, split: str, batch_size: int) -> DataLoader:
         transform=transforms.Compose([transforms.ToTensor()]),
     )
     return DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0)
-
-
-@torch.no_grad()
-def reference_latents(ae, loader: DataLoader, device: torch.device) -> np.ndarray:
-    """Real train-split latents, for the off-manifold check."""
-    ae.eval()
-    latents = [ae.encode(images.to(device)).cpu().numpy() for images, _ in loader]
-    return np.concatenate(latents)
 
 
 def main() -> None:
@@ -88,19 +90,19 @@ def main() -> None:
     parser.add_argument("--std-correction", type=float, default=1.0)
     parser.add_argument("--batch-size", type=int, default=256)
     parser.add_argument(
-        "--density-batches",
+        "--density-images",
         type=int,
-        default=8,
-        help="batches of real data for nll/discrimination (discrimination scores all "
-        "180 combinations per batch, so this is the expensive knob)",
+        default=2048,
+        help="real images scored for nll and label accuracy; each costs 180 model "
+        "evaluations, so this is the expensive knob",
     )
+    parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(
-        "--skip", nargs="*", default=[], choices=ALL_METRICS, help="metrics to omit"
+        "--output", type=Path, default=None, help="directory to write the frames to"
     )
     args = parser.parse_args()
 
     device = resolve_device()
-    wanted = [m for m in ALL_METRICS if m not in args.skip]
 
     model_path, _ = download_artifact(args.name, args.tag)
     model = MODEL_LOADERS[args.model](model_path, device=device).to(device)
@@ -118,73 +120,77 @@ def main() -> None:
             f"could not work out which autoencoder {args.name}:{args.tag} was trained "
             "with -- pass --ae explicitly"
         )
-    print(f"Autoencoder: {ae_artifact}")
     ae = load_ae_from_path(
         load_from_wandb(ae_artifact, args.tag), device=device
     ).to(device)
-
-    test_loader = build_loader(args.variant, args.split, args.batch_size)
-
-    sample_metrics: list[Metric] = []
-    if "colour" in wanted:
-        sample_metrics.append(ColourFidelity())
-    if "digit" in wanted:
-        sample_metrics.append(DigitAccuracy(load_digit_classifier(device=device)))
-    if "diversity" in wanted:
-        sample_metrics.append(SampleDiversity(args.samples))
-    if "latent" in wanted:
-        train_loader = build_loader(args.variant, "train", args.batch_size)
-        sample_metrics.append(
-            LatentPlausibility(reference_latents(ae, train_loader, device))
-        )
-
-    density_metrics: list[Metric] = []
-    if "nll" in wanted:
-        density_metrics.append(NegativeLogLikelihood())
-    if "discrimination" in wanted:
-        density_metrics.append(LabelDiscrimination())
+    judge = load_digit_classifier(device=device)
+    seen = seen_mask(DATA_ROOT, args.variant)
 
     print(
         f"\n{args.model} {args.name}:{args.tag} -> {ae_artifact} | "
         f"{args.variant}/{args.split} | {args.samples} samples per combination | "
-        f"std_correction={args.std_correction} | device={device}\n"
+        f"std_correction={args.std_correction} | seed={args.seed} | device={device}\n"
     )
 
-    report = run_eval_suite(
+    torch.manual_seed(args.seed)
+    evaluation = evaluate_model(
         model,
         ae,
-        device,
-        sample_metrics=sample_metrics,
-        density_metrics=density_metrics,
-        loader=test_loader,
-        seen=seen_mask(DATA_ROOT, args.variant),
+        judge,
+        train_loader=build_loader(args.variant, "train", args.batch_size),
+        test_loader=build_loader(args.variant, args.split, args.batch_size),
+        device=device,
+        seen=seen,
         samples_per_combination=args.samples,
         std_correction=args.std_correction,
-        max_density_batches=args.density_batches,
+        density_images=args.density_images,
     )
+    images = evaluation.images
+    samples = images[images["source"] == "sample"]
 
-    print(f"{'metric':<28} {'overall':>10} {'trained':>10} {'held-out':>10}")
-    print("-" * 62)
-    for name in sorted(report.tables):
-        trained, held_out = report.split(name)
+    pd.set_option("display.width", 160)
+    pd.set_option("display.max_columns", None)
+    pd.set_option("display.precision", 4)
+
+    print("images (digit judge ceiling: 0.971 on real images, floor 0.0996 on noise)")
+    table = images.groupby("source")[IMAGE_COLUMNS].mean().T[SOURCES]
+    table.loc["predicted_digit_entropy"] = [
+        predicted_digit_entropy(images[images["source"] == source])
+        for source in SOURCES
+    ]
+    print(table, "\n")
+
+    print(
+        "spread within a combination (read next to colour fidelity, never without it)"
+    )
+    spread = evaluation.spread.groupby("source")[SPREAD_COLUMNS].mean().T
+    print(spread[["sample", "real"]], "\n")
+
+    print(f"density on {len(evaluation.density)} real {args.split} images")
+    print(evaluation.density[DENSITY_COLUMNS].mean().to_string(), "\n")
+
+    # Only digits with a held-out combination can be compared fairly: an aggregate
+    # trained-vs-held-out split compares those digits against all the others.
+    held_out_digits = sorted(samples.loc[~samples["seen"], "digit"].unique())
+    if held_out_digits:
+        print("samples, trained vs held-out within each digit that has holdouts")
+        within = samples[samples["digit"].isin(held_out_digits)]
+        print(within.groupby(["digit", "seen"])[IMAGE_COLUMNS].mean().T, "\n")
+    else:
         print(
-            f"{name:<28} {report.overall(name):>10.4f} {trained:>10.4f} "
-            f"{held_out:>10.4f}"
+            f"every combination is in the {args.variant} train split: no held-out rows\n"
         )
 
-    if report.scalars:
-        print()
-        for name, value in sorted(report.scalars.items()):
-            print(f"{name:<28} {value:>10.4f}")
+    print("samples along each label axis (is a gap the digit, the fg, or the bg?)")
+    for axis in ("digit", "fg", "bg"):
+        print(samples.groupby(axis)[IMAGE_COLUMNS].mean().T, "\n")
 
-    print("\nper-axis marginals (the control: is a gap the digit, the fg, or the bg?)")
-    for name in sorted(report.tables):
-        axes = report.marginals(name)
-        parts = " ".join(
-            f"{axis}[{np.nanmin(values):.3f}-{np.nanmax(values):.3f}]"
-            for axis, values in axes.items()
-        )
-        print(f"  {name:<26} {parts}")
+    if args.output is not None:
+        args.output.mkdir(parents=True, exist_ok=True)
+        images.to_csv(args.output / "images.csv", index=False)
+        evaluation.spread.to_csv(args.output / "spread.csv", index=False)
+        evaluation.density.to_csv(args.output / "density.csv", index=False)
+        print(f"wrote frames to {args.output}")
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 """Turning a latent-space model into pictures.
 
 The metrics say whether a model is right; these say what it actually drew. Sampling
-mirrors `run_sample_metrics` exactly -- same `model.sample(labels, std_correction)` then
+mirrors `evaluation.collect.sample_images` exactly -- same `model.sample(labels, std_correction)` then
 `ae.decode` -- so a figure and a number always describe the same thing.
 """
 
@@ -9,8 +9,7 @@ from collections.abc import Sequence
 
 import torch
 
-from dataset_loaders.colour_mnist import NUM_BG, NUM_DIGITS, NUM_FG
-from evaluation.harness import all_combinations
+from dataset_loaders.colour_mnist import NUM_BG, NUM_DIGITS, NUM_FG, all_combinations
 from models.autoencoder import AbstractAutoencoder
 
 
@@ -40,8 +39,8 @@ def sample_combination_grid(
 ) -> torch.Tensor:
     """Every (digit, fg, bg) combination, as `(10, 6, 3, n, C, H, W)`.
 
-    The first four axes are the canonical table order, so this indexes the same way an
-    `EvalReport` table does -- `grid[digit, fg, bg]` and `table[digit, fg, bg]` describe
+    The first four axes are the canonical table order, so this indexes the same way a
+    `combination_table` does -- `grid[digit, fg, bg]` and `table[digit, fg, bg]` describe
     the same cell.
     """
     combinations = all_combinations()

@@ -30,6 +30,8 @@ dependencies = [
     "spflow>=1.1.0",
     "torch>=2.12.0",
     "torchinfo>=1.8.0",
+    "torch-fidelity==0.4.0",
+    "torchmetrics[image]==1.9.0",
     "torchvision>=0.27.0",
     "tqdm>=4.67.3",
     "transformers>=5.9.0",
@@ -53,6 +55,8 @@ train_joint_pc = "scripts.train_joint_pc:main"
 train_label_pc = "scripts.train_label_pc:main"
 train_nn_baseline = "scripts.train_nn_baseline:main"
 eval_model = "scripts.eval_model:main"
+generate_run = "scripts.generate:main"
+evaluate_run = "scripts.evaluate:main"
 train_digit_classifier = "scripts.train_digit_classifier:main"
 download_data = "scripts.download_data:main"
 generate_colour_mnist = "scripts.generate_colour_mnist:main"

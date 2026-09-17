@@ -154,7 +154,7 @@ def _load_cub200(
 def _load_celeba(train: bool = True, size: tuple[int, int] = (64, 64)) -> CelebA:
     return datasets.CelebA(
         root=DATA_DIR,
-        split="train" if train else "test",
+        split="train" if train else "val",
         download=True,
         transform=transforms.Compose(
             [

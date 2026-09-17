@@ -10,7 +10,7 @@ import torch
 import torch.nn as nn
 from torch.distributions import Categorical, Independent, MixtureSameFamily, Normal
 
-from evaluation import run_generation_probe
+from evaluation import sample_images
 from models.neural_baseline import (
     DeterministicBaseline,
     MixtureDensityBaseline,
@@ -186,15 +186,14 @@ class StubDecoder(nn.Module):
     ("kind", "kwargs"),
     [("deterministic", {}), ("mixture", {"num_components": 4})],
 )
-def test_baselines_run_through_the_generation_probe(kind: str, kwargs: dict) -> None:
-    """The whole point of the baselines: probed exactly like a circuit."""
-    probe = run_generation_probe(
+def test_baselines_run_through_the_evaluation(kind: str, kwargs: dict) -> None:
+    """The whole point of the baselines: evaluated exactly like a circuit."""
+    samples = sample_images(
         build(kind, **kwargs),
         StubDecoder(),
         torch.device("cpu"),
         samples_per_combination=2,
         std_correction=0.8,
     )
-    assert probe.bg_accuracy.shape == (10, 6, 3)
-    assert probe.fg_accuracy.shape == (10, 6, 3)
-    assert (probe.contrast_table >= 0).all()
+    assert samples.latents.shape == (360, NUM_VARS)
+    assert samples.images.shape == (360, 3, 28, 28)
