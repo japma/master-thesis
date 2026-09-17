@@ -26,6 +26,19 @@ def log_checkpoint_artifact(
     wandb.log_artifact(artifact)
 
 
+def log_metrics(metrics: dict[str, float | torch.Tensor], step: int) -> None:
+    """No-ops without an active run, so an objective that logs can still be driven
+    outside a training script -- from a test, or a notebook."""
+    if wandb.run is not None:
+        wandb.log(metrics, step=step)
+
+
+def log_summary(summary: dict[str, float]) -> None:
+    """Run-level values that do not belong on a per-epoch curve."""
+    if wandb.run is not None:
+        wandb.run.summary.update(summary)
+
+
 def log_scalar_metrics(
     avg_train_loss: dict[str, float | torch.Tensor],
     avg_val_loss: dict[str, float | torch.Tensor],
@@ -33,7 +46,7 @@ def log_scalar_metrics(
 ) -> None:
     metrics = {f"train/{key}": value for key, value in avg_train_loss.items()}
     metrics.update({f"val/{key}": value for key, value in avg_val_loss.items()})
-    wandb.log(metrics, step=step)
+    log_metrics(metrics, step=step)
 
 
 def log_images(key: str, images: torch.Tensor, step: int) -> None:

@@ -40,3 +40,33 @@ class MetricsCollector:
     def reset(self) -> None:
         self._weighted_sums = {}
         self._counts = {}
+
+
+class PerClassAccuracy:
+    """Correct/seen counts per class, so a judge that is blind to one digit cannot
+    hide behind a good overall number."""
+
+    def __init__(self, num_classes: int) -> None:
+        self.num_classes = num_classes
+        self.reset()
+
+    def update(self, predictions: torch.Tensor, targets: torch.Tensor) -> None:
+        hits = (predictions == targets).float().cpu()
+        targets = targets.cpu()
+        self._correct.index_add_(0, targets, hits)
+        self._seen.index_add_(0, targets, torch.ones_like(hits))
+
+    def reset(self) -> None:
+        self._correct = torch.zeros(self.num_classes)
+        self._seen = torch.zeros(self.num_classes)
+
+    @property
+    def overall(self) -> float:
+        return float(self._correct.sum() / self._seen.sum().clamp(min=1.0))
+
+    @property
+    def per_class(self) -> torch.Tensor:
+        """NaN for a class that never appeared, rather than a misleading zero."""
+        return torch.where(
+            self._seen > 0, self._correct / self._seen.clamp(min=1.0), torch.nan
+        )

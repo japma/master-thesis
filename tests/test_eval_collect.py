@@ -6,7 +6,6 @@ import torch
 import torch.nn as nn
 
 from dataset_loaders.colour_mnist import NUM_BG, NUM_DIGITS, NUM_FG, all_combinations
-from evaluation.classifier import DigitClassifier
 from evaluation.collect import (
     ImageSet,
     combination_table,
@@ -20,6 +19,7 @@ from evaluation.collect import (
 )
 from evaluation.colour import BG_PALETTE, FG_PALETTE
 from evaluation.metrics import fit_gaussian
+from models.classifier import DigitClassifier
 
 NUM_LATENTS = 4
 IMAGE = (3, 28, 28)

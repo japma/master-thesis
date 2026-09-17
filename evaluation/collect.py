@@ -21,7 +21,6 @@ from dataset_loaders.colour_mnist import (
     all_combinations,
     combination_index,
 )
-from evaluation.classifier import DigitClassifier
 from evaluation.colour import (
     BG_PALETTE,
     FG_PALETTE,
@@ -43,6 +42,7 @@ from evaluation.metrics import (
     spread,
 )
 from models.autoencoder import AbstractAutoencoder
+from models.classifier import DigitClassifier
 
 # Anything that yields (images, labels) -- a DataLoader in practice.
 LabelledBatches = Iterable[tuple[torch.Tensor, torch.Tensor]]

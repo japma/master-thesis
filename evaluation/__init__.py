@@ -11,11 +11,7 @@ from evaluation.aggregate import (
     per_image_seen,
     weighted_mean,
 )
-from evaluation.classifier import (
-    DigitClassifier,
-    load_digit_classifier,
-    train_digit_classifier,
-)
+from evaluation.classifier import load_digit_classifier
 from evaluation.collect import (
     ImageSet,
     ModelEvaluation,
@@ -63,7 +59,6 @@ __all__ = [
     "BG_PALETTE",
     "FG_PALETTE",
     "CombinationProbe",
-    "DigitClassifier",
     "FactorProbe",
     "ImageSet",
     "LatentReport",
@@ -98,6 +93,5 @@ __all__ = [
     "score_density",
     "score_images",
     "spread_by_combination",
-    "train_digit_classifier",
     "weighted_mean",
 ]

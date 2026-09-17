@@ -11,6 +11,7 @@ from models.autoencoder import (
     SupervisedVAE,
     VariationalAutoencoder,
 )
+from models.classifier import DigitClassifier
 from models.cspn.abstract_cspn import AbstractCSPN
 from models.cspn.joint_pc import JointPC
 from models.cspn.psinet.graph import DistributionVector, EiNetAddress, Product
@@ -22,6 +23,7 @@ from utils.config import (
     AnchorScheme,
     AutoencoderConfig,
     AutoencoderType,
+    ClassifierConfig,
     CSPNConfig,
     CSPNType,
     JointPCConfig,
@@ -341,5 +343,27 @@ def load_joint_pc_from_path(path: Path, device=None) -> JointPC:
 
     cfg = JointPCConfig.model_validate(ckpt["model_cfg"])
     model = JointPC(config=cfg, graph=ckpt["graph"])
+    model.load_state_dict(ckpt["model_state"])
+    return model.to(device) if device is not None else model
+
+
+# --- Digit classifier ---
+def save_classifier(model: DigitClassifier, path: Path) -> None:
+    model = uncompiled(model)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    torch.save(
+        {
+            "model_cfg": model.get_config(),
+            "model_state": model.state_dict(),
+        },
+        path,
+    )
+    print("Saved classifier checkpoint to", path)
+
+
+def load_classifier_from_path(path: Path, device=None) -> DigitClassifier:
+    ckpt = torch.load(path, map_location=device, weights_only=True)
+    cfg = ClassifierConfig.model_validate(ckpt["model_cfg"])
+    model = DigitClassifier(config=cfg)
     model.load_state_dict(ckpt["model_state"])
     return model.to(device) if device is not None else model

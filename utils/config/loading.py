@@ -6,6 +6,7 @@ from pathlib import Path
 import yaml
 
 from utils.config.autoencoder import AERunConfig
+from utils.config.classifier import ClassifierRunConfig
 from utils.config.cspn import CSPNRunConfig
 from utils.config.joint_pc import JointPCRunConfig
 from utils.config.label_pc import LabelPCRunConfig
@@ -18,11 +19,7 @@ def _deep_merge(base: dict, override: dict) -> dict:
     from configs/datasets/{name}.yaml's defaults."""
     merged = dict(base)
     for key, value in override.items():
-        if (
-            key in merged
-            and isinstance(merged[key], dict)
-            and isinstance(value, dict)
-        ):
+        if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
             merged[key] = _deep_merge(merged[key], value)
         else:
             merged[key] = value
@@ -45,17 +42,16 @@ def _apply_dataset_defaults(raw: dict) -> dict:
     return raw
 
 
-def load_config() -> (
-    tuple[
-        AERunConfig
-        | CSPNRunConfig
-        | JointPCRunConfig
-        | LabelPCRunConfig
-        | NeuralBaselineRunConfig,
-        int | None,
-        bool,
-    ]
-):
+def load_config() -> tuple[
+    AERunConfig
+    | ClassifierRunConfig
+    | CSPNRunConfig
+    | JointPCRunConfig
+    | LabelPCRunConfig
+    | NeuralBaselineRunConfig,
+    int | None,
+    bool,
+]:
     parser = argparse.ArgumentParser()
     parser.add_argument("config_file", type=Path)
     parser.add_argument("--seed", type=int)
@@ -104,6 +100,8 @@ def load_config() -> (
         return JointPCRunConfig.model_validate(raw), seed, resume
     elif run_type == "label_pc":
         return LabelPCRunConfig.model_validate(raw), seed, resume
+    elif run_type == "classifier":
+        return ClassifierRunConfig.model_validate(raw), seed, resume
     elif run_type == "nn_baseline":
         return NeuralBaselineRunConfig.model_validate(raw), seed, resume
     else:

@@ -13,6 +13,11 @@ from utils.config.autoencoder import (
     SupervisionConfig,
     VAETrainingType,
 )
+from utils.config.classifier import (
+    ClassifierConfig,
+    ClassifierRunConfig,
+    ClassifierTrainingConfig,
+)
 from utils.config.common import (
     WANDB_ENTITY,
     WANDB_PROJECT,
@@ -72,6 +77,9 @@ __all__ = [
     "CSPNRunConfig",
     "CSPNTrainingConfig",
     "CSPNType",
+    "ClassifierConfig",
+    "ClassifierRunConfig",
+    "ClassifierTrainingConfig",
     "ConditioningType",
     "DatasetConfig",
     "JointPCConfig",

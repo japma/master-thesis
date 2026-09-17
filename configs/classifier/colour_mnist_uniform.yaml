@@ -1,0 +1,21 @@
+# The fixed digit judge the generation metrics score samples with.
+
+type: classifier
+
+dataset:
+  name: colour_mnist_uniform
+
+model:
+  num_classes: 10
+  channels: 3
+  image_size: 28
+  conv_channels: [ 32, 32, 64 ]
+  hidden_dim: 128
+  dropout: 0.25
+
+training:
+  epochs: 30
+  learning_rate: 0.001
+  batch_size: 256
+  early_stopping_patience: 5
+  early_stopping_min_delta: 0.001

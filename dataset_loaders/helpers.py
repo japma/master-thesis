@@ -195,9 +195,6 @@ def _load_colour_mnist(
             transforms.ToTensor(),
         ]
     )
-    # `train=False` is the training loop's *validation* loader, so it maps to the `val`
-    # split rather than `test` — test stays untouched until final numbers. The `test` and
-    # `*_full` splits are constructed directly by eval code via `ColourMNIST(split=...)`.
     return ColourMNIST(
         root=DATA_DIR,
         split="train" if train else "val",
