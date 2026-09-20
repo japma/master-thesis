@@ -43,16 +43,11 @@ class ClassifierConfig(BaseModel):
         return self
 
 
-class ClassifierTrainingConfig(BaseTrainingConfig):
-    early_stopping_patience: int = 10
-    early_stopping_min_delta: float = 0.001
-
-
 class ClassifierRunConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     type: Literal["classifier"]
     dataset: DatasetConfig
     model: ClassifierConfig
-    training: ClassifierTrainingConfig
+    training: BaseTrainingConfig
     wandb: WandbConfig = Field(default_factory=WandbConfig)

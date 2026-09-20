@@ -16,8 +16,7 @@ DIGIT_FACTOR = 0
 class ClassifierObjective(AbstractObjective):
     """Cross-entropy on the digit factor of the label.
 
-    Reports `error_rate` alongside `total` so early stopping, which minimises, keeps
-    the most *accurate* epoch rather than the one with the lowest cross-entropy.
+    Reports `error_rate` alongside `total`, since accuracy is what the judge is for.
     """
 
     def __init__(

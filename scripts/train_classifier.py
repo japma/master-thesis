@@ -7,7 +7,6 @@ from torchinfo import summary
 import wandb
 from dataset_loaders import build_data_loaders
 from models.classifier import DigitClassifier
-from training.early_stopping import EarlyStopping
 from training.loop import CheckpointSpec, run_training_loop
 from training.metrics import PerClassAccuracy
 from training.objectives.classifier import DIGIT_FACTOR, ClassifierObjective
@@ -81,16 +80,6 @@ def main() -> None:
     )
     rtpt.start()
 
-    early_stopping = EarlyStopping(
-        patience=training_cfg.early_stopping_patience,
-        min_delta=training_cfg.early_stopping_min_delta,
-    )
-    print(
-        f"Early stopping on val error_rate: patience "
-        f"{training_cfg.early_stopping_patience}, min_delta "
-        f"{training_cfg.early_stopping_min_delta}"
-    )
-
     checkpoint = CheckpointSpec(
         intermediate_path=ckpt_path,
         final_path=final_checkpoint_path("digit_classifier", dataset_name),
@@ -106,8 +95,6 @@ def main() -> None:
         rtpt=rtpt,
         checkpoint=checkpoint,
         resume=resume,
-        early_stopping=early_stopping,
-        early_stopping_metric="error_rate",
     )
 
     _report_judge_quality(model, test_loader, device, model_cfg.num_classes)
@@ -122,8 +109,7 @@ def _report_judge_quality(
     device: torch.device,
     num_classes: int,
 ) -> None:
-    """Scores the weights actually saved -- early stopping restores an earlier epoch's,
-    so the last epoch's validation numbers are not necessarily the judge's."""
+    """Scores the saved weights over the whole validation set."""
     model.eval()
     accuracy = PerClassAccuracy(num_classes)
     for images, labels in loader:
