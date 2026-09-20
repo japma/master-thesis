@@ -1,147 +1,265 @@
-"""Stage 1: sample or encode latents and write them out as a run."""
+"""Stage 1: sample p(z | y), decode through the VAE, write a sample pool.
 
-import time
+No metric is computed here. This stage decides *which* labels get sampled and produces
+the images `evaluation.evaluate` scores -- including the reference pool that gives those
+scores a ceiling, because decoding happens here and only here.
+"""
+
 from pathlib import Path
+from typing import Protocol
 
 import torch
 from torch.utils.data import DataLoader
-from torchvision import transforms
 from tqdm import tqdm
 
-from dataset_loaders.colour_mnist import ColourMNIST
-from evaluation.models import (
-    StdCorrectedSampler,
-    count_parameters,
-    load_model,
-    load_vae,
-)
-from evaluation.protocols import ConditionalSampler, LatentCodec
-from evaluation.run import (
-    RunManifest,
+from dataset_loaders import build_data_loaders
+from dataset_loaders.colour_mnist import all_combinations
+from evaluation.samples import (
+    STRATIFIED_SCHEDULE,
+    ReferenceManifest,
+    SampleManifest,
     current_git_commit,
-    load_labels,
-    run_dir_name,
-    save_run,
+    reference_dir,
+    save_pool,
+    to_uint8,
+)
+from models.autoencoder import AbstractAutoencoder
+from models.autoencoder.pretrained import PretrainedVAE
+from utils.checkpoints import (
+    load_ae_from_path,
+    load_cspn_from_path,
+    load_joint_pc_from_path,
+    load_nn_baseline_from_path,
+    read_source_artifact,
+)
+from utils.config import (
+    DatasetConfig,
+    EvaluationRunConfig,
+    PretrainedAutoencoderConfig,
+    load_dataset_config,
 )
 from utils.reproducibility import seed_everything
-from utils.wandb_utils import download_artifact
+from utils.wandb_utils import download_artifact, trained_with
+
+# Every one of these exposes `sample(labels, std_correction)` over the same latent
+# space, so generation treats them interchangeably.
+MODEL_LOADERS = {
+    "cspn": load_cspn_from_path,
+    "joint_pc": load_joint_pc_from_path,
+    "nn_baseline": load_nn_baseline_from_path,
+}
+MODEL_TYPES: tuple[str, ...] = tuple(MODEL_LOADERS)
+
+DEFAULT_N_PER_CELL = 100
+DEFAULT_BATCH_SIZE = 256
+
+# `build_data_loaders` maps train=False onto colour-MNIST's val split; the reference
+# pool names it so a result says which data the ceiling was measured on.
+REFERENCE_SPLIT = "val"
 
 
-def colour_mnist_dataset_name(variant: str, split: str) -> str:
-    return f"colour_mnist_{variant}_{split}"
+class ConditionalSampler(Protocol):
+    def sample(
+        self, labels: torch.Tensor, std_correction: float = 1.0
+    ) -> torch.Tensor: ...
+
+
+def stratified_labels(n_per_cell: int = DEFAULT_N_PER_CELL) -> torch.Tensor:
+    """Every (digit, fg, bg) combination, `n_per_cell` times each.
+
+    All 180 cells, including the ones a skewed variant never trained on: a schedule
+    that only asked for what the model saw could not show the generalization gap.
+    """
+    if n_per_cell < 1:
+        raise ValueError(f"n_per_cell must be at least 1, got {n_per_cell}")
+    return all_combinations().repeat_interleave(n_per_cell, dim=0)
 
 
 @torch.no_grad()
-def sample_latents(
-    sampler: ConditionalSampler,
+def sample_and_decode(
+    model: ConditionalSampler,
+    vae: AbstractAutoencoder,
     labels: torch.Tensor,
-    n_per_label: int,
     device: torch.device,
-    batch_size: int = 256,
+    std_correction: float = 1.0,
+    batch_size: int = DEFAULT_BATCH_SIZE,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """`n_per_label` latents for every row of `labels`, with the label of each latent."""
+    """One latent and one decoded image per row of `labels`, in the same order."""
     latents: list[torch.Tensor] = []
-    sample_labels: list[torch.Tensor] = []
-    for y in tqdm(labels.split(batch_size), desc="sampling"):
-        z = sampler.sample(y.to(device), n_per_label)
-        latents.append(z.flatten(0, 1).cpu())
-        sample_labels.append(y.repeat_interleave(n_per_label, dim=0))
-    return torch.cat(latents), torch.cat(sample_labels)
+    images: list[torch.Tensor] = []
+    for batch in tqdm(labels.split(batch_size), desc="sampling"):
+        z = model.sample(batch.to(device), std_correction=std_correction)
+        x = vae.decode(z)
+        latents.append(z.float().cpu())
+        images.append(to_uint8(x).cpu())
+    return torch.cat(latents), torch.cat(images)
 
 
 @torch.no_grad()
-def encode_loader(
-    vae: LatentCodec,
-    loader: DataLoader[tuple[torch.Tensor, torch.Tensor]],
+def encode_and_decode(
+    vae: AbstractAutoencoder,
+    loader: DataLoader,
     device: torch.device,
-) -> tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Round-trip a loader through the VAE: latents, reconstructions, originals, labels."""
     latents: list[torch.Tensor] = []
+    images: list[torch.Tensor] = []
+    originals: list[torch.Tensor] = []
     labels: list[torch.Tensor] = []
-    for images, batch_labels in tqdm(loader, desc="encoding"):
-        latents.append(vae.encode(images.to(device)).cpu())
+    for batch_images, batch_labels in tqdm(loader, desc="encoding"):
+        batch_images = batch_images.to(device)
+        z = vae.encode(batch_images)
+        x = vae.decode(z)
+        latents.append(z.float().cpu())
+        images.append(to_uint8(x).cpu())
+        originals.append(to_uint8(batch_images).cpu())
         labels.append(batch_labels.long())
-    return torch.cat(latents), torch.cat(labels)
-
-
-def generate_real_run(
-    variant: str,
-    split: str,
-    vae_artifact: str,
-    output_root: Path,
-    device: torch.device,
-    data_root: Path = Path("data"),
-    batch_size: int = 256,
-) -> Path:
-    """Real colour-MNIST images encoded through the VAE, as the run `real`."""
-    vae, resolved_vae = load_vae(vae_artifact, device)
-    dataset = ColourMNIST(
-        root=data_root, split=split, variant=variant, transform=transforms.ToTensor()
+    return (
+        torch.cat(latents),
+        torch.cat(images),
+        torch.cat(originals),
+        torch.cat(labels),
     )
-    loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
-    latents, labels = encode_loader(vae, loader, device)
-
-    manifest = RunManifest(
-        model_name="real",
-        dataset=colour_mnist_dataset_name(variant, split),
-        seed=0,
-        n_samples=latents.shape[0],
-        checkpoint_path=None,
-        vae_checkpoint=resolved_vae,
-        git_commit=current_git_commit(),
-        std_correction=None,
-        sampling_seconds=None,
-        n_parameters=None,
-    )
-    run_dir = output_root / run_dir_name(manifest.dataset, manifest.model_name, 0)
-    save_run(run_dir, manifest, latents, labels)
-    return run_dir
 
 
-def generate_model_run(
-    model_type: str,
-    model_artifact: str,
-    model_name: str,
-    vae_artifact: str,
-    reference_dir: Path,
-    output_root: Path,
-    seed: int,
-    std_correction: float,
-    device: torch.device,
-    n_per_label: int = 1,
-    batch_size: int = 256,
-) -> Path:
-    """Samples for every label in the reference run, so both share one label distribution."""
-    reference = RunManifest.load(reference_dir)
-    _, resolved_vae = download_artifact(vae_artifact)
-    if reference.vae_checkpoint != resolved_vae:
+def load_generative_model(
+    model_type: str, artifact: str, device: torch.device, tag: str = "latest"
+) -> tuple[ConditionalSampler, str, Path]:
+    """The model behind a wandb `name[:version]`, the exact `name:vN` it resolved to,
+    and the checkpoint file -- which also records the autoencoder it was trained with."""
+    loader = MODEL_LOADERS.get(model_type)
+    if loader is None:
+        raise ValueError(f"unknown model type {model_type!r}, expected {MODEL_TYPES}")
+    path, resolved = download_artifact(artifact, tag)
+    model = loader(path, device=device)
+    return model.to(device).eval(), resolved, path
+
+
+def resolve_autoencoder(
+    cfg: PretrainedAutoencoderConfig | None, model_path: Path, model_ref: str
+) -> tuple[str, str, bool]:
+    """Which autoencoder decodes this model's latents: `(name, tag, external)`.
+
+    An unpinned config asks the checkpoint itself, then wandb lineage -- the same order
+    `probe_cspn` uses. A model and a decoder that were never trained together produce
+    latents the decoder cannot read.
+    """
+    if cfg is not None:
+        return cfg.name, cfg.tag, cfg.external
+
+    source = read_source_artifact(model_path) or trained_with(model_ref)
+    if source is None:
         raise ValueError(
-            f"reference {reference_dir} was encoded with {reference.vae_checkpoint}, "
-            f"not {resolved_vae}"
+            f"{model_ref} records no autoencoder, and wandb lineage did not answer "
+            "either. Pin one in the config's `autoencoder:` block."
+        )
+    print(f"Decoding with {source}, recorded by {model_ref}")
+    return source, "latest", False
+
+
+def load_vae(
+    name: str, tag: str, external: bool, dataset: DatasetConfig, device: torch.device
+) -> tuple[AbstractAutoencoder, str]:
+    """The VAE and the reference that identifies it, resolved as the trainers do:
+    a wandb `name:vN`, or the HuggingFace repo named by an `external: true` entry."""
+    if external:
+        vae = PretrainedVAE(name=name, height=dataset.height, width=dataset.width)
+        return vae.to(device).eval(), name
+    path, resolved = download_artifact(name, tag)
+    vae = load_ae_from_path(path, device=device)
+    return vae.to(device).eval(), resolved
+
+
+def check_latent_dim(
+    model: ConditionalSampler,
+    vae: AbstractAutoencoder,
+    device: torch.device,
+    model_ref: str,
+    vae_ref: str,
+) -> None:
+    """Fail naming both artifacts, rather than as a matmul error inside the decoder."""
+    with torch.no_grad():
+        probe = model.sample(all_combinations()[:1].to(device))
+    sampled = int(probe.shape[1])
+    expected = int(vae.get_latent_dim().numel())
+    if sampled != expected:
+        raise ValueError(
+            f"{model_ref} samples {sampled}-dim latents but {vae_ref} decodes "
+            f"{expected}-dim ones -- they were not trained together. Drop the config's "
+            "`autoencoder:` block to use the one the checkpoint recorded."
         )
 
-    model, resolved_model = load_model(model_type, model_artifact, device)
-    sampler = StdCorrectedSampler(model, std_correction)
-    labels = load_labels(reference_dir)
 
-    seed_everything(seed)
-    start = time.perf_counter()
-    latents, sample_labels = sample_latents(
-        sampler, labels, n_per_label, device, batch_size=batch_size
+def write_reference_pool(
+    vae: AbstractAutoencoder,
+    resolved_vae: str,
+    dataset: str,
+    pool_dir: Path,
+    device: torch.device,
+    batch_size: int = DEFAULT_BATCH_SIZE,
+) -> Path:
+    """The ceiling pool: real validation images and their VAE round trip."""
+    dataset_cfg = load_dataset_config(dataset)
+    _, val_loader = build_data_loaders(
+        dataset_cfg, batch_size=batch_size, drop_last=False
     )
-    sampling_seconds = time.perf_counter() - start
+    latents, images, originals, labels = encode_and_decode(vae, val_loader, device)
 
-    manifest = RunManifest(
-        model_name=model_name,
-        dataset=reference.dataset,
-        seed=seed,
-        n_samples=latents.shape[0],
-        checkpoint_path=resolved_model,
+    manifest = ReferenceManifest(
         vae_checkpoint=resolved_vae,
+        dataset=dataset,
+        split=REFERENCE_SPLIT,
+        n_samples=int(labels.shape[0]),
         git_commit=current_git_commit(),
-        std_correction=std_correction,
-        sampling_seconds=sampling_seconds,
-        n_parameters=count_parameters(model),
     )
-    run_dir = output_root / run_dir_name(manifest.dataset, model_name, seed)
-    save_run(run_dir, manifest, latents, sample_labels)
-    return run_dir
+    save_pool(pool_dir, manifest, latents, images, labels, originals=originals)
+    return pool_dir
+
+
+def generate_pool(cfg: EvaluationRunConfig, device: torch.device) -> Path:
+    """Sample, decode, write the pool and its reference pool. Returns the directory."""
+    generation = cfg.generation
+    model, resolved_model, model_path = load_generative_model(
+        cfg.model.model_type, cfg.model.name, device, cfg.model.tag
+    )
+    name, tag, external = resolve_autoencoder(
+        cfg.autoencoder, model_path, resolved_model
+    )
+    vae, resolved_vae = load_vae(name, tag, external, cfg.dataset, device)
+    check_latent_dim(model, vae, device, resolved_model, resolved_vae)
+
+    seed = seed_everything(generation.seed)
+    labels = stratified_labels(generation.n_per_cell)
+    latents, images = sample_and_decode(
+        model,
+        vae,
+        labels,
+        device,
+        std_correction=generation.std_correction,
+        batch_size=generation.batch_size,
+    )
+
+    manifest = SampleManifest(
+        model_checkpoint=resolved_model,
+        model_type=cfg.model.model_type,
+        vae_checkpoint=resolved_vae,
+        dataset=cfg.dataset.name,
+        schedule=STRATIFIED_SCHEDULE,
+        n_per_cell=generation.n_per_cell,
+        n_samples=int(labels.shape[0]),
+        seed=seed,
+        std_correction=generation.std_correction,
+        git_commit=current_git_commit(),
+    )
+    pool_dir = cfg.pool_dir
+    save_pool(pool_dir, manifest, latents, images, labels)
+
+    write_reference_pool(
+        vae,
+        resolved_vae,
+        cfg.dataset.name,
+        reference_dir(pool_dir),
+        device,
+        batch_size=generation.batch_size,
+    )
+    return pool_dir

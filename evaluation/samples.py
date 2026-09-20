@@ -1,105 +1,162 @@
-"""Turning a latent-space model into pictures.
+"""A sample pool directory: the on-disk contract between generation and evaluation.
 
-The metrics say whether a model is right; these say what it actually drew. Sampling
-mirrors `evaluation.collect.sample_images` exactly -- same `model.sample(labels, std_correction)` then
-`ae.decode` -- so a figure and a number always describe the same thing.
+<pool_dir>/
+    manifest.json    what produced the pool, and from which checkpoints
+    latents.pt       (N, D)        float32
+    images.pt        (N, C, H, W)  uint8, already decoded
+    labels.pt        (N, 3)        int64 -- digit, fg, bg
+<pool_dir>/reference/
+    manifest.json
+    latents.pt       encoded real validation images
+    images.pt        those latents decoded again -- the VAE round trip
+    originals.pt     the real validation images themselves
+    labels.pt
 """
 
-from collections.abc import Sequence
+import json
+import subprocess
+from dataclasses import asdict, dataclass
+from pathlib import Path
 
 import torch
 
-from dataset_loaders.colour_mnist import NUM_BG, NUM_DIGITS, NUM_FG, all_combinations
-from models.autoencoder import AbstractAutoencoder
+MANIFEST_FILENAME = "manifest.json"
+LATENTS_FILENAME = "latents.pt"
+IMAGES_FILENAME = "images.pt"
+LABELS_FILENAME = "labels.pt"
+ORIGINALS_FILENAME = "originals.pt"
+
+REFERENCE_DIRNAME = "reference"
+
+STRATIFIED_SCHEDULE = "stratified"
+
+SAMPLES_KIND = "samples"
+REFERENCE_KIND = "reference"
 
 
-@torch.no_grad()
-def decode_samples(
-    model,
-    ae: AbstractAutoencoder,
+@dataclass(frozen=True)
+class SampleManifest:
+    model_checkpoint: str
+    model_type: str
+    vae_checkpoint: str
+    dataset: str
+    schedule: str
+    n_per_cell: int
+    n_samples: int
+    seed: int
+    std_correction: float
+    git_commit: str | None
+    kind: str = SAMPLES_KIND
+
+
+@dataclass(frozen=True)
+class ReferenceManifest:
+    """What the ceiling pool is: one split of real data, round-tripped through the VAE."""
+
+    vae_checkpoint: str
+    dataset: str
+    split: str
+    n_samples: int
+    git_commit: str | None
+    kind: str = REFERENCE_KIND
+
+
+Manifest = SampleManifest | ReferenceManifest
+
+
+def save_manifest(pool_dir: Path, manifest: Manifest) -> None:
+    pool_dir.mkdir(parents=True, exist_ok=True)
+    text = json.dumps(asdict(manifest), indent=2) + "\n"
+    (pool_dir / MANIFEST_FILENAME).write_text(text)
+
+
+def _load_manifest[M: SampleManifest | ReferenceManifest](
+    pool_dir: Path, cls: type[M]
+) -> M:
+    path = pool_dir / MANIFEST_FILENAME
+    if not path.exists():
+        raise FileNotFoundError(f"No {cls.kind} pool at {pool_dir}: {path} is missing")
+    data = json.loads(path.read_text())
+    kind = data.get("kind")
+    if kind != cls.kind:
+        raise ValueError(f"{pool_dir} holds a {kind!r} pool, not a {cls.kind!r} one")
+    return cls(**data)
+
+
+def load_sample_manifest(pool_dir: Path) -> SampleManifest:
+    return _load_manifest(pool_dir, SampleManifest)
+
+
+def load_reference_manifest(pool_dir: Path) -> ReferenceManifest:
+    return _load_manifest(pool_dir, ReferenceManifest)
+
+
+def reference_dir(pool_dir: Path) -> Path:
+    return pool_dir / REFERENCE_DIRNAME
+
+
+def to_uint8(images: torch.Tensor) -> torch.Tensor:
+    """Decoder output in [0, 1] as the 8-bit image it is actually standing in for."""
+    return (images.clamp(0, 1) * 255).round().to(torch.uint8)
+
+
+def to_float(images: torch.Tensor) -> torch.Tensor:
+    """Inverse of `to_uint8`, back into the [0, 1] range every model here expects."""
+    return images.float() / 255.0
+
+
+def save_pool(
+    pool_dir: Path,
+    manifest: Manifest,
+    latents: torch.Tensor,
+    images: torch.Tensor,
     labels: torch.Tensor,
-    device: torch.device,
-    std_correction: float = 1.0,
-) -> torch.Tensor:
-    """Images for one batch of labels, on the CPU and ready to plot."""
-    model.eval()
-    ae.eval()
-    latents = model.sample(labels.to(device).long(), std_correction=std_correction)
-    return ae.decode(latents).cpu()
+    originals: torch.Tensor | None = None,
+) -> None:
+    tensors = {"latents": latents, "images": images, "labels": labels}
+    if originals is not None:
+        tensors["originals"] = originals
+
+    lengths = {name: tensor.shape[0] for name, tensor in tensors.items()}
+    if len(set(lengths.values())) != 1:
+        raise ValueError(f"pool tensors disagree on length: {lengths}")
+    if images.dtype != torch.uint8:
+        raise ValueError(f"images must be uint8, got {images.dtype}")
+    if originals is not None and originals.dtype != torch.uint8:
+        raise ValueError(f"originals must be uint8, got {originals.dtype}")
+    if labels.shape[1] != 3:
+        raise ValueError(f"labels must be (N, 3), got {tuple(labels.shape)}")
+
+    save_manifest(pool_dir, manifest)
+    torch.save(latents.cpu(), pool_dir / LATENTS_FILENAME)
+    torch.save(images.cpu(), pool_dir / IMAGES_FILENAME)
+    torch.save(labels.cpu(), pool_dir / LABELS_FILENAME)
+    if originals is not None:
+        torch.save(originals.cpu(), pool_dir / ORIGINALS_FILENAME)
+    print(f"Wrote {manifest.n_samples} samples to {pool_dir}")
 
 
-@torch.no_grad()
-def sample_combination_grid(
-    model,
-    ae: AbstractAutoencoder,
-    device: torch.device,
-    samples_per_combination: int = 1,
-    std_correction: float = 1.0,
-    combinations_per_chunk: int = 32,
-) -> torch.Tensor:
-    """Every (digit, fg, bg) combination, as `(10, 6, 3, n, C, H, W)`.
-
-    The first four axes are the canonical table order, so this indexes the same way a
-    `combination_table` does -- `grid[digit, fg, bg]` and `table[digit, fg, bg]` describe
-    the same cell.
-    """
-    combinations = all_combinations()
-    chunks = []
-    for start in range(0, combinations.shape[0], combinations_per_chunk):
-        chunk = combinations[start : start + combinations_per_chunk]
-        labels = chunk.repeat_interleave(samples_per_combination, dim=0)
-        chunks.append(decode_samples(model, ae, labels, device, std_correction))
-
-    images = torch.cat(chunks)
-    return images.view(
-        NUM_DIGITS, NUM_FG, NUM_BG, samples_per_combination, *images.shape[1:]
-    )
+def load_latents(pool_dir: Path) -> torch.Tensor:
+    return torch.load(pool_dir / LATENTS_FILENAME, weights_only=True)
 
 
-@torch.no_grad()
-def sample_for_label(
-    model,
-    ae: AbstractAutoencoder,
-    label: tuple[int, int, int],
-    count: int,
-    device: torch.device,
-    std_correction: float = 1.0,
-) -> torch.Tensor:
-    """`count` samples of one fixed combination -- the strip that shows whether a model
-    draws the same image every time."""
-    labels = torch.tensor([label], dtype=torch.long).repeat(count, 1)
-    return decode_samples(model, ae, labels, device, std_correction)
+def load_images(pool_dir: Path) -> torch.Tensor:
+    return torch.load(pool_dir / IMAGES_FILENAME, weights_only=True)
 
 
-@torch.no_grad()
-def reconstruct(
-    ae: AbstractAutoencoder, images: torch.Tensor, device: torch.device
-) -> torch.Tensor:
-    """Posterior-mean reconstruction: `encode` is the mean, so this is deterministic and
-    two autoencoders can be compared on the same image without sampling noise."""
-    ae.eval()
-    return ae.decode(ae.encode(images.to(device))).cpu()
+def load_labels(pool_dir: Path) -> torch.Tensor:
+    return torch.load(pool_dir / LABELS_FILENAME, weights_only=True)
 
 
-@torch.no_grad()
-def latent_traversal(
-    ae: AbstractAutoencoder,
-    image: torch.Tensor,
-    dims: Sequence[int],
-    values: Sequence[float],
-    device: torch.device,
-) -> dict[str, torch.Tensor]:
-    """Decode one image's latent with a single dimension swept, one row per dimension.
+def load_originals(pool_dir: Path) -> torch.Tensor:
+    return torch.load(pool_dir / ORIGINALS_FILENAME, weights_only=True)
 
-    This is the picture behind a locality number: if the digit block is doing what its
-    classifier head was trained to make it do, sweeping a dimension inside it changes the
-    digit and nothing else.
-    """
-    ae.eval()
-    latent = ae.encode(image[None].to(device))
-    rows: dict[str, torch.Tensor] = {}
-    for dim in dims:
-        swept = latent.repeat(len(values), 1)
-        swept[:, dim] = torch.tensor(values, dtype=swept.dtype, device=swept.device)
-        rows[f"dim {dim}"] = ae.decode(swept).cpu()
-    return rows
+
+def current_git_commit() -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=False
+        )
+    except OSError:
+        return None
+    return result.stdout.strip() if result.returncode == 0 else None

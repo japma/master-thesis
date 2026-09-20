@@ -7,7 +7,9 @@ import yaml
 
 from utils.config.autoencoder import AERunConfig
 from utils.config.classifier import ClassifierRunConfig
+from utils.config.common import DatasetConfig
 from utils.config.cspn import CSPNRunConfig
+from utils.config.evaluation import EvaluationRunConfig
 from utils.config.joint_pc import JointPCRunConfig
 from utils.config.label_pc import LabelPCRunConfig
 from utils.config.neural_baseline import NeuralBaselineRunConfig
@@ -42,16 +44,41 @@ def _apply_dataset_defaults(raw: dict) -> dict:
     return raw
 
 
-def load_config() -> tuple[
+def load_dataset_config(name: str) -> DatasetConfig:
+    """The dataset fragment `configs/datasets/{name}.yaml` on its own.
+
+    For scripts that are handed a dataset name rather than a run config -- an
+    evaluation entry point, say -- so they read the same shape/class counts every
+    training run does instead of restating them.
+    """
+    raw = _apply_dataset_defaults({"dataset": {"name": name}})["dataset"]
+    if set(raw) == {"name"}:
+        raise FileNotFoundError(f"No dataset fragment at configs/datasets/{name}.yaml")
+    return DatasetConfig.model_validate(raw)
+
+
+RunConfig = (
     AERunConfig
     | ClassifierRunConfig
     | CSPNRunConfig
+    | EvaluationRunConfig
     | JointPCRunConfig
     | LabelPCRunConfig
-    | NeuralBaselineRunConfig,
-    int | None,
-    bool,
-]:
+    | NeuralBaselineRunConfig
+)
+
+_RUN_TYPES: dict[str, type] = {
+    "ae": AERunConfig,
+    "classifier": ClassifierRunConfig,
+    "cspn": CSPNRunConfig,
+    "evaluation": EvaluationRunConfig,
+    "joint_pc": JointPCRunConfig,
+    "label_pc": LabelPCRunConfig,
+    "nn_baseline": NeuralBaselineRunConfig,
+}
+
+
+def load_config() -> tuple[RunConfig, int | None, bool]:
     parser = argparse.ArgumentParser()
     parser.add_argument("config_file", type=Path)
     parser.add_argument("--seed", type=int)
@@ -87,22 +114,20 @@ def load_config() -> tuple[
 
     run_type = raw.get("type")
     if dry_run:
-        raw["training"]["epochs"] = 1
-        raw.setdefault("wandb", {})["mode"] = "disabled"
-    if args.compile:
+        if "training" in raw:
+            raw["training"]["epochs"] = 1
+            raw.setdefault("wandb", {})["mode"] = "disabled"
+        else:
+            # An evaluation has no epochs to cut and never opens a run; shrink the
+            # sample schedule instead.
+            raw.setdefault("generation", {})["n_per_cell"] = 1
+    if args.compile and "training" in raw:
         raw["training"]["compile"] = True
 
-    if run_type == "ae":
-        return AERunConfig.model_validate(raw), seed, resume
-    elif run_type == "cspn":
-        return CSPNRunConfig.model_validate(raw), seed, resume
-    elif run_type == "joint_pc":
-        return JointPCRunConfig.model_validate(raw), seed, resume
-    elif run_type == "label_pc":
-        return LabelPCRunConfig.model_validate(raw), seed, resume
-    elif run_type == "classifier":
-        return ClassifierRunConfig.model_validate(raw), seed, resume
-    elif run_type == "nn_baseline":
-        return NeuralBaselineRunConfig.model_validate(raw), seed, resume
-    else:
-        raise ValueError(f"Unknown or missing run type: {run_type!r}")
+    config_type = _RUN_TYPES.get(str(run_type))
+    if config_type is None:
+        raise ValueError(
+            f"Unknown or missing run type: {run_type!r} "
+            f"(expected one of {sorted(_RUN_TYPES)})"
+        )
+    return config_type.model_validate(raw), seed, resume

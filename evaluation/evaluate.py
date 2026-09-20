@@ -1,62 +1,166 @@
-"""Stage 2: score a run against a reference run, from what stage 1 wrote to disk."""
+"""Stage 2: score a cached sample pool. No VAE, no sampling, no gradients.
+
+One CSV per metric under `results/`, accumulating across runs, so plotting a figure is
+one `read_csv`. Every file starts with the same columns identifying the run.
+"""
 
 from pathlib import Path
 
+import pandas as pd
 import torch
+from tqdm import tqdm
 
-from evaluation.fid import decode_batches, frechet_inception_distance
-from evaluation.models import load_vae
-from evaluation.results import result_row
-from evaluation.run import RunManifest, load_latents
-from utils.reproducibility import resolve_device
+from evaluation.metrics import DIGIT, accuracy, accuracy_by_combination, confusion
+from evaluation.samples import (
+    SampleManifest,
+    load_images,
+    load_labels,
+    load_originals,
+    load_reference_manifest,
+    load_sample_manifest,
+    reference_dir,
+    to_float,
+)
+from models.classifier import DigitClassifier
+from utils.checkpoints import load_classifier_from_path
+from utils.config import CheckpointConfig, EvaluationRunConfig
+from utils.wandb_utils import download_artifact
 
-METRICS: tuple[str, ...] = ("fid",)
+DEFAULT_BATCH_SIZE = 512
+
+# Where a set of images came from. Generated is read against the other two.
+GENERATED = "generated"
+REAL = "real"
+RECONSTRUCTION = "reconstruction"
+
+# Identify a run; re-evaluating one replaces its rows rather than duplicating them.
+RUN_KEYS = ["checkpoint", "seed", "std_correction"]
 
 
-def evaluate_run(
-    run_dir: Path,
-    reference_dir: Path,
-    metrics: list[str],
-    device: torch.device | None = None,
-    batch_size: int = 256,
-) -> list[dict[str, object]]:
-    unknown = sorted(set(metrics) - set(METRICS))
-    if unknown:
-        raise ValueError(f"unknown metrics {unknown}, expected some of {METRICS}")
+def load_judge(
+    cfg: CheckpointConfig, device: torch.device
+) -> tuple[DigitClassifier, str]:
+    """A frozen classifier and the exact `name:vN` it came from."""
+    path, checkpoint = download_artifact(cfg.name, cfg.tag)
+    model = load_classifier_from_path(path, device=device)
+    model.to(device).eval()
+    model.requires_grad_(False)
+    return model, checkpoint
 
-    run = RunManifest.load(run_dir)
-    reference = RunManifest.load(reference_dir)
-    if run.dataset != reference.dataset:
-        raise ValueError(f"run is on {run.dataset}, reference on {reference.dataset}")
-    if run.vae_checkpoint != reference.vae_checkpoint:
+
+@torch.no_grad()
+def predict(
+    model: DigitClassifier,
+    images: torch.Tensor,
+    device: torch.device,
+    batch_size: int = DEFAULT_BATCH_SIZE,
+    desc: str = "judging",
+) -> torch.Tensor:
+    """Predicted digit per image, for `(N, C, H, W)` uint8 images."""
+    predictions = [
+        model(to_float(batch).to(device)).argmax(dim=1).cpu()
+        for batch in tqdm(images.split(batch_size), desc=desc)
+    ]
+    return torch.cat(predictions)
+
+
+def run_columns(manifest: SampleManifest, classifier: str) -> dict:
+    """The identity columns every metric CSV starts with."""
+    return {
+        "model": manifest.model_type,
+        "dataset": manifest.dataset,
+        "checkpoint": manifest.model_checkpoint,
+        "seed": manifest.seed,
+        "std_correction": manifest.std_correction,
+        "vae": manifest.vae_checkpoint,
+        "classifier": classifier,
+    }
+
+
+def tag(frame: pd.DataFrame, columns: dict, source: str) -> pd.DataFrame:
+    """Prefix a metric's own columns with the run identity, so every CSV reads alike."""
+    tagged = frame.assign(**columns, source=source)
+    identity = [*columns, "source"]
+    return tagged[[*identity, *frame.columns]]
+
+
+def write_metric(path: Path, frame: pd.DataFrame, keys: dict) -> None:
+    """Write `frame` to `path`, replacing any rows already there for the same run."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        existing = pd.read_csv(path)
+        stale = pd.Series(True, index=existing.index)
+        for column, value in keys.items():
+            stale &= existing[column] == value
+        frame = pd.concat([existing[~stale], frame], ignore_index=True)
+    frame.to_csv(path, index=False)
+    print(f"Wrote {path}")
+
+
+def evaluate_pool(cfg: EvaluationRunConfig, device: torch.device) -> None:
+    pool_dir = cfg.pool_dir
+    results_root = cfg.evaluation.results_root
+    batch_size = cfg.evaluation.batch_size
+    if not pool_dir.is_dir():
+        raise FileNotFoundError(
+            f"No sample pool at {pool_dir}. Run `uv run generate_samples` with this "
+            "config first."
+        )
+    manifest = load_sample_manifest(pool_dir)
+    reference_pool = reference_dir(pool_dir)
+    reference = load_reference_manifest(reference_pool)
+    if reference.vae_checkpoint != manifest.vae_checkpoint:
         raise ValueError(
-            f"run decodes with {run.vae_checkpoint}, "
-            f"reference with {reference.vae_checkpoint}"
+            f"pool was decoded with {manifest.vae_checkpoint} but its reference pool "
+            f"used {reference.vae_checkpoint}; the ceiling would not bound the samples"
         )
 
-    device = device if device is not None else resolve_device()
-    vae, _ = load_vae(run.vae_checkpoint, device)
+    model, classifier = load_judge(cfg.classifier, device)
+    num_classes = model.config.num_classes
+    columns = run_columns(manifest, classifier)
+    keys = {key: columns[key] for key in RUN_KEYS}
 
-    rows: list[dict[str, object]] = []
-    if run.sampling_seconds is not None:
-        rows.append(result_row(run, "sampling_seconds", run.sampling_seconds))
-    if run.n_parameters is not None:
-        rows.append(result_row(run, "n_parameters", run.n_parameters))
+    reference_labels = load_labels(reference_pool)
+    image_sets = {
+        GENERATED: (load_images(pool_dir), load_labels(pool_dir)),
+        REAL: (load_originals(reference_pool), reference_labels),
+        RECONSTRUCTION: (load_images(reference_pool), reference_labels),
+    }
 
-    if "fid" in metrics:
-        fid = frechet_inception_distance(
-            decode_batches(
-                vae, load_latents(run_dir), device, batch_size, desc="fid: run"
-            ),
-            decode_batches(
-                vae,
-                load_latents(reference_dir),
-                device,
-                batch_size,
-                desc="fid: reference",
-            ),
-            device,
+    overall: list[pd.DataFrame] = []
+    by_combination: list[pd.DataFrame] = []
+    confusions: list[pd.DataFrame] = []
+    for source, (images, labels) in image_sets.items():
+        predictions = predict(model, images, device, batch_size, desc=source)
+        digits = labels[:, DIGIT]
+        scores = pd.DataFrame(
+            [{"value": accuracy(predictions, digits), "n": int(digits.shape[0])}]
         )
-        rows.append(result_row(run, "fid", fid))
+        overall.append(tag(scores, columns, source))
+        by_combination.append(
+            tag(accuracy_by_combination(predictions, labels), columns, source)
+        )
+        confusions.append(
+            tag(confusion(predictions, digits, num_classes), columns, source)
+        )
 
-    return rows
+    write_metric(
+        results_root / "digit_accuracy.csv", pd.concat(overall, ignore_index=True), keys
+    )
+    write_metric(
+        results_root / "digit_accuracy_by_combination.csv",
+        pd.concat(by_combination, ignore_index=True),
+        keys,
+    )
+    write_metric(
+        results_root / "confusion_digit.csv",
+        pd.concat(confusions, ignore_index=True),
+        keys,
+    )
+    _print_summary(pd.concat(overall, ignore_index=True))
+
+
+def _print_summary(scores: pd.DataFrame) -> None:
+    print("\ndigit accuracy")
+    for row in scores.itertuples(index=False):
+        print(f"  {row.source:<16} {row.value:.4f}  (n={row.n})")

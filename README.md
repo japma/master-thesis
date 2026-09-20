@@ -34,30 +34,63 @@ python visualize.py
 
 ### Evaluation
 
-Two stages that communicate through `eval_runs/`. Stage 1 writes latents, labels and a
-manifest per run; stage 2 decodes them and upserts `results/metrics.csv`, one row per
-`(model, dataset, checkpoint, seed, metric_name, value)`. New metrics never need new samples.
+Two stages that communicate through a sample pool directory, both driven by one config
+file. Stage 1 samples p(z | y), decodes through the VAE and caches the images; stage 2
+scores them with a frozen classifier and writes one CSV per metric. No metric is computed
+in stage 1, and stage 2 never loads the VAE.
 
 ```bash
-# 1. the reference: real test images encoded through the VAE
-uv run generate_run real --variant uniform --split test \
-    --vae variational_colour_mnist_uniform:v1
-
-# 2. a model, sampled for exactly the reference's labels
-uv run generate_run model --model-type cspn --checkpoint psinet_colour_mnist_uniform:v1 \
-    --model-name cspn_std0.6 --std-correction 0.6 --seed 0 \
-    --vae variational_colour_mnist_uniform:v1 \
-    --reference eval_runs/colour_mnist_uniform_test__real__seed0
-
-# 3. metrics
-uv run evaluate_run --run eval_runs/colour_mnist_uniform_test__cspn_std0.6__seed0 \
-    --reference eval_runs/colour_mnist_uniform_test__real__seed0 --metrics fid
+uv run generate_samples configs/evaluation/colour_mnist_uniform.yaml
+uv run evaluate_samples configs/evaluation/colour_mnist_uniform.yaml
 ```
 
+Both stages read the same config, and the pool location is derived from it
+(`<output_root>/<dataset>__<model>__seed<N>`), so no path is pasted between them. `--seed`
+overrides `generation.seed` for both, which moves the pool together.
+
+```yaml
+type: evaluation
+dataset:      { name: colour_mnist_uniform }
+model:        { name: psinet_colour_mnist_uniform, model_type: cspn, tag: latest }
+classifier:   { name: digit_classifier_colour_mnist_uniform, tag: latest }
+generation:   { n_per_cell: 100, seed: 0, std_correction: 1.0, output_root: results/samples }
+evaluation:   { batch_size: 512, results_root: results }
+```
+
+`model_type` is one of `cspn`, `joint_pc`, `nn_baseline` -- they all expose the same
+`sample(labels, std_correction)`. Unknown keys are rejected, so a typo fails at load
+rather than silently taking a default.
+
+There is no `autoencoder:` entry by default: the decoder is whichever autoencoder the
+model checkpoint recorded being trained against (`read_source_artifact`, falling back to
+wandb lineage), so the latents always fit the decoder. Add
+`autoencoder: { name: ..., external: false, tag: latest }` only to override that. Either
+way the sampled latent width is checked against the decoder before anything is decoded,
+so a mismatched pair fails naming both artifacts.
+
+Stage 1 also writes a nested `reference/` pool -- the validation split encoded and
+decoded through the same VAE -- so stage 2 scores three sets of images: the generated
+samples, the real validation images, and their VAE round trip. The last two are the
+ceilings; generated accuracy is not readable without them.
+
+Stage 2 writes **one CSV per metric** under `results_root`, accumulating across runs, so
+a thesis figure is one `read_csv`:
+
+```
+results/digit_accuracy.csv                 <run>,source,value,n
+results/digit_accuracy_by_combination.csv  <run>,source,digit,fg,bg,value,n
+results/confusion_digit.csv                <run>,source,truth,predicted,n
+```
+
+`<run>` is the same identity prefix everywhere -- model, dataset, checkpoint, seed,
+std_correction, vae, classifier -- so every row is self-describing, and re-evaluating a
+run replaces its rows instead of duplicating them. `source` is `generated`, `real` or
+`reconstruction`, so the ceilings are rows rather than suffixes on metric names. Only the
+digit is judged for now; adding fg/bg means more metric functions and more CSVs, not a
+change to what exists.
+
 Checkpoints are always wandb artifacts (`name` or `name:version`); manifests record the
-exact version they resolved to. FID uses torchmetrics 1.9.0 with
-torch-fidelity 0.4.0's `inception-v3-compat` weights
-(`weights-inception-2015-12-05-6726825d.pth`), downloaded to `$TORCH_HOME` on first use.
+exact version they resolved to.
 
 ## Configuration
 

@@ -1,97 +1,58 @@
-"""Everything that produces a number for the results section.
+"""Generation and classifier-based evaluation, as two separate stages.
 
-    metrics.py   the math: tensors in, one value per image out
-    collect.py   the loops: run models, call metrics, return DataFrames
+    samples.py    the on-disk contract: what a sample pool is
+    generate.py   stage 1 -- sample p(z | y), decode, write a pool
+    metrics.py    the numbers: predictions and labels in, a value or a table out
+    evaluate.py   stage 2 -- run the judge, write one CSV per metric
+
+Stage 1 computes no metric and stage 2 loads no VAE; the pool directory is the only
+thing they share.
 """
 
-from evaluation.aggregate import (
-    combination_mean,
-    latent_mahalanobis,
-    marginals,
-    per_image_seen,
-    weighted_mean,
+from evaluation.evaluate import evaluate_pool, load_judge, predict
+from evaluation.generate import (
+    MODEL_TYPES,
+    generate_pool,
+    load_generative_model,
+    load_vae,
+    sample_and_decode,
+    stratified_labels,
 )
-from evaluation.classifier import load_digit_classifier
-from evaluation.collect import (
-    ImageSet,
-    ModelEvaluation,
-    combination_table,
-    encode_images,
-    evaluate_model,
-    fit_latent_gaussian,
-    mark_seen,
-    predicted_digit_entropy,
-    reconstruct_images,
-    sample_images,
-    score_density,
-    score_images,
-    spread_by_combination,
-)
-from evaluation.colour import (
-    BG_PALETTE,
-    FG_PALETTE,
-    border_colour,
-    foreground_colour,
-    nearest_palette_index,
-)
-from evaluation.latent_probe import (
-    FactorProbe,
-    LatentReport,
-    blocks_for,
-    encode_dataset,
-    probe_factor,
-    probe_latents,
-)
-from evaluation.reconstruction import (
-    CombinationProbe,
-    reconstruction_summary,
-    run_combination_probe,
-)
+from evaluation.metrics import accuracy, accuracy_by_combination, confusion
 from evaluation.samples import (
-    decode_samples,
-    latent_traversal,
-    reconstruct,
-    sample_combination_grid,
-    sample_for_label,
+    ReferenceManifest,
+    SampleManifest,
+    load_images,
+    load_labels,
+    load_latents,
+    load_originals,
+    load_reference_manifest,
+    load_sample_manifest,
+    reference_dir,
+    save_pool,
 )
 
 __all__ = [
-    "BG_PALETTE",
-    "FG_PALETTE",
-    "CombinationProbe",
-    "FactorProbe",
-    "ImageSet",
-    "LatentReport",
-    "ModelEvaluation",
-    "blocks_for",
-    "border_colour",
-    "combination_mean",
-    "combination_table",
-    "decode_samples",
-    "encode_dataset",
-    "encode_images",
-    "evaluate_model",
-    "fit_latent_gaussian",
-    "foreground_colour",
-    "latent_mahalanobis",
-    "latent_traversal",
-    "load_digit_classifier",
-    "marginals",
-    "mark_seen",
-    "nearest_palette_index",
-    "per_image_seen",
-    "predicted_digit_entropy",
-    "probe_factor",
-    "probe_latents",
-    "reconstruct",
-    "reconstruct_images",
-    "reconstruction_summary",
-    "run_combination_probe",
-    "sample_combination_grid",
-    "sample_for_label",
-    "sample_images",
-    "score_density",
-    "score_images",
-    "spread_by_combination",
-    "weighted_mean",
+    "MODEL_TYPES",
+    "ReferenceManifest",
+    "SampleManifest",
+    "accuracy",
+    "accuracy_by_combination",
+    "confusion",
+    "evaluate_pool",
+    "generate_pool",
+    "load_generative_model",
+    "load_images",
+    "load_judge",
+    "load_labels",
+    "load_latents",
+    "load_originals",
+    "load_reference_manifest",
+    "load_sample_manifest",
+    "load_vae",
+    "predict",
+    "reference_dir",
+    "sample_and_decode",
+    "save_pool",
+    "stratified_labels",
 ]
