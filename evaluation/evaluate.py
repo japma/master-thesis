@@ -10,7 +10,7 @@ import pandas as pd
 import torch
 from tqdm import tqdm
 
-from evaluation.metrics import DIGIT, accuracy, accuracy_by_combination, confusion
+from evaluation.metrics import digit_accuracy, selected
 from evaluation.samples import (
     SampleManifest,
     load_images,
@@ -127,37 +127,23 @@ def evaluate_pool(cfg: EvaluationRunConfig, device: torch.device) -> None:
         RECONSTRUCTION: (load_images(reference_pool), reference_labels),
     }
 
-    overall: list[pd.DataFrame] = []
-    by_combination: list[pd.DataFrame] = []
-    confusions: list[pd.DataFrame] = []
+    metrics = selected(cfg.evaluation.metrics)
+    frames: dict[str, list[pd.DataFrame]] = {metric.FILENAME: [] for metric in metrics}
     for source, (images, labels) in image_sets.items():
         predictions = predict(model, images, device, batch_size, desc=source)
-        digits = labels[:, DIGIT]
-        scores = pd.DataFrame(
-            [{"value": accuracy(predictions, digits), "n": int(digits.shape[0])}]
-        )
-        overall.append(tag(scores, columns, source))
-        by_combination.append(
-            tag(accuracy_by_combination(predictions, labels), columns, source)
-        )
-        confusions.append(
-            tag(confusion(predictions, digits, num_classes), columns, source)
-        )
+        pixels = to_float(images)
+        for metric in metrics:
+            table = metric.compute(pixels, predictions, labels, num_classes)
+            frames[metric.FILENAME].append(tag(table, columns, source))
 
-    write_metric(
-        results_root / "digit_accuracy.csv", pd.concat(overall, ignore_index=True), keys
-    )
-    write_metric(
-        results_root / "digit_accuracy_by_combination.csv",
-        pd.concat(by_combination, ignore_index=True),
-        keys,
-    )
-    write_metric(
-        results_root / "confusion_digit.csv",
-        pd.concat(confusions, ignore_index=True),
-        keys,
-    )
-    _print_summary(pd.concat(overall, ignore_index=True))
+    tables = {
+        filename: pd.concat(parts, ignore_index=True)
+        for filename, parts in frames.items()
+    }
+    for filename, table in tables.items():
+        write_metric(results_root / filename, table, keys)
+    if digit_accuracy.FILENAME in tables:
+        _print_summary(tables[digit_accuracy.FILENAME])
 
 
 def _print_summary(scores: pd.DataFrame) -> None:

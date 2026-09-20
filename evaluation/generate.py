@@ -140,9 +140,8 @@ def resolve_autoencoder(
 ) -> tuple[str, str, bool]:
     """Which autoencoder decodes this model's latents: `(name, tag, external)`.
 
-    An unpinned config asks the checkpoint itself, then wandb lineage -- the same order
-    `probe_cspn` uses. A model and a decoder that were never trained together produce
-    latents the decoder cannot read.
+    An unpinned config asks the checkpoint itself, then wandb lineage. A model and a
+    decoder that were never trained together produce latents the decoder cannot read.
     """
     if cfg is not None:
         return cfg.name, cfg.tag, cfg.external

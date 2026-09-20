@@ -41,6 +41,7 @@ from utils.config.evaluation import (
     EvaluationRunConfig,
     GeneratedModelConfig,
     GenerationConfig,
+    MarginalConfig,
 )
 from utils.config.joint_pc import (
     JointPCConfig,
@@ -96,6 +97,7 @@ __all__ = [
     "JointPCRunConfig",
     "LabelPCConfig",
     "LabelPCRunConfig",
+    "MarginalConfig",
     "NeuralBaselineConfig",
     "NeuralBaselineRunConfig",
     "NeuralBaselineType",

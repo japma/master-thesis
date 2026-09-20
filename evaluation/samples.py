@@ -28,6 +28,9 @@ ORIGINALS_FILENAME = "originals.pt"
 
 REFERENCE_DIRNAME = "reference"
 
+# Column of `labels.pt` each factor lives in.
+DIGIT, FG, BG = 0, 1, 2
+
 STRATIFIED_SCHEDULE = "stratified"
 
 SAMPLES_KIND = "samples"

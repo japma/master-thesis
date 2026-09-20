@@ -3,7 +3,7 @@ from functools import partial
 from pathlib import Path
 
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 from torchvision import datasets, transforms
 from torchvision.datasets.celeba import CelebA
 from torchvision.datasets.cifar import CIFAR10
@@ -220,6 +220,17 @@ _DATASETS = {
 }
 
 
+def build_dataset(
+    name: str, train: bool = True, size: tuple[int, int] = (28, 28)
+) -> Dataset:
+    """One split of a registered dataset. `_DATASETS` stays the only place a name is
+    bound to a variant, so nothing has to parse `colour_mnist_<variant>`."""
+    loader_fn = _DATASETS.get(name)
+    if loader_fn is None:
+        raise ValueError(f"Unsupported dataset '{name}'")
+    return loader_fn(train=train, size=size)
+
+
 def build_data_loaders(
     cfg: DatasetConfig,
     batch_size: int = 32,
@@ -227,14 +238,10 @@ def build_data_loaders(
     num_workers: int = 8,
     drop_last: bool = True,
 ) -> tuple[DataLoader, DataLoader]:
-    loader_fn = _DATASETS.get(cfg.name)
-    if loader_fn is None:
-        raise ValueError(f"Unsupported dataset '{cfg.name}'")
-
     size = (cfg.height, cfg.width)
 
-    train_dataset = loader_fn(train=True, size=size)
-    test_dataset = loader_fn(train=False, size=size)
+    train_dataset = build_dataset(cfg.name, train=True, size=size)
+    test_dataset = build_dataset(cfg.name, train=False, size=size)
 
     train_loader = DataLoader(
         train_dataset,

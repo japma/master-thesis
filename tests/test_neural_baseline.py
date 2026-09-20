@@ -7,10 +7,8 @@ import math
 
 import pytest
 import torch
-import torch.nn as nn
 from torch.distributions import Categorical, Independent, MixtureSameFamily, Normal
 
-from evaluation import sample_images
 from models.neural_baseline import (
     DeterministicBaseline,
     MixtureDensityBaseline,
@@ -169,31 +167,3 @@ def test_both_baselines_train() -> None:
             first = loss.item() if first is None else first
         assert math.isfinite(loss.item())
         assert loss.item() < first
-
-
-class StubDecoder(nn.Module):
-    """Turns a latent into an image the colour probe can measure."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.decoder = nn.Linear(NUM_VARS, 3 * 28 * 28)
-
-    def decode(self, z: torch.Tensor) -> torch.Tensor:
-        return self.decoder(z).reshape(-1, 3, 28, 28).sigmoid()
-
-
-@pytest.mark.parametrize(
-    ("kind", "kwargs"),
-    [("deterministic", {}), ("mixture", {"num_components": 4})],
-)
-def test_baselines_run_through_the_evaluation(kind: str, kwargs: dict) -> None:
-    """The whole point of the baselines: evaluated exactly like a circuit."""
-    samples = sample_images(
-        build(kind, **kwargs),
-        StubDecoder(),
-        torch.device("cpu"),
-        samples_per_combination=2,
-        std_correction=0.8,
-    )
-    assert samples.latents.shape == (360, NUM_VARS)
-    assert samples.images.shape == (360, 3, 28, 28)

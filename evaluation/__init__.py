@@ -2,14 +2,21 @@
 
     samples.py    the on-disk contract: what a sample pool is
     generate.py   stage 1 -- sample p(z | y), decode, write a pool
-    metrics.py    the numbers: predictions and labels in, a value or a table out
+    colour.py     how a colour is read off an image, against the fixed palettes
+    conditionals.py  what the training split says a factor's distribution is
+    marginal.py   queries with a factor left free: the mixture reference and
+                  the calibration that scores it (its own entrypoint)
+    metrics/      one module per metric: a FILENAME and a compute(), listed in METRICS
+    fid.py        FID between two image sets -- present, deliberately not wired in
     evaluate.py   stage 2 -- run the judge, write one CSV per metric
 
 Stage 1 computes no metric and stage 2 loads no VAE; the pool directory is the only
 thing they share.
 """
 
+from evaluation.conditionals import conditional, total_variation, training_labels
 from evaluation.evaluate import evaluate_pool, load_judge, predict
+from evaluation.fid import frechet_inception_distance
 from evaluation.generate import (
     MODEL_TYPES,
     generate_pool,
@@ -18,7 +25,8 @@ from evaluation.generate import (
     sample_and_decode,
     stratified_labels,
 )
-from evaluation.metrics import accuracy, accuracy_by_combination, confusion
+from evaluation.marginal import calibration, run_marginal, sample_labels
+from evaluation.metrics import METRICS
 from evaluation.samples import (
     ReferenceManifest,
     SampleManifest,
@@ -33,13 +41,14 @@ from evaluation.samples import (
 )
 
 __all__ = [
+    "METRICS",
     "MODEL_TYPES",
     "ReferenceManifest",
     "SampleManifest",
-    "accuracy",
-    "accuracy_by_combination",
-    "confusion",
+    "calibration",
+    "conditional",
     "evaluate_pool",
+    "frechet_inception_distance",
     "generate_pool",
     "load_generative_model",
     "load_images",
@@ -52,7 +61,11 @@ __all__ = [
     "load_vae",
     "predict",
     "reference_dir",
+    "run_marginal",
     "sample_and_decode",
+    "sample_labels",
     "save_pool",
     "stratified_labels",
+    "total_variation",
+    "training_labels",
 ]

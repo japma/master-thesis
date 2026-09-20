@@ -8,7 +8,7 @@ pool's location is derived rather than pasted between them.
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from utils.config.common import (
     DatasetConfig,
@@ -49,6 +49,52 @@ class EvaluationConfig(BaseModel):
     batch_size: int = Field(default=512, ge=1)
     # One CSV per metric lands here, accumulating across runs.
     results_root: Path = Path("results")
+    # Which metrics to write, by module name in `evaluation/metrics/`. Omit for all of
+    # them, so a new metric applies to every existing config.
+    metrics: list[str] | None = None
+
+    @field_validator("metrics")
+    @classmethod
+    def _known_metrics(cls, names: list[str] | None) -> list[str] | None:
+        if names is None:
+            return names
+        # Imported here, not at module level: `evaluation` imports this module back.
+        from evaluation.metrics import METRICS_BY_NAME
+
+        if not names:
+            raise ValueError("metrics is empty; omit the key to run all of them")
+        if len(set(names)) != len(names):
+            raise ValueError(f"metrics lists the same metric twice: {names}")
+        unknown = [name for name in names if name not in METRICS_BY_NAME]
+        if unknown:
+            raise ValueError(
+                f"unknown metrics {unknown}; known metrics are "
+                f"{sorted(METRICS_BY_NAME)}"
+            )
+        return names
+
+
+class MarginalConfig(BaseModel):
+    """Marginalized queries: which factors to leave to the model, and how many samples."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Each query is [digit, fg, bg]; -1 leaves that factor free. The digit must be
+    # given: reading a digit back needs the judge, the colours are read off pixels.
+    queries: list[list[int]]
+    n_per_query: int = Field(default=1000, ge=1)
+
+    @field_validator("queries")
+    @classmethod
+    def _valid_queries(cls, queries: list[list[int]]) -> list[list[int]]:
+        # Imported here, not at module level: `evaluation` imports this module back.
+        from evaluation.marginal import as_query
+
+        if not queries:
+            raise ValueError("queries is empty; drop the `marginal` block instead")
+        for query in queries:
+            as_query(query)
+        return queries
 
 
 class EvaluationRunConfig(BaseModel):
@@ -64,6 +110,8 @@ class EvaluationRunConfig(BaseModel):
     classifier: CheckpointConfig
     generation: GenerationConfig = Field(default_factory=GenerationConfig)
     evaluation: EvaluationConfig = Field(default_factory=EvaluationConfig)
+    # Only `evaluate_marginal` reads this; omit it for the ordinary two stages.
+    marginal: MarginalConfig | None = None
 
     @property
     def pool_dir(self) -> Path:

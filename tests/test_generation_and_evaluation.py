@@ -17,6 +17,7 @@ from dataset_loaders.colour_mnist import (
     all_combinations,
     combination_index,
 )
+from evaluation.colour import BG_PALETTE, FG_PALETTE
 from evaluation.evaluate import GENERATED, evaluate_pool, predict, write_metric
 from evaluation.generate import (
     MODEL_TYPES,
@@ -25,7 +26,17 @@ from evaluation.generate import (
     sample_and_decode,
     stratified_labels,
 )
-from evaluation.metrics import accuracy, accuracy_by_combination, confusion
+from evaluation.metrics import (
+    METRICS,
+    colour_accuracy,
+    colour_accuracy_by_combination,
+    colour_contrast,
+    colour_drift,
+    confusion_digit,
+    digit_accuracy,
+    digit_accuracy_by_combination,
+    selected,
+)
 from evaluation.samples import (
     ReferenceManifest,
     SampleManifest,
@@ -132,7 +143,12 @@ def write_pool(
     return pool_dir
 
 
-def build_config(root: Path, n_per_cell: int = 1, seed: int = 0) -> EvaluationRunConfig:
+def build_config(
+    root: Path,
+    n_per_cell: int = 1,
+    seed: int = 0,
+    metrics: list[str] | None = None,
+) -> EvaluationRunConfig:
     """A config whose `pool_dir` is where `write_pool` puts its pool."""
     return EvaluationRunConfig(
         type="evaluation",
@@ -147,7 +163,9 @@ def build_config(root: Path, n_per_cell: int = 1, seed: int = 0) -> EvaluationRu
         autoencoder=PretrainedAutoencoderConfig(name="vae", external=False),
         classifier=CheckpointConfig(name="judge"),
         generation=GenerationConfig(n_per_cell=n_per_cell, seed=seed, output_root=root),
-        evaluation=EvaluationConfig(results_root=root / "results", batch_size=64),
+        evaluation=EvaluationConfig(
+            results_root=root / "results", batch_size=64, metrics=metrics
+        ),
     )
 
 
@@ -245,15 +263,65 @@ def test_save_pool_rejects_float_images(tmp_path: Path) -> None:
 
 
 # --- metrics ---
+def test_every_metric_names_the_csv_it_writes() -> None:
+    assert [metric.FILENAME for metric in METRICS] == [
+        "digit_accuracy.csv",
+        "digit_accuracy_by_combination.csv",
+        "confusion_digit.csv",
+        "colour_accuracy.csv",
+        "colour_accuracy_by_combination.csv",
+        "colour_drift.csv",
+        "colour_contrast.csv",
+    ]
+
+
+def blank(labels: torch.Tensor) -> torch.Tensor:
+    """Flat images, for the metrics that never look at pixels."""
+    return torch.zeros(labels.shape[0], 3, IMAGE_SIZE, IMAGE_SIZE)
+
+
+def unused(labels: torch.Tensor) -> torch.Tensor:
+    """Judge predictions, for the colour metrics that never look at them."""
+    return torch.zeros(labels.shape[0], dtype=torch.long)
+
+
+def painted(labels: torch.Tensor) -> torch.Tensor:
+    """A centre square of each row's foreground colour on its background colour.
+
+    The square clears `BORDER_MARGIN`, so the border reads pure background and the most
+    foreground-like decile reads pure foreground.
+    """
+    inset = IMAGE_SIZE // 4
+    images = (
+        torch.tensor(BG_PALETTE[labels[:, 2]])
+        .reshape(-1, 3, 1, 1)
+        .expand(-1, 3, IMAGE_SIZE, IMAGE_SIZE)
+        .clone()
+    )
+    images[:, :, inset:-inset, inset:-inset] = torch.tensor(
+        FG_PALETTE[labels[:, 1]]
+    ).reshape(-1, 3, 1, 1)
+    return images
+
+
 def test_accuracy_counts_matches() -> None:
-    assert accuracy(torch.tensor([1, 2, 3, 4]), torch.tensor([1, 2, 0, 0])) == 0.5
+    labels = torch.tensor([[1, 0, 0], [2, 0, 0], [0, 0, 0], [0, 0, 0]])
+    predictions = torch.tensor([1, 2, 3, 4])
+
+    scores = digit_accuracy.compute(blank(labels), predictions, labels, num_classes=10)
+
+    assert list(scores.columns) == ["value", "n"]
+    assert scores["value"].tolist() == [0.5]
+    assert scores["n"].tolist() == [4]
 
 
 def test_accuracy_by_combination_has_a_row_per_cell_present() -> None:
     labels = torch.tensor([[0, 0, 0], [0, 0, 0], [1, 2, 1]])
     predictions = torch.tensor([0, 9, 1])
 
-    cells = accuracy_by_combination(predictions, labels)
+    cells = digit_accuracy_by_combination.compute(
+        blank(labels), predictions, labels, num_classes=10
+    )
 
     assert list(cells.columns) == ["digit", "fg", "bg", "value", "n"]
     assert len(cells) == 2
@@ -265,7 +333,9 @@ def test_accuracy_by_combination_covers_every_cell_of_a_stratified_pool() -> Non
     labels = stratified_labels(2)
     predictions = torch.zeros(labels.shape[0], dtype=torch.long)
 
-    cells = accuracy_by_combination(predictions, labels)
+    cells = digit_accuracy_by_combination.compute(
+        blank(labels), predictions, labels, num_classes=10
+    )
 
     assert len(cells) == NUM_COMBINATIONS
     assert int(cells["n"].sum()) == NUM_COMBINATIONS * 2
@@ -275,10 +345,10 @@ def test_accuracy_by_combination_covers_every_cell_of_a_stratified_pool() -> Non
 
 
 def test_confusion_is_a_complete_grid_with_truth_as_rows() -> None:
-    targets = torch.tensor([0, 0, 1])
+    labels = torch.tensor([[0, 0, 0], [0, 0, 0], [1, 0, 0]])
     predictions = torch.tensor([0, 1, 1])
 
-    pairs = confusion(predictions, targets, num_classes=2)
+    pairs = confusion_digit.compute(blank(labels), predictions, labels, num_classes=2)
 
     assert list(pairs.columns) == ["truth", "predicted", "n"]
     assert len(pairs) == 4
@@ -286,6 +356,59 @@ def test_confusion_is_a_complete_grid_with_truth_as_rows() -> None:
     lookup = pairs.set_index(["truth", "predicted"])["n"]
     assert lookup[(0, 0)] == 1 and lookup[(0, 1)] == 1
     assert lookup[(1, 0)] == 0 and lookup[(1, 1)] == 1
+
+
+def test_colour_is_read_perfectly_off_correctly_painted_images() -> None:
+    labels = all_combinations()
+    images = painted(labels)
+
+    scores = colour_accuracy.compute(images, unused(labels), labels, num_classes=10)
+    drift = colour_drift.compute(images, unused(labels), labels, num_classes=10)
+
+    assert scores["factor"].tolist() == ["fg", "bg"]
+    assert scores["value"].tolist() == [1.0, 1.0]
+    assert drift["value"].max() < 1e-5
+
+
+def test_colour_accuracy_catches_a_swapped_background() -> None:
+    labels = all_combinations()
+    wrong = labels.clone()
+    wrong[:, 2] = (wrong[:, 2] + 1) % NUM_BG
+
+    scores = colour_accuracy.compute(
+        painted(wrong), unused(labels), labels, num_classes=10
+    )
+    drift = colour_drift.compute(painted(wrong), unused(labels), labels, num_classes=10)
+
+    background = scores[scores["factor"] == "bg"].iloc[0]
+    assert background["value"] == 0.0
+    assert drift[drift["factor"] == "bg"].iloc[0]["value"] > 0.1
+
+
+def test_colour_accuracy_by_combination_has_a_row_per_cell_and_factor() -> None:
+    labels = all_combinations()
+
+    cells = colour_accuracy_by_combination.compute(
+        painted(labels), unused(labels), labels, num_classes=10
+    )
+
+    assert list(cells.columns) == ["factor", "digit", "fg", "bg", "value", "n"]
+    assert len(cells) == 2 * NUM_COMBINATIONS
+    assert cells["value"].min() == 1.0
+
+
+def test_contrast_separates_a_painted_digit_from_a_flat_image() -> None:
+    labels = all_combinations()
+
+    painted_contrast = colour_contrast.compute(
+        painted(labels), unused(labels), labels, num_classes=10
+    )
+    flat_contrast = colour_contrast.compute(
+        blank(labels), unused(labels), labels, num_classes=10
+    )
+
+    assert float(flat_contrast["value"].iloc[0]) == 0.0
+    assert float(painted_contrast["value"].iloc[0]) > 0.5
 
 
 # --- evaluation ---
@@ -316,6 +439,10 @@ def test_evaluate_pool_writes_one_csv_per_metric(
 
     results = cfg.evaluation.results_root
     assert sorted(p.name for p in results.glob("*.csv")) == [
+        "colour_accuracy.csv",
+        "colour_accuracy_by_combination.csv",
+        "colour_contrast.csv",
+        "colour_drift.csv",
         "confusion_digit.csv",
         "digit_accuracy.csv",
         "digit_accuracy_by_combination.csv",
@@ -346,6 +473,38 @@ def test_every_csv_identifies_the_run_and_the_image_source(
 
     cells = pd.read_csv(results / "digit_accuracy_by_combination.csv")
     assert len(cells) == 3 * NUM_COMBINATIONS
+
+
+def test_the_config_selects_which_metrics_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = build_config(tmp_path, n_per_cell=2, metrics=["colour_accuracy"])
+    write_pool(tmp_path, n_per_cell=2, pool_dir=cfg.pool_dir)
+    patch_judge(monkeypatch)
+
+    evaluate_pool(cfg, DEVICE)
+
+    results = cfg.evaluation.results_root
+    assert [p.name for p in results.glob("*.csv")] == ["colour_accuracy.csv"]
+
+
+def test_omitting_metrics_runs_all_of_them() -> None:
+    assert selected(None) == METRICS
+
+
+def test_an_unknown_metric_fails_at_config_load(tmp_path: Path) -> None:
+    with pytest.raises(ValidationError, match="unknown metrics"):
+        build_config(tmp_path, metrics=["colour_acuracy"])
+
+
+def test_an_empty_metric_list_fails_rather_than_writing_nothing(tmp_path: Path) -> None:
+    with pytest.raises(ValidationError, match="omit the key"):
+        build_config(tmp_path, metrics=[])
+
+
+def test_a_repeated_metric_fails(tmp_path: Path) -> None:
+    with pytest.raises(ValidationError, match="twice"):
+        build_config(tmp_path, metrics=["colour_drift", "colour_drift"])
 
 
 def test_re_evaluating_a_run_replaces_its_rows_rather_than_appending(
