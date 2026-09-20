@@ -16,7 +16,6 @@ from utils.config.autoencoder import (
 from utils.config.classifier import (
     ClassifierConfig,
     ClassifierRunConfig,
-    ClassifierTrainingConfig,
 )
 from utils.config.common import (
     WANDB_ENTITY,
@@ -36,6 +35,13 @@ from utils.config.cspn import (
     CSPNType,
     PretrainedLabelPCConfig,
 )
+from utils.config.evaluation import (
+    CheckpointConfig,
+    EvaluationConfig,
+    EvaluationRunConfig,
+    GeneratedModelConfig,
+    GenerationConfig,
+)
 from utils.config.joint_pc import (
     JointPCConfig,
     JointPCRunConfig,
@@ -44,7 +50,7 @@ from utils.config.label_pc import (
     LabelPCConfig,
     LabelPCRunConfig,
 )
-from utils.config.loading import load_config
+from utils.config.loading import load_config, load_dataset_config
 from utils.config.neural_baseline import (
     NeuralBaselineConfig,
     NeuralBaselineRunConfig,
@@ -77,11 +83,15 @@ __all__ = [
     "CSPNRunConfig",
     "CSPNTrainingConfig",
     "CSPNType",
+    "CheckpointConfig",
     "ClassifierConfig",
     "ClassifierRunConfig",
-    "ClassifierTrainingConfig",
     "ConditioningType",
     "DatasetConfig",
+    "EvaluationConfig",
+    "EvaluationRunConfig",
+    "GeneratedModelConfig",
+    "GenerationConfig",
     "JointPCConfig",
     "JointPCRunConfig",
     "LabelPCConfig",
@@ -95,4 +105,5 @@ __all__ = [
     "VAETrainingType",
     "WandbConfig",
     "load_config",
+    "load_dataset_config",
 ]

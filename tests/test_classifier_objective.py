@@ -37,7 +37,7 @@ def make_batch(n: int = 8) -> Batch:
     return Batch(images=torch.rand(n, 3, IMAGE_SIZE, IMAGE_SIZE), labels=labels)
 
 
-def test_train_step_reports_the_metrics_early_stopping_watches() -> None:
+def test_train_step_reports_total_and_error_rate() -> None:
     step = build_objective().train_step(make_batch())
 
     assert set(step.metrics) == {"total", "error_rate"}
