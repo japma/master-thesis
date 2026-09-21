@@ -11,7 +11,7 @@ from models.cspn.psinet.conditioning_nn import build_conditioning_mlp_for
 from models.cspn.psinet.einsum_network import Args, EinsumNetwork
 from models.cspn.psinet.exponential_family_array import NormalArray
 from models.cspn.psinet.graph import random_binary_trees
-from models.cspn.psinet.label_encoder import build_label_encoder
+from models.cspn.psinet.label_encoder import LabelDropout, build_label_encoder
 from utils.config import CSPNConfig
 
 
@@ -65,10 +65,16 @@ class PsiNetCSPN(AbstractCSPN):
 
         encoder = build_label_encoder(config.encoder_config)
 
-        # self.label_dropout = LabelDropout(
-        #   unknown_indices=encoder.unknown_indices,
-        #  dropout_prob=config.label_dropout_prob,
-        # )
+        # Only built when the encoder reserved an unknown slot to drop labels into.
+        self.label_dropout = (
+            LabelDropout(
+                unknown_indices=encoder.unknown_indices,
+                dropout_prob=config.encoder_config.label_dropout_prob,
+            )
+            if encoder.allow_unknown
+            else None
+        )
+        self.unknown_indices: list[int] = encoder.unknown_indices
 
         conditioning_network = build_conditioning_mlp_for(
             self.einet,
@@ -104,8 +110,14 @@ class PsiNetCSPN(AbstractCSPN):
             return z
         return z * self.latent_std + self.latent_mean
 
+    @property
+    def supports_unknown(self) -> bool:
+        """Whether a label may carry "unspecified" for a factor, and be sampled from."""
+        return self.label_dropout is not None
+
     def forward(self, z: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
-        # labels = self.label_dropout(labels)
+        if self.label_dropout is not None:
+            labels = self.label_dropout(labels)
         log_prob = self.einet.forward(x=self._normalize(z), y=labels).squeeze(-1)
         if self.config.normalize_latents:
             # change of variables for z_norm = (z - mean) / std:

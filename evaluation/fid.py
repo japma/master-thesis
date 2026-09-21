@@ -39,6 +39,14 @@ DEFAULT_BATCH_SIZE = 256
 DEFAULT_FEATURE_DIM = 2048
 
 
+def subsample(images: torch.Tensor, n: int, generator: torch.Generator) -> torch.Tensor:
+    """`n` images drawn without replacement, or all of them if there are fewer."""
+    if images.shape[0] <= n:
+        return images
+    idx = torch.randperm(images.shape[0], generator=generator)[:n]
+    return images[idx]
+
+
 def batches(
     images: torch.Tensor, batch_size: int = DEFAULT_BATCH_SIZE, desc: str = "features"
 ) -> Iterator[torch.Tensor]:
@@ -121,22 +129,34 @@ def run_fid(cfg: EvaluationRunConfig, device: torch.device) -> None:
         GENERATED: load_images(pool_dir),
         RECONSTRUCTION: load_images(reference_pool),
     }
-    total = batch_count(int(originals.shape[0]), batch_size) + sum(
-        batch_count(int(images.shape[0]), batch_size) for images in sources.values()
+
+    # FID is biased upward at small sample counts, so a set scored against fewer images
+    # looks worse for that reason alone. Every set is cut to the same n, or the
+    # generated row would be penalised against a reconstruction ceiling measured on the
+    # whole val split.
+    common = min(
+        int(originals.shape[0]), *(int(images.shape[0]) for images in sources.values())
     )
+    generator = torch.Generator().manual_seed(manifest.seed)
+    originals = subsample(originals, common, generator)
+    sources = {
+        source: subsample(images, common, generator)
+        for source, images in sources.items()
+    }
+
+    total = batch_count(common, batch_size) * (1 + len(sources))
     rtpt = start_rtpt(f"fid_{manifest.dataset}", total)
 
     scores = fid_against(originals, sources, device, batch_size, rtpt=rtpt)
     rows = [
-        tag(
-            pd.DataFrame([{"value": score, "n": int(sources[source].shape[0])}]),
-            columns,
-            source,
-        )
+        tag(pd.DataFrame([{"value": score, "n": common}]), columns, source)
         for source, score in scores.items()
     ]
     table = pd.concat(rows, ignore_index=True)
     write_metric(cfg.evaluation.results_root / FILENAME, table, keys)
-    print("\nfid (lower is better; reconstruction is the ceiling this model can reach)")
+    print(
+        f"\nfid (lower is better; reconstruction is the ceiling this model can reach)"
+        f"\n     every set cut to n={common} so the rows are comparable"
+    )
     for row in table.itertuples(index=False):
         print(f"  {row.source:<16} {row.value:.3f}  (n={row.n})")

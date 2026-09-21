@@ -37,6 +37,12 @@ class CSPNEncoderConfig(BaseModel):
 
     encoder_type: CSPNEncoderType
     num_classes: list[int] = []
+    # "Don't care" support. Above 0, every factor gains an extra label value meaning
+    # "unspecified", and training replaces a real value with it this often -- so the
+    # hypernetwork learns a representation for it. That widens the conditioning input,
+    # so a model trained with it is NOT checkpoint-compatible with one trained without.
+    # 0.0 leaves the encoder exactly as it was.
+    label_dropout_prob: float = Field(default=0.0, ge=0.0, lt=1.0)
 
     @model_validator(mode="after")
     def validate_encoder_config(self) -> Self:

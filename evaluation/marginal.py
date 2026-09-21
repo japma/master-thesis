@@ -42,6 +42,7 @@ from evaluation.generate import (
 )
 from evaluation.samples import BG, DIGIT, FG, to_float, to_uint8
 from models.cspn.joint_pc import JointPC
+from models.cspn.psinet_cspn import PsiNetCSPN
 from utils.config import EvaluationRunConfig
 from utils.progress import start_rtpt
 from utils.reproducibility import seed_everything
@@ -159,6 +160,7 @@ def calibration_histogram(
 # Which sampler produced a set of images, the way `source` names it for a pool.
 MIXTURE = "mixture"
 MARGINALIZED = "marginalized"
+DONT_CARE = "dont_care"
 
 CALIBRATION_FILENAME = "colour_calibration.csv"
 HISTOGRAM_FILENAME = "colour_calibration_histogram.csv"
@@ -217,6 +219,37 @@ def marginalized_samples(
     return torch.cat(images)
 
 
+@torch.no_grad()
+def dont_care_samples(
+    model: PsiNetCSPN,
+    vae: object,
+    query: torch.Tensor,
+    n: int,
+    device: torch.device,
+    std_correction: float = 1.0,
+    batch_size: int = 256,
+) -> torch.Tensor:
+    """The learned stand-in: free factors carry the encoder's "unspecified" index.
+
+    Not a marginal. The hypernetwork saw that index during training and learned *a*
+    parameter set for it; whether that set matches the true conditional is exactly what
+    the calibration number measures.
+    """
+    if not model.supports_unknown:
+        raise ValueError(
+            "this CSPN was trained without label dropout, so it has no unknown index; "
+            "set encoder_config.label_dropout_prob above 0 and retrain"
+        )
+    labels = query.clone()
+    for factor in free_factors(query):
+        labels[factor] = model.unknown_indices[factor]
+    rows = labels.unsqueeze(0).repeat(n, 1)
+    _, images = sample_and_decode(
+        model, vae, rows, device, std_correction=std_correction, batch_size=batch_size
+    )
+    return images
+
+
 def score(
     images: torch.Tensor, query: torch.Tensor, labels: torch.Tensor
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -266,7 +299,10 @@ def run_marginal(cfg: EvaluationRunConfig, device: torch.device) -> None:
     batch_size = cfg.generation.batch_size
     std_correction = cfg.generation.std_correction
 
-    arms_per_query = 2 if isinstance(model, JointPC) else 1
+    arms_per_query = 1 + int(
+        isinstance(model, JointPC)
+        or (isinstance(model, PsiNetCSPN) and model.supports_unknown)
+    )
     rtpt = start_rtpt(
         f"marginal_{cfg.dataset.name}", len(cfg.marginal.queries) * arms_per_query
     )
@@ -288,6 +324,16 @@ def run_marginal(cfg: EvaluationRunConfig, device: torch.device) -> None:
                 generator=generator,
             )
         }
+        if isinstance(model, PsiNetCSPN) and model.supports_unknown:
+            arms[DONT_CARE] = dont_care_samples(
+                model,
+                vae,
+                query,
+                n,
+                device,
+                std_correction=std_correction,
+                batch_size=batch_size,
+            )
         if isinstance(model, JointPC):
             arms[MARGINALIZED] = marginalized_samples(
                 model,

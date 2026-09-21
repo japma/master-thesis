@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import ABC
 
 import torch
 import torch.nn.functional as F
@@ -9,83 +9,76 @@ from utils.config import CSPNEncoderConfig
 
 
 class LabelEncoder(torch.nn.Module, ABC):
-    @abstractmethod
-    def forward(self, x: torch.Tensor) -> torch.Tensor: ...
+    """One-hot blocks, one per independently-varying label factor.
+
+    With `allow_unknown`, every factor gets one extra slot past its real values, and
+    `unknown_indices` names it. That slot is what "don't care" means to the
+    hypernetwork: an ordinary input value it can learn a representation for, standing
+    in for a marginal it cannot compute. Off by default, because turning it on widens
+    the conditioning input and so invalidates every existing checkpoint.
+    """
+
+    def __init__(self, cardinalities: list[int], allow_unknown: bool = False) -> None:
+        super().__init__()
+        self._cardinalities: list[int] = list(cardinalities)
+        self._allow_unknown: bool = allow_unknown
 
     @property
-    @abstractmethod
-    def num_classes(self) -> int: ...
+    def allow_unknown(self) -> bool:
+        return self._allow_unknown
 
     @property
-    @abstractmethod
     def factor_sizes(self) -> list[int]:
-        """Width of each independently-varying factor in the encoded vector.
+        """Width of each factor in the encoded vector.
 
         `forward` concatenates one block per factor, so these are the slice widths of
         the output and must sum to `num_classes`. A conditioning network that wants to
         treat factors separately (see FactorizedConditioningMLP) slices on these.
         """
-        ...
-
-
-class CategoricalLabelEncoder(LabelEncoder):
-    def __init__(self, num_classes: int) -> None:
-        super().__init__()
-        self._num_real_classes: int = num_classes
+        extra = 1 if self._allow_unknown else 0
+        return [c + extra for c in self._cardinalities]
 
     @property
     def num_classes(self) -> int:
-        return self._num_real_classes
+        return sum(self.factor_sizes)
 
     @property
-    def factor_sizes(self) -> list[int]:
-        return [self.num_classes]
+    def unknown_indices(self) -> list[int]:
+        """The "no value given" index per factor: the slot past that factor's real
+        values. Empty when the encoder has no unknown slot."""
+        if not self._allow_unknown:
+            return []
+        return list(self._cardinalities)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return F.one_hot(x, num_classes=self.num_classes).float()
+        """`(B, factors)` indices to concatenated one-hot blocks."""
+        parts = [
+            F.one_hot(x[:, i], num_classes=size).float()
+            for i, size in enumerate(self.factor_sizes)
+        ]
+        return torch.cat(parts, dim=-1)
+
+
+class CategoricalLabelEncoder(LabelEncoder):
+    """A single categorical factor, given as `(B,)` rather than `(B, 1)`."""
+
+    def __init__(self, num_classes: int, allow_unknown: bool = False) -> None:
+        super().__init__([num_classes], allow_unknown)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return F.one_hot(x, num_classes=self.factor_sizes[0]).float()
 
 
 class MultiBinaryLabelEncoder(LabelEncoder):
     """Each attribute is a binary category: 0, 1."""
 
-    def __init__(self, num_classes: int) -> None:
-        super().__init__()
-        self._num_attrs: int = num_classes
-
-    @property
-    def num_classes(self) -> int:
-        return self._num_attrs * 2
-
-    @property
-    def factor_sizes(self) -> list[int]:
-        return [2] * self._num_attrs
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        parts = [
-            F.one_hot(x[:, i], num_classes=2).float() for i in range(self._num_attrs)
-        ]
-        return torch.cat(parts, dim=-1)
+    def __init__(self, num_classes: int, allow_unknown: bool = False) -> None:
+        super().__init__([2] * num_classes, allow_unknown)
 
 
 class MultiCategoricalLabelEncoder(LabelEncoder):
-    def __init__(self, cardinalities: list[int]) -> None:
-        super().__init__()
-        self._real_cardinalities: list[int] = cardinalities
-
-    @property
-    def num_classes(self) -> int:
-        return sum(c for c in self._real_cardinalities)
-
-    @property
-    def factor_sizes(self) -> list[int]:
-        return list(self._real_cardinalities)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        parts = [
-            F.one_hot(x[:, i], num_classes=c).float()
-            for i, c in enumerate(self._real_cardinalities)
-        ]
-        return torch.cat(parts, dim=-1)
+    def __init__(self, cardinalities: list[int], allow_unknown: bool = False) -> None:
+        super().__init__(cardinalities, allow_unknown)
 
 
 class LabelDropout(torch.nn.Module):
@@ -121,12 +114,13 @@ class LabelDropout(torch.nn.Module):
 def build_label_encoder(config: CSPNEncoderConfig) -> LabelEncoder:
     from utils.config import CSPNEncoderType
 
+    allow_unknown = config.label_dropout_prob > 0.0
     match config.encoder_type:
         case CSPNEncoderType.CATEGORICAL:
-            return CategoricalLabelEncoder(config.num_classes[0])
+            return CategoricalLabelEncoder(config.num_classes[0], allow_unknown)
         case CSPNEncoderType.MULTI_BINARY:
-            return MultiBinaryLabelEncoder(config.num_classes[0])
+            return MultiBinaryLabelEncoder(config.num_classes[0], allow_unknown)
         case CSPNEncoderType.MULTI_CATEGORICAL:
-            return MultiCategoricalLabelEncoder(config.num_classes)
+            return MultiCategoricalLabelEncoder(config.num_classes, allow_unknown)
         case _:
             raise ValueError(f"Illegal encoder type {config.encoder_type!r}")

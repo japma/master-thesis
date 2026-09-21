@@ -1,0 +1,45 @@
+# colour-MNIST skewed, CSPN trained with a "don't care" label value.
+#
+# Identical to colour_mnist_skewed.yaml except for label_dropout_prob, so the pair
+# isolates what the don't-care token costs and buys. It is the cheap trick the field
+# uses in place of a marginal: the hypernetwork learns *a* parameter set for
+# "unspecified", and `evaluate_marginal` measures how far that sits from the true
+# conditional -- with the mixture reference as the floor.
+#
+# Not checkpoint-compatible with the plain CSPN: the conditioning input is wider.
+
+type: cspn
+
+dataset:
+  name: colour_mnist_skewed
+
+autoencoder:
+  name: "variational_colour_mnist_skewed"
+  external: false
+  tag: "latest"
+
+model:
+  model_type: "psinet"
+  variant: "dontcare"
+  num_vars: 16
+  num_repetitions: 3
+  num_input_distributions: 8
+  num_sums: 8
+  min_var: 0.001
+  max_var: 4.0
+  h_dims: [ 256, 128 ]
+  normalize_latents: true
+  encoder_config:
+    encoder_type: multi_categorical
+    # classes, fg colours, bg colours
+    num_classes: [ 10, 6, 3 ]
+    # Adds an 11th digit / 7th fg / 4th bg meaning "unspecified", and trains with
+    # 15% of label values replaced by it.
+    label_dropout_prob: 0.15
+
+training:
+  epochs: 200
+  learning_rate: 0.0003
+  batch_size: 128
+  early_stopping_patience: 10
+  early_stopping_min_delta: 0.01

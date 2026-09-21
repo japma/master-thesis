@@ -72,6 +72,7 @@ STEPS=(
 if [ "$WITH_OPTIONAL" -eq 1 ]; then
     STEPS+=(
         "psinet_${DATASET}_factorized|configs/cspn/colour_mnist_${VARIANT}_factorized.yaml|train_cspn"
+        "psinet_${DATASET}_dontcare|configs/cspn/colour_mnist_${VARIANT}_dontcare.yaml|train_cspn"
         "nn_baseline_${DATASET}|configs/nn_baseline/colour_mnist_${VARIANT}_mixture.yaml|train_nn_baseline"
     )
 fi
