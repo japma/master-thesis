@@ -23,6 +23,7 @@ from evaluation.generate import (
     MODEL_TYPES,
     check_latent_dim,
     empirical_labels,
+    generate_pool,
     resolve_autoencoder,
     sample_and_decode,
     stratified_labels,
@@ -261,6 +262,29 @@ def test_save_pool_rejects_float_images(tmp_path: Path) -> None:
             images=torch.zeros(4, 3, IMAGE_SIZE, IMAGE_SIZE),
             labels=all_combinations()[:4],
         )
+
+
+# --- generation guards ---
+def test_generation_checks_the_latent_dim_before_sampling(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A decoder that cannot read the model's latents must fail naming both artifacts,
+    not as a matmul error thousands of samples later."""
+    cfg = build_config(tmp_path, n_per_cell=1)
+    monkeypatch.setattr(
+        "evaluation.generate.load_generative_model",
+        lambda *a, **k: (WideSampler(LATENT_DIM + 4), "cspn:v9", Path("m.pt")),
+    )
+    monkeypatch.setattr(
+        "evaluation.generate.resolve_autoencoder",
+        lambda *a, **k: ("vae", "latest", False),
+    )
+    monkeypatch.setattr(
+        "evaluation.generate.load_vae", lambda *a, **k: (NarrowVAE(), "vae:v1")
+    )
+
+    with pytest.raises(ValueError, match="were not trained together"):
+        generate_pool(cfg, DEVICE)
 
 
 # --- label schedules ---
@@ -680,11 +704,31 @@ def test_check_latent_dim_names_both_artifacts_on_a_mismatch() -> None:
             DEVICE,
             "psinet_colour_mnist_uniform:v9",
             "variational_colour_mnist_uniform:v1",
+            all_combinations()[:1],
         )
 
 
 def test_check_latent_dim_passes_a_matching_pair() -> None:
-    check_latent_dim(WideSampler(LATENT_DIM), NarrowVAE(), DEVICE, "model:v1", "vae:v1")
+    check_latent_dim(
+        WideSampler(LATENT_DIM),
+        NarrowVAE(),
+        DEVICE,
+        "model:v1",
+        "vae:v1",
+        all_combinations()[:1],
+    )
+
+
+def test_check_latent_dim_probes_with_the_runs_own_label_space() -> None:
+    """CelebA hands it a 40-attribute row; nothing here may assume three factors."""
+    check_latent_dim(
+        WideSampler(LATENT_DIM),
+        NarrowVAE(),
+        DEVICE,
+        "model:v1",
+        "vae:v1",
+        torch.randint(0, 2, (4, 40)),
+    )
 
 
 def test_a_pinned_autoencoder_wins_over_the_recorded_one(tmp_path: Path) -> None:

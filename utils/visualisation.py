@@ -437,7 +437,9 @@ def plot_image_rows(
     for row, (name, images) in enumerate(rows.items()):
         for column in range(count):
             ax = axes[row][column]
-            ax.imshow(images[column].detach().cpu().clamp(0, 1).permute(1, 2, 0).numpy())
+            ax.imshow(
+                images[column].detach().cpu().clamp(0, 1).permute(1, 2, 0).numpy()
+            )
             ax.set_xticks([])
             ax.set_yticks([])
             for spine in ax.spines.values():
@@ -505,9 +507,7 @@ def plot_combination_grid(
     ax.imshow(canvas)
 
     ax.set_xticks([pad + c * (width + pad) + width / 2 for c in range(columns)])
-    ax.set_xticklabels(
-        [FG_NAMES[c % NUM_FG][:2] for c in range(columns)], fontsize=6
-    )
+    ax.set_xticklabels([FG_NAMES[c % NUM_FG][:2] for c in range(columns)], fontsize=6)
     ax.set_yticks([pad + d * (height + pad) + height / 2 for d in range(NUM_DIGITS)])
     ax.set_yticklabels([str(d) for d in range(NUM_DIGITS)], fontsize=7)
     ax.set_ylabel("digit")

@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pandas as pd
 import torch
+from rtpt import RTPT
 from tqdm import tqdm
 
 from evaluation.metrics import selected
@@ -24,6 +25,7 @@ from evaluation.samples import (
 from models.classifier import DigitClassifier
 from utils.checkpoints import load_classifier_from_path
 from utils.config import CheckpointConfig, EvaluationRunConfig
+from utils.progress import batch_count, start_rtpt
 from utils.wandb_utils import download_artifact
 
 DEFAULT_BATCH_SIZE = 512
@@ -59,12 +61,14 @@ def predict(
     device: torch.device,
     batch_size: int = DEFAULT_BATCH_SIZE,
     desc: str = "judging",
+    rtpt: RTPT | None = None,
 ) -> torch.Tensor:
     """Predicted digit per image, for `(N, C, H, W)` uint8 images."""
-    predictions = [
-        model(to_float(batch).to(device)).argmax(dim=1).cpu()
-        for batch in tqdm(images.split(batch_size), desc=desc)
-    ]
+    predictions = []
+    for batch in tqdm(images.split(batch_size), desc=desc):
+        if rtpt is not None:
+            rtpt.step(subtitle=desc)
+        predictions.append(model(to_float(batch).to(device)).argmax(dim=1).cpu())
     return torch.cat(predictions)
 
 
@@ -140,9 +144,16 @@ def evaluate_pool(cfg: EvaluationRunConfig, device: torch.device) -> None:
     }
 
     metrics = selected(cfg.evaluation.metrics)
+    rtpt = start_rtpt(
+        f"evaluate_{manifest.dataset}",
+        sum(
+            batch_count(int(images.shape[0]), batch_size)
+            for images, _ in image_sets.values()
+        ),
+    )
     frames: dict[str, list[pd.DataFrame]] = {metric.FILENAME: [] for metric in metrics}
     for source, (images, labels) in image_sets.items():
-        predictions = predict(model, images, device, batch_size, desc=source)
+        predictions = predict(model, images, device, batch_size, source, rtpt)
         pixels = to_float(images)
         for metric in metrics:
             table = metric.compute(pixels, predictions, labels, num_classes)

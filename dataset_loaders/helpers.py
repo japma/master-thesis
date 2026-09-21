@@ -154,7 +154,8 @@ def _load_cub200(
 def _load_celeba(train: bool = True, size: tuple[int, int] = (64, 64)) -> CelebA:
     return datasets.CelebA(
         root=DATA_DIR,
-        split="train" if train else "val",
+        # torchvision spells it "valid"; "val" raises rather than falling back.
+        split="train" if train else "valid",
         download=True,
         transform=transforms.Compose(
             [

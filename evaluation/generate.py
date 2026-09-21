@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Protocol
 
 import torch
+from rtpt import RTPT
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
@@ -37,8 +38,8 @@ from utils.config import (
     DatasetConfig,
     EvaluationRunConfig,
     PretrainedAutoencoderConfig,
-    load_dataset_config,
 )
+from utils.progress import batch_count, start_rtpt
 from utils.reproducibility import seed_everything
 from utils.wandb_utils import download_artifact, trained_with
 
@@ -99,11 +100,14 @@ def sample_and_decode(
     device: torch.device,
     std_correction: float = 1.0,
     batch_size: int = DEFAULT_BATCH_SIZE,
+    rtpt: RTPT | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """One latent and one decoded image per row of `labels`, in the same order."""
     latents: list[torch.Tensor] = []
     images: list[torch.Tensor] = []
     for batch in tqdm(labels.split(batch_size), desc="sampling"):
+        if rtpt is not None:
+            rtpt.step(subtitle="sampling")
         z = model.sample(batch.to(device), std_correction=std_correction)
         x = vae.decode(z)
         latents.append(z.float().cpu())
@@ -116,6 +120,7 @@ def encode_and_decode(
     vae: AbstractAutoencoder,
     loader: DataLoader,
     device: torch.device,
+    rtpt: RTPT | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """Round-trip a loader through the VAE: latents, reconstructions, originals, labels."""
     latents: list[torch.Tensor] = []
@@ -123,6 +128,8 @@ def encode_and_decode(
     originals: list[torch.Tensor] = []
     labels: list[torch.Tensor] = []
     for batch_images, batch_labels in tqdm(loader, desc="encoding"):
+        if rtpt is not None:
+            rtpt.step(subtitle="reference")
         batch_images = batch_images.to(device)
         z = vae.encode(batch_images)
         x = vae.decode(z)
@@ -191,10 +198,15 @@ def check_latent_dim(
     device: torch.device,
     model_ref: str,
     vae_ref: str,
+    probe_labels: torch.Tensor,
 ) -> None:
-    """Fail naming both artifacts, rather than as a matmul error inside the decoder."""
+    """Fail naming both artifacts, rather than as a matmul error inside the decoder.
+
+    `probe_labels` is one row of the labels this run will actually use: the label space
+    is the dataset's, and CelebA's 40 attributes are not colour-MNIST's three factors.
+    """
     with torch.no_grad():
-        probe = model.sample(all_combinations()[:1].to(device))
+        probe = model.sample(probe_labels[:1].to(device))
     sampled = int(probe.shape[1])
     expected = int(vae.get_latent_dim().numel())
     if sampled != expected:
@@ -211,14 +223,17 @@ def write_reference_pool(
     dataset: str,
     pool_dir: Path,
     device: torch.device,
-    batch_size: int = DEFAULT_BATCH_SIZE,
+    val_loader: DataLoader,
+    rtpt: RTPT | None = None,
 ) -> Path:
-    """The ceiling pool: real validation images and their VAE round trip."""
-    dataset_cfg = load_dataset_config(dataset)
-    _, val_loader = build_data_loaders(
-        dataset_cfg, batch_size=batch_size, drop_last=False
+    """The ceiling pool: real validation images and their VAE round trip.
+
+    Takes the loader rather than building it, so the caller can size an RTPT budget
+    from its length before any work starts.
+    """
+    latents, images, originals, labels = encode_and_decode(
+        vae, val_loader, device, rtpt=rtpt
     )
-    latents, images, originals, labels = encode_and_decode(vae, val_loader, device)
 
     manifest = ReferenceManifest(
         vae_checkpoint=resolved_vae,
@@ -241,7 +256,6 @@ def generate_pool(cfg: EvaluationRunConfig, device: torch.device) -> Path:
         cfg.autoencoder, model_path, resolved_model
     )
     vae, resolved_vae = load_vae(name, tag, external, cfg.dataset, device)
-    check_latent_dim(model, vae, device, resolved_model, resolved_vae)
 
     seed = seed_everything(generation.seed)
     if generation.schedule == EMPIRICAL_SCHEDULE:
@@ -252,6 +266,18 @@ def generate_pool(cfg: EvaluationRunConfig, device: torch.device) -> Path:
         )
     else:
         labels = stratified_labels(generation.n_per_cell)
+    check_latent_dim(model, vae, device, resolved_model, resolved_vae, labels)
+
+    # Both phases are sized up front, so the ETA covers the whole run and not just
+    # sampling -- the reference pass is the longer half for CelebA.
+    _, val_loader = build_data_loaders(
+        cfg.dataset, batch_size=generation.batch_size, drop_last=False
+    )
+    rtpt = start_rtpt(
+        f"generate_{cfg.dataset.name}",
+        batch_count(int(labels.shape[0]), generation.batch_size) + len(val_loader),
+    )
+
     latents, images = sample_and_decode(
         model,
         vae,
@@ -259,6 +285,7 @@ def generate_pool(cfg: EvaluationRunConfig, device: torch.device) -> Path:
         device,
         std_correction=generation.std_correction,
         batch_size=generation.batch_size,
+        rtpt=rtpt,
     )
 
     manifest = SampleManifest(
@@ -282,6 +309,7 @@ def generate_pool(cfg: EvaluationRunConfig, device: torch.device) -> Path:
         cfg.dataset.name,
         reference_dir(pool_dir),
         device,
-        batch_size=generation.batch_size,
+        val_loader=val_loader,
+        rtpt=rtpt,
     )
     return pool_dir

@@ -132,6 +132,4 @@ class CSPNRunConfig(BaseModel):
     autoencoder: PretrainedAutoencoderConfig
     training: CSPNTrainingConfig
     wandb: WandbConfig = Field(default_factory=WandbConfig)
-    label_pc: PretrainedLabelPCConfig = Field(
-        default_factory=PretrainedLabelPCConfig
-    )
+    label_pc: PretrainedLabelPCConfig = Field(default_factory=PretrainedLabelPCConfig)

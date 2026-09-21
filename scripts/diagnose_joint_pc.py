@@ -28,6 +28,7 @@ from evaluation.generate import (
 )
 from models.cspn.joint_pc import JointPC
 from utils.config import EvaluationRunConfig, load_config
+from utils.progress import start_rtpt
 from utils.reproducibility import resolve_device
 
 SAMPLES_PER_VALUE = 256
@@ -67,8 +68,10 @@ def factor_report(
     # p(y_f) needs the *other* label factors summed out, not pinned to zero.
     joint = label_distribution(model, device)
 
+    rtpt = start_rtpt(f"diagnose_{len(FACTOR_NAMES)}factors", len(FACTOR_NAMES))
     rows = []
     for factor, name in enumerate(FACTOR_NAMES):
+        rtpt.step(subtitle=name)
         others = tuple(i for i in range(len(CARDINALITIES)) if i != factor)
         modelled = joint.sum(dim=others)
         counts = torch.bincount(

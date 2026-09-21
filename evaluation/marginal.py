@@ -43,6 +43,7 @@ from evaluation.generate import (
 from evaluation.samples import BG, DIGIT, FG, to_float, to_uint8
 from models.cspn.joint_pc import JointPC
 from utils.config import EvaluationRunConfig
+from utils.progress import start_rtpt
 from utils.reproducibility import seed_everything
 
 # The judge reads digits, the palette reads colours; only the latter is available here,
@@ -254,17 +255,21 @@ def run_marginal(cfg: EvaluationRunConfig, device: torch.device) -> None:
         cfg.autoencoder, model_path, resolved_model
     )
     vae, resolved_vae = load_vae(name, tag_, external, cfg.dataset, device)
-    check_latent_dim(model, vae, device, resolved_model, resolved_vae)
-
     seed = seed_everything(cfg.generation.seed)
     generator = torch.Generator().manual_seed(seed)
     labels = training_labels(cfg.dataset.name)
+    check_latent_dim(model, vae, device, resolved_model, resolved_vae, labels)
     columns = run_columns(cfg, resolved_model, resolved_vae, seed)
     keys = {key: columns[key] for key in RUN_KEYS}
 
     n = cfg.marginal.n_per_query
     batch_size = cfg.generation.batch_size
     std_correction = cfg.generation.std_correction
+
+    arms_per_query = 2 if isinstance(model, JointPC) else 1
+    rtpt = start_rtpt(
+        f"marginal_{cfg.dataset.name}", len(cfg.marginal.queries) * arms_per_query
+    )
 
     distances: list[pd.DataFrame] = []
     histograms: list[pd.DataFrame] = []
@@ -294,6 +299,7 @@ def run_marginal(cfg: EvaluationRunConfig, device: torch.device) -> None:
                 batch_size=batch_size,
             )
         for arm, images in arms.items():
+            rtpt.step(subtitle=f"{arm} {spec}")
             distance, histogram_table = score(images, query, labels)
             distances.append(tag(distance, columns, arm))
             histograms.append(tag(histogram_table, columns, arm))
