@@ -89,6 +89,13 @@ def load_config() -> tuple[RunConfig, int | None, bool]:
         help="torch.compile the trained model, overriding training.compile",
     )
     parser.add_argument(
+        "--compile-mode",
+        choices=["default", "reduce-overhead", "max-autotune"],
+        help=(
+            "torch.compile mode, overriding training.compile_mode. Implies --compile."
+        ),
+    )
+    parser.add_argument(
         "--resume",
         action="store_true",
         help=(
@@ -121,8 +128,10 @@ def load_config() -> tuple[RunConfig, int | None, bool]:
             # An evaluation has no epochs to cut and never opens a run; shrink the
             # sample schedule instead.
             raw.setdefault("generation", {})["n_per_cell"] = 1
-    if args.compile and "training" in raw:
+    if (args.compile or args.compile_mode) and "training" in raw:
         raw["training"]["compile"] = True
+        if args.compile_mode:
+            raw["training"]["compile_mode"] = args.compile_mode
 
     config_type = _RUN_TYPES.get(str(run_type))
     if config_type is None:

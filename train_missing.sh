@@ -9,6 +9,12 @@
 #   --with-optional   also the factorized CSPN (E1) and the mixture nn_baseline
 #   --force           retrain everything, even what wandb already has (a new version
 #                     of an artifact; the old one stays, so nothing is lost)
+#   --compile         pass --compile to every trainer (torch.compile). Worth most on
+#                     the convolutional autoencoders; the circuits have dynamic control
+#                     flow, so measure one before assuming it helps them too.
+#   --compile-mode M  default | reduce-overhead | max-autotune (implies --compile).
+#                     max-autotune pays a large one-off cost, which a 200-epoch run
+#                     can absorb and a short one cannot.
 #
 # Order matters: everything downstream trains on the autoencoder's latents, so a missing
 # autoencoder is trained first and the rest follow in the same run.
@@ -21,11 +27,15 @@ VARIANT="skewed"
 DRY_RUN=0
 WITH_OPTIONAL=0
 FORCE=0
+COMPILE=0
+COMPILE_MODE=""
 for arg in "$@"; do
     case "$arg" in
         --dry-run)       DRY_RUN=1 ;;
         --with-optional) WITH_OPTIONAL=1 ;;
         --force)         FORCE=1 ;;
+        --compile)       COMPILE=1 ;;
+        --compile-mode=*) COMPILE=1; COMPILE_MODE="${arg#*=}" ;;
         --*)             echo "Unknown option: $arg" >&2; exit 2 ;;
         *)               VARIANT="$arg" ;;
     esac
@@ -68,6 +78,13 @@ fi
 
 echo "Variant: ${VARIANT}   (dataset ${DATASET})"
 [ "$FORCE" -eq 1 ] && echo "--force: retraining everything, existing checkpoints ignored"
+
+TRAIN_ARGS=()
+if [ "$COMPILE" -eq 1 ]; then
+    TRAIN_ARGS+=(--compile)
+    [ -n "$COMPILE_MODE" ] && TRAIN_ARGS+=(--compile-mode "$COMPILE_MODE")
+    echo "torch.compile enabled${COMPILE_MODE:+ (mode ${COMPILE_MODE})}"
+fi
 echo "Asking wandb which checkpoints already exist ..."
 
 EXISTING="$(uv run python - <<'PYEOF'
@@ -110,7 +127,7 @@ for step in "${STEPS[@]}"; do
         continue
     fi
     if [ "$DRY_RUN" -eq 1 ]; then
-        echo "would train  ${artifact}  <-  uv run ${entrypoint} ${config}"
+        echo "would train  ${artifact}  <-  uv run ${entrypoint} ${config} ${TRAIN_ARGS[*]}"
         TRAINED=$((TRAINED + 1))
         continue
     fi
@@ -120,7 +137,7 @@ for step in "${STEPS[@]}"; do
     echo "  ${entrypoint} ${config}"
     echo "  started at $(date)"
     echo "========================================"
-    uv run "$entrypoint" "$config"
+    uv run "$entrypoint" "$config" "${TRAIN_ARGS[@]}"
     echo "Finished ${artifact} at $(date)"
     echo
     TRAINED=$((TRAINED + 1))
