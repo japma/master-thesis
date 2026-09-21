@@ -75,6 +75,10 @@ class CSPNConfig(BaseModel):
     encoder_config: CSPNEncoderConfig
     normalize_latents: bool = False
     conditioning_type: ConditioningType = ConditioningType.JOINT
+    # Appended to the checkpoint and artifact name, after the conditioning type. Needed
+    # whenever two configs share model_type and dataset -- e.g. the same CSPN trained on
+    # a different autoencoder's latent space, which is a different model entirely.
+    variant: str = ""
 
     @model_validator(mode="after")
     def valid_var_range(self) -> Self:

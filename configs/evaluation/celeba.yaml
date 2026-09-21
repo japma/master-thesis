@@ -1,0 +1,48 @@
+# CelebA: generate a pool, then score it with FID.
+#
+# Two things differ from the colour-MNIST configs, and both follow from the label space.
+# CelebA has 40 binary attributes -- 2^40 combinations -- so the generation schedule
+# draws whole label rows from the training split instead of enumerating cells. And there
+# is no judge: `evaluate_samples` would have nothing to score, so stage 2 is
+# `evaluate_fid`.
+#
+#   uv run generate_samples configs/evaluation/celeba.yaml
+#   uv run evaluate_fid     configs/evaluation/celeba.yaml
+#
+# FID is the only metric here for now. It says a set of images looks like CelebA; it
+# says nothing about whether a sample carries the attributes it was conditioned on.
+# An attribute judge is the obvious next one -- see the note at the bottom.
+
+type: evaluation
+
+dataset:
+  name: celeba
+
+model:
+  name: psinet_celeba
+  model_type: cspn
+  tag: latest
+
+# Unpinned on purpose: the decoder is whichever autoencoder this checkpoint records
+# being trained against, so the latents always fit.
+
+# No `classifier:` -- nothing here is judged.
+
+generation:
+  schedule: empirical
+  n_samples: 10000
+  seed: 0
+  std_correction: 1.0
+  batch_size: 128
+  output_root: results/samples
+
+evaluation:
+  # FID's Inception pass is the cost here, not the metric.
+  batch_size: 128
+  results_root: results
+
+# Still missing, and worth adding before the writeup:
+#   - attribute accuracy: does a sample conditioned on `Smiling` actually smile? Needs a
+#     multi-label attribute classifier, the CelebA analogue of the digit judge.
+#   - the calibration metric from `evaluate_marginal`, which needs that same judge to
+#     read attributes back off the pixels.

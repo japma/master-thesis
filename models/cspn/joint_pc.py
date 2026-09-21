@@ -169,6 +169,23 @@ class JointPC(AbstractCSPN):
             log_prob = self.einet.forward(x=self._pack(z, labels)).squeeze(-1)
         return log_prob - self._log_jacobian(observed)
 
+    def latent_log_marginal(self, z: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
+        """Exact log p(z), every label variable marginalized out.
+
+        The mirror of `label_log_marginal`, and what turns the joint into a conditional:
+        `log p(y | z) = forward(z, y) - latent_log_marginal(z, y)`, exactly, at the cost
+        of one extra pass. `labels` only supplies placeholder values and the batch size.
+        """
+        with self._marginalizing(self.label_idx):
+            log_prob = self.einet.forward(x=self._pack(z, labels)).squeeze(-1)
+        return log_prob - self._log_jacobian(self.latent_idx)
+
+    def conditional_log_prob(
+        self, z: torch.Tensor, labels: torch.Tensor
+    ) -> torch.Tensor:
+        """Exact log p(y | z)."""
+        return self.forward(z, labels) - self.latent_log_marginal(z, labels)
+
     def label_log_marginal(self, labels: torch.Tensor) -> torch.Tensor:
         """Exact log p(y), every latent dim marginalized out.
 

@@ -34,8 +34,14 @@ class GeneratedModelConfig(CheckpointConfig):
 class GenerationConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    # "stratified" enumerates every colour-MNIST (digit, fg, bg) cell. "empirical"
+    # draws whole label rows from the training split, for a label space too large to
+    # enumerate -- CelebA's 40 binary attributes are 2^40 combinations.
+    schedule: Literal["stratified", "empirical"] = "stratified"
     # Samples per (digit, fg, bg) combination; 180 cells, so 100 is 18k samples.
     n_per_cell: int = Field(default=100, ge=1)
+    # Total samples, read only by the empirical schedule.
+    n_samples: int = Field(default=10000, ge=1)
     seed: int = 0
     # Scales the sampled standard deviation; 1.0 samples the model as trained.
     std_correction: float = 1.0
@@ -107,7 +113,8 @@ class EvaluationRunConfig(BaseModel):
     # against; pin it only to override that. Guessing the name is how you end up
     # decoding 20-dim latents with a 16-dim decoder.
     autoencoder: PretrainedAutoencoderConfig | None = None
-    classifier: CheckpointConfig
+    # Omit when no judge applies: CelebA is scored with FID, not a digit classifier.
+    classifier: CheckpointConfig | None = None
     generation: GenerationConfig = Field(default_factory=GenerationConfig)
     evaluation: EvaluationConfig = Field(default_factory=EvaluationConfig)
     # Only `evaluate_marginal` reads this; omit it for the ordinary two stages.

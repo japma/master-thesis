@@ -14,8 +14,9 @@ from tqdm import tqdm
 
 from dataset_loaders import build_data_loaders
 from dataset_loaders.colour_mnist import all_combinations
+from evaluation.conditionals import training_labels
 from evaluation.samples import (
-    STRATIFIED_SCHEDULE,
+    EMPIRICAL_SCHEDULE,
     ReferenceManifest,
     SampleManifest,
     current_git_commit,
@@ -73,6 +74,21 @@ def stratified_labels(n_per_cell: int = DEFAULT_N_PER_CELL) -> torch.Tensor:
     if n_per_cell < 1:
         raise ValueError(f"n_per_cell must be at least 1, got {n_per_cell}")
     return all_combinations().repeat_interleave(n_per_cell, dim=0)
+
+
+def empirical_labels(
+    dataset: str, n: int, generator: torch.Generator | None = None
+) -> torch.Tensor:
+    """`n` whole label rows drawn from the training split.
+
+    Whole rows, not per-factor draws: CelebA's attributes are heavily dependent, and
+    independent sampling would ask the model for combinations nobody ever wears.
+    """
+    if n < 1:
+        raise ValueError(f"n_samples must be at least 1, got {n}")
+    labels = training_labels(dataset)
+    idx = torch.randint(labels.shape[0], (n,), generator=generator)
+    return labels[idx].clone()
 
 
 @torch.no_grad()
@@ -228,7 +244,14 @@ def generate_pool(cfg: EvaluationRunConfig, device: torch.device) -> Path:
     check_latent_dim(model, vae, device, resolved_model, resolved_vae)
 
     seed = seed_everything(generation.seed)
-    labels = stratified_labels(generation.n_per_cell)
+    if generation.schedule == EMPIRICAL_SCHEDULE:
+        labels = empirical_labels(
+            cfg.dataset.name,
+            generation.n_samples,
+            torch.Generator().manual_seed(seed),
+        )
+    else:
+        labels = stratified_labels(generation.n_per_cell)
     latents, images = sample_and_decode(
         model,
         vae,
@@ -243,7 +266,7 @@ def generate_pool(cfg: EvaluationRunConfig, device: torch.device) -> Path:
         model_type=cfg.model.model_type,
         vae_checkpoint=resolved_vae,
         dataset=cfg.dataset.name,
-        schedule=STRATIFIED_SCHEDULE,
+        schedule=generation.schedule,
         n_per_cell=generation.n_per_cell,
         n_samples=int(labels.shape[0]),
         seed=seed,

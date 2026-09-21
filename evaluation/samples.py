@@ -32,6 +32,8 @@ REFERENCE_DIRNAME = "reference"
 DIGIT, FG, BG = 0, 1, 2
 
 STRATIFIED_SCHEDULE = "stratified"
+# Labels drawn from the training split, for a label space too large to enumerate.
+EMPIRICAL_SCHEDULE = "empirical"
 
 SAMPLES_KIND = "samples"
 REFERENCE_KIND = "reference"
@@ -127,8 +129,8 @@ def save_pool(
         raise ValueError(f"images must be uint8, got {images.dtype}")
     if originals is not None and originals.dtype != torch.uint8:
         raise ValueError(f"originals must be uint8, got {originals.dtype}")
-    if labels.shape[1] != 3:
-        raise ValueError(f"labels must be (N, 3), got {tuple(labels.shape)}")
+    if labels.dim() != 2:
+        raise ValueError(f"labels must be (N, factors), got {tuple(labels.shape)}")
 
     save_manifest(pool_dir, manifest)
     torch.save(latents.cpu(), pool_dir / LATENTS_FILENAME)

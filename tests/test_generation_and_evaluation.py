@@ -22,6 +22,7 @@ from evaluation.evaluate import GENERATED, evaluate_pool, predict, write_metric
 from evaluation.generate import (
     MODEL_TYPES,
     check_latent_dim,
+    empirical_labels,
     resolve_autoencoder,
     sample_and_decode,
     stratified_labels,
@@ -260,6 +261,62 @@ def test_save_pool_rejects_float_images(tmp_path: Path) -> None:
             images=torch.zeros(4, 3, IMAGE_SIZE, IMAGE_SIZE),
             labels=all_combinations()[:4],
         )
+
+
+# --- label schedules ---
+def test_empirical_schedule_draws_whole_rows_from_training(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Attributes are dependent, so a drawn row must be a row that actually occurred."""
+    training = torch.tensor([[0, 1, 1], [1, 0, 0]] * 50)
+    monkeypatch.setattr("evaluation.generate.training_labels", lambda name: training)
+
+    drawn = empirical_labels("whatever", 200, torch.Generator().manual_seed(0))
+
+    assert drawn.shape == (200, 3)
+    rows = {tuple(row) for row in drawn.tolist()}
+    assert rows <= {(0, 1, 1), (1, 0, 0)}
+    assert len(rows) == 2
+
+
+def test_empirical_schedule_rejects_an_empty_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "evaluation.generate.training_labels", lambda name: torch.zeros(4, 3).long()
+    )
+    with pytest.raises(ValueError, match="at least 1"):
+        empirical_labels("whatever", 0)
+
+
+def test_a_pool_accepts_a_label_space_that_is_not_colour_mnists(tmp_path: Path) -> None:
+    """CelebA carries 40 binary attributes, not [digit, fg, bg]."""
+    manifest = ReferenceManifest(
+        vae_checkpoint="vae:v1",
+        dataset="celeba",
+        split="val",
+        n_samples=4,
+        git_commit=None,
+    )
+    save_pool(
+        tmp_path / "celeba",
+        manifest,
+        latents=torch.zeros(4, LATENT_DIM),
+        images=torch.zeros(4, 3, IMAGE_SIZE, IMAGE_SIZE, dtype=torch.uint8),
+        labels=torch.randint(0, 2, (4, 40)),
+    )
+    assert load_labels(tmp_path / "celeba").shape == (4, 40)
+
+
+def test_a_judged_metric_without_a_judge_says_so(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = build_config(tmp_path, n_per_cell=2)
+    cfg.classifier = None
+    write_pool(tmp_path, n_per_cell=2, pool_dir=cfg.pool_dir)
+
+    with pytest.raises(ValueError, match="evaluate_fid"):
+        evaluate_pool(cfg, DEVICE)
 
 
 # --- metrics ---

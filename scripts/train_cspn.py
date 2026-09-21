@@ -168,10 +168,15 @@ def main() -> None:
     device = resolve_device()
     dataset_name = dataset_cfg.name
 
-    variant = (
-        ""
-        if cspn_cfg.conditioning_type is ConditioningType.JOINT
-        else str(cspn_cfg.conditioning_type)
+    variant = "_".join(
+        part
+        for part in (
+            ""
+            if cspn_cfg.conditioning_type is ConditioningType.JOINT
+            else str(cspn_cfg.conditioning_type),
+            cspn_cfg.variant,
+        )
+        if part
     )
 
     run_name = f"cspn_{dataset_name}_{cspn_cfg.model_type}" + (

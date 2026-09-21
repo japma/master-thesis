@@ -156,6 +156,10 @@ class AutoencoderConfig(BaseModel):
     num_decoder_resblocks: int = 1
     # Required by (and only read by) model_type=supervised/anchored.
     supervision: SupervisionConfig | None = None
+    # Appended to the checkpoint and artifact name. Two configs with the same
+    # model_type and dataset otherwise land in one wandb collection, where `:latest`
+    # would resolve to whichever ran last -- and they may not even share a latent_dim.
+    variant: str = ""
 
     @model_validator(mode="after")
     def validate_supervision(self) -> Self:

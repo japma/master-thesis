@@ -24,10 +24,7 @@ BG_MEANS = torch.tensor([-2.0, 0.0, 2.0])
 def make_batch(n: int, seed: int) -> tuple[torch.Tensor, torch.Tensor]:
     generator = torch.Generator().manual_seed(seed)
     labels = torch.stack(
-        [
-            torch.randint(0, c, (n,), generator=generator)
-            for c in CARDINALITIES
-        ],
+        [torch.randint(0, c, (n,), generator=generator) for c in CARDINALITIES],
         dim=1,
     )
     z = 0.2 * torch.randn(n, NUM_LATENTS, generator=generator)
@@ -86,6 +83,32 @@ def test_label_marginal_sums_to_one(trained: JointPC) -> None:
     )
     total = trained.label_log_marginal(labels).exp().sum().item()
     assert total == pytest.approx(1.0, abs=1e-3)
+
+
+def test_conditional_log_prob_is_a_distribution_over_the_labels(
+    trained: JointPC,
+) -> None:
+    """log p(y|z) = log p(z,y) - log p(z), so summing over every y must give 1."""
+    z = torch.randn(4, NUM_LATENTS)
+    cells = [[d, f, b] for d in range(10) for f in range(6) for b in range(3)]
+
+    total = torch.stack(
+        [
+            trained.conditional_log_prob(z, torch.tensor([cell] * 4)).exp()
+            for cell in cells
+        ]
+    ).sum(dim=0)
+
+    assert total.tolist() == pytest.approx([1.0] * 4, abs=1e-4)
+
+
+def test_latent_marginal_drops_the_labels(trained: JointPC) -> None:
+    """p(z) must not depend on the placeholder labels handed in with it."""
+    z = torch.randn(4, NUM_LATENTS)
+    one = trained.latent_log_marginal(z, torch.zeros(4, 3, dtype=torch.long))
+    other = trained.latent_log_marginal(z, torch.tensor([[7, 5, 2]] * 4))
+
+    assert one.tolist() == pytest.approx(other.tolist(), abs=1e-5)
 
 
 def test_conditional_sampling_follows_the_background_label(trained: JointPC) -> None:
@@ -169,3 +192,11 @@ def test_checkpoint_round_trip(trained: JointPC) -> None:
 
     assert restored.get_config() == trained.get_config()
     assert torch.allclose(restored(z, labels), trained(z, labels), atol=1e-5)
+
+    # Sampling walks the layer/parameter layout that is re-derived at load time, so
+    # matching densities alone would not prove the structure survived the round trip.
+    torch.manual_seed(11)
+    before = trained.sample(labels)
+    torch.manual_seed(11)
+    after = restored.sample(labels)
+    assert torch.allclose(before, after, atol=1e-5)

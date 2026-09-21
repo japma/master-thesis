@@ -10,7 +10,7 @@ import pandas as pd
 import torch
 from tqdm import tqdm
 
-from evaluation.metrics import digit_accuracy, selected
+from evaluation.metrics import selected
 from evaluation.samples import (
     SampleManifest,
     load_images,
@@ -35,6 +35,10 @@ RECONSTRUCTION = "reconstruction"
 
 # Identify a run; re-evaluating one replaces its rows rather than duplicating them.
 RUN_KEYS = ["checkpoint", "seed", "std_correction"]
+
+# A metric is worth printing when it is one number per source; anything with its own
+# per-cell columns belongs in the CSV, not the terminal.
+SUMMARY_COLUMNS = {"factor", "value", "n"}
 
 
 def load_judge(
@@ -64,8 +68,11 @@ def predict(
     return torch.cat(predictions)
 
 
-def run_columns(manifest: SampleManifest, classifier: str) -> dict:
-    """The identity columns every metric CSV starts with."""
+def run_columns(manifest: SampleManifest, classifier: str | None = None) -> dict:
+    """The identity columns every metric CSV starts with.
+
+    `classifier` is None where no judge was involved, as in FID.
+    """
     return {
         "model": manifest.model_type,
         "dataset": manifest.dataset,
@@ -73,7 +80,7 @@ def run_columns(manifest: SampleManifest, classifier: str) -> dict:
         "seed": manifest.seed,
         "std_correction": manifest.std_correction,
         "vae": manifest.vae_checkpoint,
-        "classifier": classifier,
+        "classifier": classifier or "none",
     }
 
 
@@ -115,6 +122,11 @@ def evaluate_pool(cfg: EvaluationRunConfig, device: torch.device) -> None:
             f"used {reference.vae_checkpoint}; the ceiling would not bound the samples"
         )
 
+    if cfg.classifier is None:
+        raise ValueError(
+            f"{cfg.dataset.name} has no `classifier:` in its config, but every metric "
+            "here is judged. Score this model with `evaluate_fid` instead."
+        )
     model, classifier = load_judge(cfg.classifier, device)
     num_classes = model.config.num_classes
     columns = run_columns(manifest, classifier)
@@ -142,11 +154,17 @@ def evaluate_pool(cfg: EvaluationRunConfig, device: torch.device) -> None:
     }
     for filename, table in tables.items():
         write_metric(results_root / filename, table, keys)
-    if digit_accuracy.FILENAME in tables:
-        _print_summary(tables[digit_accuracy.FILENAME])
+    _print_summary(tables, identity=[*columns, "source"])
 
 
-def _print_summary(scores: pd.DataFrame) -> None:
-    print("\ndigit accuracy")
-    for row in scores.itertuples(index=False):
-        print(f"  {row.source:<16} {row.value:.4f}  (n={row.n})")
+def _print_summary(tables: dict[str, pd.DataFrame], identity: list[str]) -> None:
+    """Every metric that is one number per source. The per-cell tables are too big to
+    read in a terminal and are what the CSVs are for."""
+    for filename, table in tables.items():
+        own = [column for column in table.columns if column not in identity]
+        if not set(own) <= SUMMARY_COLUMNS:
+            continue
+        print(f"\n{filename.removesuffix('.csv')}")
+        for row in table.itertuples(index=False):
+            factor = f"{row.factor:<3} " if "factor" in own else ""
+            print(f"  {row.source:<16} {factor}{row.value:.4f}  (n={row.n})")

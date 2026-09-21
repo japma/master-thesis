@@ -59,13 +59,15 @@ def main() -> None:
     run_name = f"{model_name}_{training_cfg.vae_type}"
     if supervised or anchored:
         run_name = f"{run_name}_{autoencoder_cfg.model_type}"
+    if autoencoder_cfg.variant:
+        run_name = f"{run_name}_{autoencoder_cfg.variant}"
 
     init_run(wandb_cfg, run_name, cfg.model_dump())
 
     print(f"Training Autoencoder on {dataset_name} | device={device} | seed={seed}")
 
     ae_ckpt_path = intermediate_checkpoint_path(
-        autoencoder_cfg.model_type, dataset_cfg.name
+        autoencoder_cfg.model_type, dataset_cfg.name, autoencoder_cfg.variant
     )
     if resume and ae_ckpt_path.exists():
         ae = load_ae_from_path(ae_ckpt_path, device=device).to(device)
@@ -212,7 +214,9 @@ def main() -> None:
 
     checkpoint = CheckpointSpec(
         intermediate_path=ae_ckpt_path,
-        final_path=final_checkpoint_path(autoencoder_cfg.model_type, dataset_name),
+        final_path=final_checkpoint_path(
+            autoencoder_cfg.model_type, dataset_name, autoencoder_cfg.variant
+        ),
         artifact_type="autoencoder",
     )
 

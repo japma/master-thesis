@@ -18,8 +18,18 @@ CARDINALITIES = (NUM_DIGITS, NUM_FG, NUM_BG)
 
 
 def training_labels(dataset: str) -> torch.Tensor:
-    """The `(N, 3)` labels the model was trained on."""
-    return build_dataset(dataset, train=True).targets
+    """The `(N, factors)` labels the model was trained on.
+
+    Colour-MNIST calls them `targets`, torchvision's CelebA calls them `attr`.
+    """
+    data = build_dataset(dataset, train=True)
+    for attribute in ("targets", "attr"):
+        labels = getattr(data, attribute, None)
+        if labels is not None:
+            return torch.as_tensor(labels).long()
+    raise AttributeError(
+        f"{dataset} exposes neither `targets` nor `attr`, so its labels cannot be read"
+    )
 
 
 def matching(labels: torch.Tensor, query: torch.Tensor) -> torch.Tensor:

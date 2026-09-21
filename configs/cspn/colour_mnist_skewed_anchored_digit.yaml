@@ -1,0 +1,41 @@
+# colour-MNIST skewed, on the fully anchored latent space.
+#
+# Every factor anchored, digits on ten orthogonal unit vectors. The CSPN does
+# not need this -- its hypernetwork emits parameters per label either way -- but it is
+# the control the joint PC has to be compared against on the same latent space.
+#
+# `variant` keeps this out of the psinet_colour_mnist_skewed collection: same model_type and dataset, but a
+# different autoencoder means a different model, and `:latest` must not mix them.
+
+type: cspn
+
+dataset:
+  name: colour_mnist_skewed
+
+autoencoder:
+  name: "anchored_colour_mnist_skewed_digit"
+  external: false
+  tag: "latest"
+
+model:
+  model_type: "psinet"
+  variant: "anchored_digit"
+  num_vars: 20
+  num_repetitions: 3
+  num_input_distributions: 8
+  num_sums: 8
+  min_var: 0.001
+  max_var: 4.0
+  h_dims: [ 256, 128 ]
+  normalize_latents: true
+  encoder_config:
+    encoder_type: multi_categorical
+    # classes, fg colours, bg colours
+    num_classes: [ 10, 6, 3 ]
+
+training:
+  epochs: 200
+  learning_rate: 0.0003
+  batch_size: 128
+  early_stopping_patience: 10
+  early_stopping_min_delta: 0.01

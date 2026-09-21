@@ -1,19 +1,19 @@
-# Every factor anchored, digits included.
+# colour-MNIST, skewed variant.
 #
-# Digits get a one-hot block: ten classes on ten mutually orthogonal unit vectors, which
-# is the anchor geometry that does *not* claim 3 sits between 2 and 4. It costs
-# dimensions -- hence latent_dim 20 rather than the 16 the other colour-MNIST
-# autoencoders use, so that 4 stay free for style -- and it is the variant to watch for
-# the failure mode anchoring invites: a block so tightly clamped that the decoder snaps
-# to the ten codes it saw and anything between them is noise.
+# All 180 combinations appear, but digit 0 is red 45% of the time (weight 4x versus the
+# other foregrounds); every other digit stays uniform. It asks whether a model picks up a
+# colour prior nobody told it about.
 #
-# Note the latent_dim difference when comparing against colour_mnist_uniform_anchored:
-# the colour blocks are identical, the digit block and the style budget are not.
-
+# Every factor anchored, digits included, on ten mutually orthogonal unit vectors.
+# This is the one to watch for the joint PC: anchoring makes each factor
+# mean-separated in the latent space, which is the only structure a Gaussian-leaf
+# mixture conditions on well. Note latent_dim is 20 here, not 16 -- anything
+# trained on it needs its latent size to match.
+#
 type: ae
 
 dataset:
-  name: colour_mnist_uniform
+  name: colour_mnist_skewed
 
 model:
   model_type: anchored

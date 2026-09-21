@@ -1,0 +1,48 @@
+# colour-MNIST, skewed variant.
+#
+# All 180 combinations appear, but digit 0 is red 45% of the time (weight 4x versus the
+# other foregrounds); every other digit stays uniform. It asks whether a model picks up a
+# colour prior nobody told it about.
+#
+# Colours anchored, digit left to a classification head. The fg block *is* an RGB
+# coordinate and the bg block the same palette's grey diagonal, so a colour the
+# training set never contained is still a point in the block.
+#
+type: ae
+
+dataset:
+  name: colour_mnist_skewed
+
+model:
+  model_type: anchored
+  latent_dim: 16
+  num_blocks: 2
+  base_channels: 32
+  # Targets are [digit, fg, bg]; 5 of the 16 dimensions stay free for style.
+  supervision:
+    names: [digit, fg, bg]
+    dims: [5, 3, 3]
+    cardinalities: [10, 6, 3]
+    anchors: [none, colour_mnist_fg, colour_mnist_bg]
+    # Anchors sit 0.5-1.0 apart, so this is a tight clamp: the classes are ~5-10 std
+    # apart and the decoder sees a narrow band around each. Raise it to trade clamping
+    # for coverage of the values *between* anchors.
+    anchor_std: 0.1
+
+training:
+  vae_type: beta
+  epochs: 100
+  learning_rate: 0.0005
+  batch_size: 128
+  beta: 1.0
+  beta_start: 0.0
+  beta_end: 1.0
+  kl_warmup_epochs: 10
+  lambda_perceptual: 0.0
+  # gamma is set by the cross-entropy, which only bites well above 1; the anchor KL
+  # opens near 50 nats per dimension, so anchor_weight scales it back to roughly the
+  # same footing. Tune against acc/digit and anchor_rmse/{fg,bg} in wandb.
+  gamma_start: 0.0
+  gamma_end: 10.0
+  anchor_weight: 0.1
+  classifier_warmup_epochs: 10

@@ -1,6 +1,7 @@
 #!/bin/bash
 # train_missing.sh
-# Trains the colour-MNIST models a variant needs, skipping whatever wandb already has.
+# Trains every colour-MNIST model for a variant -- the four autoencoders and the
+# CSPN/joint PC on each latent space -- skipping whatever wandb already has.
 # Usage: bash train_missing.sh [variant] [--dry-run] [--with-optional]
 #
 #   variant           colour-MNIST variant, default "skewed"
@@ -32,12 +33,27 @@ done
 
 DATASET="colour_mnist_${VARIANT}"
 
-# What the calibration experiment needs, in dependency order:
+# Everything for a variant, in dependency order: the autoencoders first, because every
+# model below trains on one of their latent spaces, then the models that consume them.
 #   artifact name | config | entrypoint
 STEPS=(
+    # --- latent spaces ---
     "variational_${DATASET}|configs/autoencoder/colour_mnist_${VARIANT}.yaml|train_ae"
+    "anchored_${DATASET}|configs/autoencoder/colour_mnist_${VARIANT}_anchored.yaml|train_ae"
+    "anchored_${DATASET}_digit|configs/autoencoder/colour_mnist_${VARIANT}_anchored_digit.yaml|train_ae"
+    "supervised_${DATASET}|configs/autoencoder/colour_mnist_${VARIANT}_supervised.yaml|train_ae"
+
+    # --- on the plain variational space ---
     "psinet_${DATASET}|configs/cspn/colour_mnist_${VARIANT}.yaml|train_cspn"
     "joint_pc_${DATASET}|configs/joint_pc/colour_mnist_${VARIANT}.yaml|train_joint_pc"
+
+    # --- on the anchored spaces: the comparison that asks whether mean-separated
+    #     factors are what the joint PC was missing. Both arms, same latent space.
+    "psinet_${DATASET}_anchored|configs/cspn/colour_mnist_${VARIANT}_anchored.yaml|train_cspn"
+    "joint_pc_${DATASET}_anchored|configs/joint_pc/colour_mnist_${VARIANT}_anchored.yaml|train_joint_pc"
+    "psinet_${DATASET}_anchored_digit|configs/cspn/colour_mnist_${VARIANT}_anchored_digit.yaml|train_cspn"
+    "joint_pc_${DATASET}_anchored_digit|configs/joint_pc/colour_mnist_${VARIANT}_anchored_digit.yaml|train_joint_pc"
+
     # The judge is deliberately trained on uniform for every variant, so that it is not
     # itself weaker on the combinations the model under test never saw.
     "digit_classifier_colour_mnist_uniform|configs/classifier/colour_mnist_uniform.yaml|train_classifier"
@@ -79,6 +95,7 @@ echo
 
 TRAINED=0
 SKIPPED=0
+MISSING=0
 for step in "${STEPS[@]}"; do
     IFS='|' read -r artifact config entrypoint <<< "$step"
 
@@ -88,8 +105,9 @@ for step in "${STEPS[@]}"; do
         continue
     fi
     if [ ! -f "$config" ]; then
-        echo "MISSING CONFIG  ${config}  -- cannot train ${artifact}" >&2
-        exit 1
+        echo "no config    ${config}  (skipping ${artifact})"
+        MISSING=$((MISSING + 1))
+        continue
     fi
     if [ "$DRY_RUN" -eq 1 ]; then
         echo "would train  ${artifact}  <-  uv run ${entrypoint} ${config}"
@@ -109,7 +127,7 @@ for step in "${STEPS[@]}"; do
 done
 
 if [ "$DRY_RUN" -eq 1 ]; then
-    echo "Dry run: ${TRAINED} to train, ${SKIPPED} already there."
+    echo "Dry run: ${TRAINED} to train, ${SKIPPED} already there, ${MISSING} without a config."
 else
-    echo "Done: ${TRAINED} trained, ${SKIPPED} skipped."
+    echo "Done: ${TRAINED} trained, ${SKIPPED} skipped, ${MISSING} without a config."
 fi

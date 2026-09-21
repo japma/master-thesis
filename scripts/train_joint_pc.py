@@ -44,6 +44,8 @@ def main() -> None:
     device = resolve_device()
     dataset_name = dataset_cfg.name
     run_name = f"joint_pc_{dataset_name}"
+    if model_cfg.variant:
+        run_name = f"{run_name}_{model_cfg.variant}"
 
     init_run(cfg.wandb, run_name, cfg.model_dump())
 
@@ -70,7 +72,9 @@ def main() -> None:
         f"{model_cfg.label_cardinalities} labels | device={device} | seed={seed}"
     )
 
-    ckpt_path = intermediate_checkpoint_path("joint_pc", dataset_name)
+    ckpt_path = intermediate_checkpoint_path(
+        "joint_pc", dataset_name, model_cfg.variant
+    )
     resumed = False
     if resume and ckpt_path.exists():
         model = load_joint_pc_from_path(ckpt_path, device=device)
@@ -124,7 +128,7 @@ def main() -> None:
 
     checkpoint = CheckpointSpec(
         intermediate_path=ckpt_path,
-        final_path=final_checkpoint_path("joint_pc", dataset_name),
+        final_path=final_checkpoint_path("joint_pc", dataset_name, model_cfg.variant),
         artifact_type="joint_pc",
     )
 
