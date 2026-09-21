@@ -1,6 +1,7 @@
 """Entry point for autoencoder training."""
 
 from collections.abc import Sized
+from typing import cast
 
 import torch
 from rtpt import RTPT
@@ -24,7 +25,7 @@ from utils.checkpoints import (
     intermediate_checkpoint_path,
     load_ae_from_path,
 )
-from utils.compilation import maybe_compile
+from utils.compilation import maybe_compile, uncompiled
 from utils.config import (
     AERunConfig,
     AutoencoderType,
@@ -139,9 +140,13 @@ def main() -> None:
                 delay_steps=len(train_loader) * training_cfg.kl_warmup_epochs,
             )
             if anchored:
-                assert isinstance(ae, AnchoredVAE)
+                # `ae` may be a torch.compile wrapper by now, and the wrapper is not
+                # an instance of what it wraps -- check the module underneath.
+                assert isinstance(uncompiled(ae), AnchoredVAE)
                 objective = AnchoredVAEObjective(
-                    model=ae,
+                    # The compiled wrapper is what has to be called for the compile to
+                    # do anything; it proxies to the AnchoredVAE asserted above.
+                    model=cast(AnchoredVAE, ae),
                     optimizer=optimizer,
                     lr_scheduler=lr_scheduler,
                     loss_fn=AnchoredVAELoss(
@@ -156,14 +161,14 @@ def main() -> None:
                     factor_names=supervision.factor_names,
                 )
             else:
-                assert isinstance(ae, SupervisedVAE)
+                assert isinstance(uncompiled(ae), SupervisedVAE)
                 objective = SupervisedVAEObjective(
-                    model=ae,
+                    model=cast(SupervisedVAE, ae),
                     optimizer=optimizer,
                     lr_scheduler=lr_scheduler,
-                    loss_fn=SupervisedVAELoss(
-                        loss_fn, gamma=training_cfg.gamma_end
-                    ).to(device),
+                    loss_fn=SupervisedVAELoss(loss_fn, gamma=training_cfg.gamma_end).to(
+                        device
+                    ),
                     beta_scheduler=beta_scheduler,
                     gamma_scheduler=gamma_scheduler,
                     factor_names=supervision.factor_names,
@@ -207,9 +212,9 @@ def main() -> None:
         raise ValueError(f"Unknown training type: {training_cfg.vae_type}")
 
     sample_indices = torch.randperm(test_data_size)[: min(10, test_data_size)]
-    sample_images = torch.stack(
-        [test_dataset[i.item()][0] for i in sample_indices]
-    ).to(device)
+    sample_images = torch.stack([test_dataset[i.item()][0] for i in sample_indices]).to(
+        device
+    )
     log_images("samples/input", sample_images, step=0)
 
     checkpoint = CheckpointSpec(
