@@ -193,7 +193,7 @@ def build_config(root: Path, queries: list[list[int]]) -> EvaluationRunConfig:
         model=GeneratedModelConfig(name="cspn", model_type="cspn"),
         autoencoder=PretrainedAutoencoderConfig(name="vae", external=False),
         classifier=CheckpointConfig(name="judge"),
-        generation=GenerationConfig(seed=0, batch_size=64, output_root=root),
+        generation=GenerationConfig(seed=0, batch_size=64),
         evaluation=EvaluationConfig(results_root=root / "results"),
         marginal=MarginalConfig(queries=queries, n_per_query=500),
     )

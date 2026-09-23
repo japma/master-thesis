@@ -34,43 +34,57 @@ python visualize.py
 
 ### Evaluation
 
-Two stages that communicate through a sample pool directory, both driven by one config
-file. Stage 1 samples p (z | y), decodes through the VAE and caches the images; stage 2
-scores them with a frozen classifier and writes one CSV per metric. No metric is computed
-in stage 1, and stage 2 never loads the VAE.
+Two stages around one **pool per dataset**, both driven by one config file per dataset
+(`configs/pools/<dataset>.yaml`). Stage 1 samples every listed model, decodes through
+the autoencoder its checkpoint was trained against, and caches the images; stage 2
+scores them and writes one CSV per metric. No metric is computed in stage 1, and stage 2
+never loads a VAE.
 
 ```bash
-uv run generate_samples configs/evaluation/colour_mnist_uniform.yaml
-uv run evaluate_samples configs/evaluation/colour_mnist_uniform.yaml
+uv run generate_pools   configs/pools/colour_mnist_skewed.yaml   # stage 1
+uv run evaluate_samples configs/pools/colour_mnist_skewed.yaml   # judged metrics (colour-MNIST)
+uv run evaluate_sets    configs/pools/colour_mnist_skewed.yaml   # FID, KID, precision/recall, CMMD
 ```
 
-Both stages read the same config, and the pool location is derived from it
-(`<output_root>/<dataset>__<model>__seed<N>`), so no path is pasted between them. `--seed`
-overrides `generation.seed` for both, which moves the pool together.
+```
+results/pools/<dataset>/
+  real/                                 the val split: images + labels
+  stratified_<n>/                       conditioning labels (colour-MNIST)
+  vaes/<vae>/<vN>/                      real/ round-tripped through that VAE
+  seed<s>/<type>/<model>/<vN>/std<x>/   the model's samples
+```
+
+`real/` and `vaes/` hold nothing random, so they are shared by every model and seed.
+Models are conditioned either on the stratified schedule (every colour-MNIST cell,
+held-out ones included) or on `real/`'s own labels (CelebA: sample i on image i).
 
 ```yaml
-type: evaluation
-dataset: { name: colour_mnist_uniform }
-model: { name: psinet_colour_mnist_uniform, model_type: cspn, tag: latest }
+type: pools
+dataset: { name: colour_mnist_skewed }
+models:
+  - { type: cspn, name: psinet_colour_mnist_skewed }                 # latest, resolved to vN
+  - { type: cspn, name: psinet_colour_mnist_skewed_anchored, version: v3 }  # pinned
+  - { type: joint_pc, name: joint_pc_colour_mnist_skewed_labels-digit, labels: [digit] }
 classifier: { name: digit_classifier_colour_mnist_uniform, tag: latest }
-generation: { n_per_cell: 100, seed: 0, std_correction: 1.0, output_root: results/samples }
+generation: { labels: stratified, n_per_cell: 100, seeds: [0] }
 evaluation: { batch_size: 512, results_root: results }
 ```
 
-`model_type` is one of `cspn`, `joint_pc`, `nn_baseline` -- they all expose the same
-`sample(labels, std_correction)`. Unknown keys are rejected, so a typo fails at load
-rather than silently taking a default.
+`type` is one of `cspn`, `joint_pc`, `nn_baseline` -- they all expose the same
+`sample(labels, std_correction)`. `latest` is always resolved to the exact `vN` before
+anything is written, and every directory is written under a temporary name and renamed
+when complete. Re-running skips everything already generated, samples a newly trained
+version beside the old one, and ends with a summary; a listed model wandb does not have
+is reported as missing, never fatal. Stage 2 scores each model's newest generated
+version, or the one it pins.
 
-There is no `autoencoder:` entry by default: the decoder is whichever autoencoder the
-model checkpoint recorded being trained against (`read_source_artifact`, falling back to
-wandb lineage), so the latents always fit the decoder. Add
-`autoencoder: { name: ..., external: false, tag: latest }` only to override that. Either
-way the sampled latent width is checked against the decoder before anything is decoded,
-so a mismatched pair fails naming both artifacts.
+The decoder is always the autoencoder the model checkpoint recorded being trained
+against (`read_source_artifact`, falling back to wandb lineage), so the latents always
+fit it. The sampled latent width is checked against the decoder before anything is
+decoded, so a mismatched pair fails naming both artifacts.
 
-Stage 1 also writes a nested `reference/` pool -- the validation split encoded and
-decoded through the same VAE -- so stage 2 scores three sets of images: the generated
-samples, the real validation images, and their VAE round trip. The last two are the
+Stage 2 scores three sets of images per model: its generated samples, the real
+validation images, and their round trip through that model's VAE. The last two are the
 ceilings; generated accuracy is not readable without them.
 
 Stage 2 writes **one CSV per metric** under `results_root`, accumulating across runs, so

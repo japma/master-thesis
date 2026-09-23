@@ -25,15 +25,20 @@ class JointPCConfig(BaseModel):
     min_var: float = 1e-4
     max_var: float = 4.0
     normalize_latents: bool = False
-    # Appended to the checkpoint and artifact name. Two joint PCs on the same dataset
-    # but different autoencoders are different models and must not share a collection.
-    variant: str = ""
     # Weight on the exact log p(y | z) term added to the joint NLL. The motivation is
     # that the labels are ~5 nats of a loss dominated by 16 continuous dims, so the
     # label-latent coupling gets little of the gradient. UNVERIFIED: a 400-step
     # synthetic run at lambda=5 was indistinguishable from lambda=0, which is too short
     # to conclude anything either way. 0.0 keeps the plain joint NLL.
     conditional_weight: float = Field(default=0.0, ge=0.0)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_legacy_variant(cls, data: object) -> object:
+        """Checkpoints written before names were derived still carry a `variant`."""
+        if isinstance(data, dict):
+            data = {key: value for key, value in data.items() if key != "variant"}
+        return data
 
     @model_validator(mode="after")
     def valid_label_cardinalities(self) -> Self:

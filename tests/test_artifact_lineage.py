@@ -81,8 +81,10 @@ class FakeArtifact:
 
 
 def test_artifact_ref_always_pins_a_version() -> None:
-    assert artifact_ref(FakeArtifact("ae:v3")) == "ae:v3"
+    assert artifact_ref(FakeArtifact("ae:v3", version="v3")) == "ae:v3"
     assert artifact_ref(FakeArtifact("ae", version="v3")) == "ae:v3"
+    # Fetched by alias, wandb names the artifact after the alias, not the version.
+    assert artifact_ref(FakeArtifact("ae:latest", version="v3")) == "ae:v3"
 
 
 # --- wandb lineage ---

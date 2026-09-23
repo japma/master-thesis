@@ -9,6 +9,8 @@ import torch
 from PIL import Image
 from torch.utils.data import Dataset
 
+from utils.config.common import LabelFactor
+
 FG_COLOURS: dict[str, tuple[int, int, int]] = {
     "red": (255, 0, 0),
     "green": (0, 255, 0),
@@ -33,7 +35,7 @@ IDX_TO_FG: dict[int, str] = dict(enumerate(FG_NAMES))
 IDX_TO_BG: dict[int, str] = dict(enumerate(BG_NAMES))
 
 # Order of the columns in `ColourMNIST.targets`.
-FACTOR_NAMES: tuple[str, ...] = ("digit", "fg", "bg")
+FACTOR_NAMES: tuple[str, ...] = tuple(LabelFactor)
 
 NUM_DIGITS: int = 10
 NUM_FG: int = len(FG_NAMES)

@@ -1,0 +1,30 @@
+# The CelebA pool. Every model is conditioned on the val labels, one sample per val
+# image in the same order, so the generated set carries exactly the real set's labels.
+#
+#   uv run generate_pools configs/pools/celeba.yaml
+#   uv run evaluate_sets  configs/pools/celeba.yaml
+#
+# No `classifier:`: there is no attribute judge yet, so `evaluate_samples` does not
+# apply. The set metrics say the images look like CelebA (and, with recall, cover it);
+# they say nothing about whether a sample carries its attributes. That needs a
+# multi-label attribute classifier, the CelebA analogue of the digit judge.
+
+type: pools
+
+dataset:
+  name: celeba
+
+models:
+  - { type: cspn, name: psinet_celeba }
+
+generation:
+  labels: real
+  seeds: [0]
+  batch_size: 128
+
+evaluation:
+  # The networks' forward passes are the cost here, not the metrics.
+  batch_size: 128
+  results_root: results
+  halvings: 5
+  set_metrics: [fid, kid, precision, recall, cmmd]

@@ -1,6 +1,6 @@
 """Generic training loop shared by autoencoder, CSPN, and LabelPC training."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import torch
@@ -19,6 +19,9 @@ class CheckpointSpec:
     intermediate_path: Path
     final_path: Path
     artifact_type: str
+    # Logged with every artifact: what a later run needs to know about this model
+    # without loading it (the VAE kind, the exact inputs, the config).
+    metadata: dict = field(default_factory=dict)
 
 
 def run_training_loop(
@@ -64,9 +67,9 @@ def run_training_loop(
         for images, labels in tqdm.tqdm(
             train_loader, desc=f"Train {epoch + 1}/{epochs}"
         ):
-            batch = Batch(
-                images=images if needs_images else None, labels=labels
-            ).to(device)
+            batch = Batch(images=images if needs_images else None, labels=labels).to(
+                device
+            )
             loss = objective.train_step(batch)
             train_metrics.update(loss)
 
@@ -74,9 +77,9 @@ def run_training_loop(
         print(f"Train Loss: {avg_train_loss}")
 
         for images, labels in tqdm.tqdm(test_loader, desc=f"Test {epoch + 1}/{epochs}"):
-            batch = Batch(
-                images=images if needs_images else None, labels=labels
-            ).to(device)
+            batch = Batch(images=images if needs_images else None, labels=labels).to(
+                device
+            )
             loss = objective.val_step(batch)
             val_metrics.update(loss)
 
@@ -112,6 +115,7 @@ def run_training_loop(
                 name=checkpoint.intermediate_path.stem,
                 type=checkpoint.artifact_type,
                 description=f"Epoch {epoch + 1}",
+                metadata=checkpoint.metadata,
             )
 
         objective.on_epoch_end()
@@ -144,4 +148,5 @@ def run_training_loop(
         checkpoint.final_path,
         name=checkpoint.final_path.stem,
         type=checkpoint.artifact_type,
+        metadata=checkpoint.metadata,
     )

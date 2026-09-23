@@ -1,21 +1,33 @@
-"""Generation and evaluation run config.
+"""Pool and evaluation configs.
 
-One file describes a whole evaluation: which model to sample, which VAE decodes it,
-which classifier judges it, and how. Both stages read the same config, so the sample
-pool's location is derived rather than pasted between them.
+`PoolRunConfig` (`type: pools`) describes one dataset: every generative model to sample
+into its pool, and how the pool is scored. `generate_pools`, `evaluate_samples` and
+`evaluate_sets` all read it.
+
+`EvaluationRunConfig` (`type: evaluation`) is one model at a time, and only
+`evaluate_marginal` still reads it.
 """
 
+import re
+from enum import StrEnum
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from utils.config.common import (
     DatasetConfig,
+    LabelFactor,
     PretrainedAutoencoderConfig,
 )
 
-MODEL_TYPES = Literal["cspn", "joint_pc", "nn_baseline"]
+
+class GenerativeModelType(StrEnum):
+    """The conditional models over a VAE's latent space; all expose `sample(labels)`."""
+
+    CSPN = "cspn"
+    JOINT_PC = "joint_pc"
+    NN_BASELINE = "nn_baseline"
 
 
 class CheckpointConfig(BaseModel):
@@ -28,25 +40,17 @@ class CheckpointConfig(BaseModel):
 
 
 class GeneratedModelConfig(CheckpointConfig):
-    model_type: MODEL_TYPES
+    model_type: GenerativeModelType
 
 
 class GenerationConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    # "stratified" enumerates every colour-MNIST (digit, fg, bg) cell. "empirical"
-    # draws whole label rows from the training split, for a label space too large to
-    # enumerate -- CelebA's 40 binary attributes are 2^40 combinations.
-    schedule: Literal["stratified", "empirical"] = "stratified"
-    # Samples per (digit, fg, bg) combination; 180 cells, so 100 is 18k samples.
     n_per_cell: int = Field(default=100, ge=1)
-    # Total samples, read only by the empirical schedule.
-    n_samples: int = Field(default=10000, ge=1)
     seed: int = 0
     # Scales the sampled standard deviation; 1.0 samples the model as trained.
     std_correction: float = 1.0
     batch_size: int = Field(default=256, ge=1)
-    output_root: Path = Path("results/samples")
 
 
 class EvaluationConfig(BaseModel):
@@ -136,16 +140,70 @@ class EvaluationRunConfig(BaseModel):
     # against; pin it only to override that. Guessing the name is how you end up
     # decoding 20-dim latents with a 16-dim decoder.
     autoencoder: PretrainedAutoencoderConfig | None = None
-    # Omit when no judge applies: CelebA is scored with FID, not a digit classifier.
     classifier: CheckpointConfig | None = None
     generation: GenerationConfig = Field(default_factory=GenerationConfig)
     evaluation: EvaluationConfig = Field(default_factory=EvaluationConfig)
-    # Only `evaluate_marginal` reads this; omit it for the ordinary two stages.
     marginal: MarginalConfig | None = None
 
+
+class PoolModelConfig(BaseModel):
+    """One generative model in a dataset's pool."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: GenerativeModelType
+    # The wandb artifact collection.
+    name: str
+    # `v3` pins a version; omit for the latest, which is resolved to its `vN` and
+    # recorded, so no pool or result ever says `latest`.
+    version: str | None = None
+    # The label columns the model conditions on, for models trained on a subset, e.g.
+    # `[digit]`. Omit for all of them.
+    labels: tuple[LabelFactor, ...] | None = None
+    std_correction: float = 1.0
+
+    @field_validator("version")
+    @classmethod
+    def _is_a_version(cls, version: str | None) -> str | None:
+        if version is not None and not re.fullmatch(r"v\d+", version):
+            raise ValueError(f"version must look like v3, got {version!r}")
+        return version
+
+
+class PoolGenerationConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # What the models are conditioned on. `real`: the val labels, one sample per real
+    # image, in the same order. `stratified`: every colour-MNIST (digit, fg, bg) cell
+    # `n_per_cell` times, held-out cells included.
+    labels: Literal["real", "stratified"]
+    n_per_cell: int = Field(default=100, ge=1)
+    seeds: list[int] = Field(default_factory=lambda: [0], min_length=1)
+    batch_size: int = Field(default=256, ge=1)
+    root: Path = Path("results/pools")
+
+
+class PoolRunConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["pools"]
+    dataset: DatasetConfig
+    models: list[PoolModelConfig] = Field(min_length=1)
+    # Omit when no judge applies: CelebA has no attribute classifier yet.
+    classifier: CheckpointConfig | None = None
+    generation: PoolGenerationConfig
+    evaluation: EvaluationConfig = Field(default_factory=EvaluationConfig)
+
+    @model_validator(mode="after")
+    def _unique_models(self) -> Self:
+        keys = [(m.name, m.std_correction) for m in self.models]
+        repeated = sorted({key for key in keys if keys.count(key) > 1})
+        if repeated:
+            raise ValueError(
+                f"models lists the same (name, std_correction) twice: {repeated}"
+            )
+        return self
+
     @property
-    def pool_dir(self) -> Path:
-        """Where stage 1 writes and stage 2 reads. Determined by the config alone."""
-        return self.generation.output_root / (
-            f"{self.dataset.name}__{self.model.name}__seed{self.generation.seed}"
-        )
+    def dataset_dir(self) -> Path:
+        return self.generation.root / self.dataset.name

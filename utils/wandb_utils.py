@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 import torch
@@ -19,11 +20,36 @@ def init_run(wandb_cfg: WandbConfig, run_name: str, config: dict) -> None:
 
 
 def log_checkpoint_artifact(
-    path: Path, name: str, type: str, description: str | None = None
+    path: Path,
+    name: str,
+    type: str,
+    description: str | None = None,
+    metadata: dict | None = None,
 ) -> None:
-    artifact = wandb.Artifact(name=name, type=type, description=description)
+    artifact = wandb.Artifact(
+        name=name, type=type, description=description, metadata=metadata
+    )
     artifact.add_file(str(path))
     wandb.log_artifact(artifact)
+
+
+def rename_run(name: str) -> None:
+    """Rename the active run, once its name can be derived -- which, for a model on a
+    VAE, is only after the VAE has been consumed through the run."""
+    if wandb.run is not None:
+        wandb.run.name = name
+
+
+def record_input(key: str, ref: str) -> None:
+    """Store the exact `name:vN` an input resolved to in the run's config, next to
+    the alias the config asked for."""
+    if wandb.run is not None:
+        wandb.run.config.update({key: ref}, allow_val_change=True)
+
+
+def artifact_metadata(ref: str) -> dict:
+    """The metadata an artifact was logged with; empty for artifacts logged without."""
+    return dict(wandb.Api().artifact(_qualified(ref, "latest")).metadata or {})
 
 
 def log_metrics(metrics: dict[str, float | torch.Tensor], step: int) -> None:
@@ -61,10 +87,30 @@ def _qualified(ckpt_name: str, tag: str) -> str:
     return f"{ENTITY}/{PROJECT}/{name}"
 
 
+def is_versioned(ref: str) -> bool:
+    """`name:v3`, as opposed to `name:latest` or a bare `name`."""
+    return re.fullmatch(r".+:v\d+", ref) is not None
+
+
 def artifact_ref(artifact) -> str:
-    """`name:version` -- the version-pinned reference, never `:latest`."""
-    name = str(artifact.name)
-    return name if ":" in name else f"{name}:{artifact.version}"
+    """`name:vN` -- the version-pinned reference, never `:latest`.
+
+    `artifact.name` carries whatever alias the artifact was fetched by (`foo:latest`),
+    so the collection name is taken from it and the version from `artifact.version`.
+    """
+    return f"{str(artifact.name).partition(':')[0]}:{artifact.version}"
+
+
+def resolve_artifact(ckpt_name: str, tag: str = "latest") -> str | None:
+    """The exact `name:vN` behind `ckpt_name:tag`, without downloading it, or None if
+    wandb has no such artifact. Any other failure (auth, network) still raises."""
+    try:
+        artifact = wandb.Api().artifact(_qualified(ckpt_name, tag))
+    except (ValueError, wandb.errors.CommError) as error:
+        if "not found" not in str(error).lower():
+            raise
+        return None
+    return artifact_ref(artifact)
 
 
 def download_artifact(ckpt_name: str, tag: str = "latest") -> tuple[Path, str]:

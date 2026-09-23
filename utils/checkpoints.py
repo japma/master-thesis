@@ -23,6 +23,7 @@ from utils.config import (
     AnchorScheme,
     AutoencoderConfig,
     AutoencoderType,
+    AutoencoderVariant,
     ClassifierConfig,
     CSPNConfig,
     CSPNType,
@@ -30,6 +31,7 @@ from utils.config import (
     NeuralBaselineConfig,
     NeuralBaselineType,
 )
+from utils.naming import intermediate_name
 from utils.reproducibility import get_rng_state, set_rng_state
 
 
@@ -38,34 +40,17 @@ from utils.reproducibility import get_rng_state, set_rng_state
 # purely additive (optimizer/scheduler/epoch/RNG state for resuming a crashed run),
 # so existing model checkpoints (and code that only ever loads those) are completely
 # unaffected whether or not a sidecar exists next to them.
-def intermediate_checkpoint_path(
-    model_type: str, dataset_name: str, variant: str = ""
-) -> Path:
-    name = f"intermediate_{model_type}_{dataset_name}{_variant_suffix(variant)}"
-    return Path("checkpoints/intermediate") / f"{name}.pt"
+def intermediate_checkpoint_path(name: str) -> Path:
+    """`name` as `utils.naming` derives it; the artifact is logged under the stem."""
+    return Path("checkpoints/intermediate") / f"{intermediate_name(name)}.pt"
 
 
-def final_checkpoint_path(
-    model_type: str, dataset_name: str, variant: str = ""
-) -> Path:
-    return (
-        Path("checkpoints")
-        / f"{model_type}_{dataset_name}{_variant_suffix(variant)}.pt"
-    )
-
-
-def _variant_suffix(variant: str) -> str:
-    """Architecture-variant tag appended to a checkpoint name.
-
-    Empty for the default variant, so every pre-existing checkpoint keeps its path;
-    ablation variants get their own file instead of overwriting the baseline they are
-    meant to be compared against.
-    """
-    return f"_{variant}" if variant else ""
+def final_checkpoint_path(name: str) -> Path:
+    return Path("checkpoints") / f"{name}.pt"
 
 
 def label_pc_checkpoint_path(dataset_name: str) -> Path:
-    return final_checkpoint_path("label_pc", dataset_name)
+    return final_checkpoint_path(f"label_pc_{dataset_name}")
 
 
 def train_state_path(checkpoint_path: Path) -> Path:
@@ -146,7 +131,7 @@ def _create_autoencoder_from_checkpoint(cfg: AutoencoderConfig) -> AbstractAutoe
 
 def load_ae_from_path(path: Path, device=None) -> AbstractAutoencoder:
     with torch.serialization.safe_globals(
-        [AnchorScheme, AutoencoderType, *_LEGACY_CONFIG_GLOBALS]
+        [AnchorScheme, AutoencoderType, AutoencoderVariant, *_LEGACY_CONFIG_GLOBALS]
     ):
         ckpt = torch.load(path, map_location=device, weights_only=True)
     cfg = AutoencoderConfig.model_validate(ckpt["model_cfg"])

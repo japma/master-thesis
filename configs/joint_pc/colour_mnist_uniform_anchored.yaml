@@ -1,6 +1,5 @@
-# Joint PC over p(z, y): no conditioning hypernetwork, so the label-latent dependence
-# has to come from mixture structure -- hence the larger sums/repetitions than
-# the matching configs/cspn config.
+# colour-MNIST uniform, joint PC on the colour-anchored latent space: fg and bg are
+# mean-separated here, the digit is not.
 
 type: joint_pc
 
@@ -8,7 +7,7 @@ dataset:
   name: colour_mnist_uniform
 
 autoencoder:
-  name: "vae_colour_mnist_uniform_variational"
+  name: "vae_colour_mnist_uniform_anchored"
   external: false
   tag: "latest"
 

@@ -9,7 +9,7 @@ from utils.config.autoencoder import AERunConfig
 from utils.config.classifier import ClassifierRunConfig
 from utils.config.common import DatasetConfig
 from utils.config.cspn import CSPNRunConfig
-from utils.config.evaluation import EvaluationRunConfig
+from utils.config.evaluation import EvaluationRunConfig, PoolRunConfig
 from utils.config.joint_pc import JointPCRunConfig
 from utils.config.label_pc import LabelPCRunConfig
 from utils.config.neural_baseline import NeuralBaselineRunConfig
@@ -62,6 +62,7 @@ RunConfig = (
     | ClassifierRunConfig
     | CSPNRunConfig
     | EvaluationRunConfig
+    | PoolRunConfig
     | JointPCRunConfig
     | LabelPCRunConfig
     | NeuralBaselineRunConfig
@@ -75,6 +76,7 @@ _RUN_TYPES: dict[str, type] = {
     "joint_pc": JointPCRunConfig,
     "label_pc": LabelPCRunConfig,
     "nn_baseline": NeuralBaselineRunConfig,
+    "pools": PoolRunConfig,
 }
 
 

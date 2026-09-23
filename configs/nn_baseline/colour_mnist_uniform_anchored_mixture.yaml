@@ -1,10 +1,12 @@
+# colour-MNIST uniform, mixture baseline on the colour-anchored latent space.
+
 type: nn_baseline
 
 dataset:
   name: colour_mnist_uniform
 
 autoencoder:
-  name: "vae_colour_mnist_uniform_variational"
+  name: "vae_colour_mnist_uniform_anchored"
   external: false
   tag: "latest"
 

@@ -11,7 +11,7 @@ dataset:
   name: colour_mnist_uniform_x2
 
 autoencoder:
-  name: "variational_colour_mnist_uniform"
+  name: "vae_colour_mnist_uniform_variational"
   external: false
   tag: "latest"
 

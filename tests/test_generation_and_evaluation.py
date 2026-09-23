@@ -1,6 +1,5 @@
-"""The two evaluation stages against the contract they share: the pool directory."""
+"""The two evaluation stages against the contract they share: a dataset's pool."""
 
-import json
 from pathlib import Path
 
 import pandas as pd
@@ -8,6 +7,7 @@ import pytest
 import torch
 import yaml
 from pydantic import ValidationError
+from torch.utils.data import TensorDataset
 
 from dataset_loaders.colour_mnist import (
     NUM_BG,
@@ -18,12 +18,17 @@ from dataset_loaders.colour_mnist import (
     combination_index,
 )
 from evaluation.colour import BG_PALETTE, FG_PALETTE
-from evaluation.evaluate import GENERATED, evaluate_pool, predict, write_metric
+from evaluation.evaluate import (
+    GENERATED,
+    evaluate_pools,
+    find_models,
+    predict,
+    write_metric,
+)
 from evaluation.generate import (
     MODEL_TYPES,
     check_latent_dim,
-    empirical_labels,
-    generate_pool,
+    generate_pools,
     resolve_autoencoder,
     sample_and_decode,
     stratified_labels,
@@ -39,20 +44,22 @@ from evaluation.metrics import (
     digit_accuracy_by_combination,
     selected,
 )
-from evaluation.samples import (
-    ReferenceManifest,
-    SampleManifest,
-    load_images,
-    load_labels,
-    load_latents,
-    load_originals,
-    load_reference_manifest,
-    load_sample_manifest,
-    reference_dir,
-    save_pool,
-    to_float,
-    to_uint8,
+from evaluation.pools import (
+    IMAGES,
+    LABELS,
+    LATENTS,
+    ModelManifest,
+    RealManifest,
+    is_complete,
+    load_conditioning,
+    load_manifest,
+    load_tensor,
+    model_dir,
+    real_dir,
+    vae_dir,
+    write_dir,
 )
+from evaluation.samples import to_float, to_uint8
 from models.classifier import DigitClassifier
 from utils.config import (
     CheckpointConfig,
@@ -60,8 +67,9 @@ from utils.config import (
     DatasetConfig,
     EvaluationConfig,
     EvaluationRunConfig,
-    GeneratedModelConfig,
-    GenerationConfig,
+    PoolGenerationConfig,
+    PoolModelConfig,
+    PoolRunConfig,
     PretrainedAutoencoderConfig,
 )
 from utils.config.loading import _apply_dataset_defaults
@@ -70,6 +78,7 @@ from utils.reproducibility import seed_everything
 IMAGE_SIZE = 8
 LATENT_DIM = 4
 DEVICE = torch.device("cpu")
+DATASET = "colour_mnist_uniform"
 
 
 class ConstantSampler:
@@ -89,6 +98,9 @@ class StripeDecoder:
     def encode(self, x: torch.Tensor) -> torch.Tensor:
         return x.mean(dim=(1, 2, 3), keepdim=False).unsqueeze(1).expand(-1, LATENT_DIM)
 
+    def get_latent_dim(self) -> torch.Size:
+        return torch.Size([LATENT_DIM])
+
 
 def build_judge() -> DigitClassifier:
     seed_everything(0)
@@ -97,78 +109,81 @@ def build_judge() -> DigitClassifier:
     ).eval()
 
 
-def write_pool(
-    root: Path,
-    n_per_cell: int = 1,
-    vae_checkpoint: str = "vae:v1",
-    pool_dir: Path | None = None,
-) -> Path:
-    """A complete pool -- samples plus the nested reference pool -- built by hand."""
-    labels = stratified_labels(n_per_cell)
-    n = labels.shape[0]
-    pool_dir = pool_dir if pool_dir is not None else root / "pool"
-    save_pool(
-        pool_dir,
-        SampleManifest(
-            model_checkpoint="cspn:v2",
-            model_type="cspn",
-            vae_checkpoint=vae_checkpoint,
-            dataset="colour_mnist_uniform",
-            schedule="stratified",
-            n_per_cell=n_per_cell,
-            n_samples=n,
-            seed=0,
-            std_correction=1.0,
-            git_commit="abc123",
-        ),
-        latents=torch.zeros(n, LATENT_DIM),
-        images=torch.zeros(n, 3, IMAGE_SIZE, IMAGE_SIZE, dtype=torch.uint8),
-        labels=labels,
-    )
-
-    reference_labels = all_combinations()
-    m = reference_labels.shape[0]
-    save_pool(
-        reference_dir(pool_dir),
-        ReferenceManifest(
-            vae_checkpoint=vae_checkpoint,
-            dataset="colour_mnist_uniform",
-            split="val",
-            n_samples=m,
-            git_commit="abc123",
-        ),
-        latents=torch.zeros(m, LATENT_DIM),
-        images=torch.zeros(m, 3, IMAGE_SIZE, IMAGE_SIZE, dtype=torch.uint8),
-        labels=reference_labels,
-        originals=torch.zeros(m, 3, IMAGE_SIZE, IMAGE_SIZE, dtype=torch.uint8),
-    )
-    return pool_dir
+def real_split(n_per_cell: int = 1) -> TensorDataset:
+    """A stand-in val split: every colour-MNIST cell, painted."""
+    labels = all_combinations().repeat_interleave(n_per_cell, dim=0)
+    return TensorDataset(painted(labels), labels)
 
 
 def build_config(
     root: Path,
+    labels: str = "stratified",
     n_per_cell: int = 1,
-    seed: int = 0,
+    models: list[PoolModelConfig] | None = None,
+    seeds: list[int] | None = None,
     metrics: list[str] | None = None,
-) -> EvaluationRunConfig:
-    """A config whose `pool_dir` is where `write_pool` puts its pool."""
-    return EvaluationRunConfig(
-        type="evaluation",
+) -> PoolRunConfig:
+    return PoolRunConfig(
+        type="pools",
         dataset=DatasetConfig(
-            name="colour_mnist_uniform",
+            name=DATASET,
             channels=3,
             height=IMAGE_SIZE,
             width=IMAGE_SIZE,
             num_classes=10,
         ),
-        model=GeneratedModelConfig(name="cspn", model_type="cspn"),
-        autoencoder=PretrainedAutoencoderConfig(name="vae", external=False),
+        models=models or [PoolModelConfig(type="cspn", name="cspn")],
         classifier=CheckpointConfig(name="judge"),
-        generation=GenerationConfig(n_per_cell=n_per_cell, seed=seed, output_root=root),
+        generation=PoolGenerationConfig(
+            labels=labels,
+            n_per_cell=n_per_cell,
+            seeds=seeds or [0],
+            batch_size=64,
+            root=root / "pools",
+        ),
         evaluation=EvaluationConfig(
             results_root=root / "results", batch_size=64, metrics=metrics
         ),
     )
+
+
+def patch_generation(
+    monkeypatch: pytest.MonkeyPatch,
+    versions: dict[str, int] | None = None,
+    sampler: object | None = None,
+    n_real_per_cell: int = 1,
+) -> dict[str, int]:
+    """Stub wandb, the checkpoints and the val split. Returns the live version table:
+    a name absent from it is a model wandb does not have."""
+    versions = {"cspn": 2} if versions is None else versions
+
+    def resolve(name: str, tag: str = "latest") -> str | None:
+        if name not in versions:
+            return None
+        return f"{name}:{tag}" if tag != "latest" else f"{name}:v{versions[name]}"
+
+    monkeypatch.setattr("evaluation.generate.resolve_artifact", resolve)
+    monkeypatch.setattr(
+        "evaluation.generate.load_generative_model",
+        lambda model_type, ref, device: (
+            sampler or ConstantSampler(),
+            ref,
+            Path("m.pt"),
+        ),
+    )
+    monkeypatch.setattr(
+        "evaluation.generate.resolve_autoencoder",
+        lambda cfg, path, ref: ("vae:v1", "latest", False),
+    )
+    monkeypatch.setattr(
+        "evaluation.generate.load_vae", lambda *a, **k: (StripeDecoder(), "vae:v1")
+    )
+    monkeypatch.setattr(
+        "evaluation.generate.build_dataset",
+        lambda *a, **k: real_split(n_real_per_cell),
+    )
+    monkeypatch.setattr("evaluation.generate.LOADER_WORKERS", 0)
+    return versions
 
 
 # --- schedule ---
@@ -206,141 +221,205 @@ def test_uint8_round_trip_stays_within_a_quantisation_step() -> None:
 
 
 # --- pool contract ---
-def test_pool_round_trips_through_disk(tmp_path: Path) -> None:
-    pool_dir = write_pool(tmp_path, n_per_cell=2)
+def test_a_directory_is_written_all_or_nothing(tmp_path: Path) -> None:
+    directory = tmp_path / "real"
+    crashed = tmp_path / "real.partial"
+    crashed.mkdir()
+    (crashed / "images.pt").write_bytes(b"half a file")
 
-    manifest = load_sample_manifest(pool_dir)
-    assert manifest.model_checkpoint == "cspn:v2"
-    assert manifest.n_samples == NUM_COMBINATIONS * 2
-    assert load_labels(pool_dir).shape == (NUM_COMBINATIONS * 2, 3)
-    assert load_latents(pool_dir).shape == (NUM_COMBINATIONS * 2, LATENT_DIM)
-    assert load_images(pool_dir).dtype == torch.uint8
-
-    reference = load_reference_manifest(reference_dir(pool_dir))
-    assert reference.split == "val"
-    assert load_originals(reference_dir(pool_dir)).shape[0] == NUM_COMBINATIONS
-
-
-def test_reading_a_reference_pool_as_a_sample_pool_is_refused(tmp_path: Path) -> None:
-    pool_dir = write_pool(tmp_path)
-
-    with pytest.raises(ValueError, match="not a 'samples' one"):
-        load_sample_manifest(reference_dir(pool_dir))
-
-
-def test_save_pool_rejects_tensors_that_disagree(tmp_path: Path) -> None:
-    manifest = ReferenceManifest(
-        vae_checkpoint="vae:v1",
-        dataset="colour_mnist_uniform",
-        split="val",
-        n_samples=4,
-        git_commit=None,
-    )
-    with pytest.raises(ValueError, match="disagree on length"):
-        save_pool(
-            tmp_path / "bad",
-            manifest,
-            latents=torch.zeros(4, LATENT_DIM),
-            images=torch.zeros(3, 3, IMAGE_SIZE, IMAGE_SIZE, dtype=torch.uint8),
-            labels=all_combinations()[:4],
-        )
-
-
-def test_save_pool_rejects_float_images(tmp_path: Path) -> None:
-    manifest = ReferenceManifest(
-        vae_checkpoint="vae:v1",
-        dataset="colour_mnist_uniform",
-        split="val",
-        n_samples=4,
-        git_commit=None,
-    )
-    with pytest.raises(ValueError, match="must be uint8"):
-        save_pool(
-            tmp_path / "bad",
-            manifest,
-            latents=torch.zeros(4, LATENT_DIM),
-            images=torch.zeros(4, 3, IMAGE_SIZE, IMAGE_SIZE),
-            labels=all_combinations()[:4],
-        )
-
-
-# --- generation guards ---
-def test_generation_checks_the_latent_dim_before_sampling(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """A decoder that cannot read the model's latents must fail naming both artifacts,
-    not as a matmul error thousands of samples later."""
-    cfg = build_config(tmp_path, n_per_cell=1)
-    monkeypatch.setattr(
-        "evaluation.generate.load_generative_model",
-        lambda *a, **k: (WideSampler(LATENT_DIM + 4), "cspn:v9", Path("m.pt")),
-    )
-    monkeypatch.setattr(
-        "evaluation.generate.resolve_autoencoder",
-        lambda *a, **k: ("vae", "latest", False),
-    )
-    monkeypatch.setattr(
-        "evaluation.generate.load_vae", lambda *a, **k: (NarrowVAE(), "vae:v1")
-    )
-
-    with pytest.raises(ValueError, match="were not trained together"):
-        generate_pool(cfg, DEVICE)
-
-
-# --- label schedules ---
-def test_empirical_schedule_draws_whole_rows_from_training(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Attributes are dependent, so a drawn row must be a row that actually occurred."""
-    training = torch.tensor([[0, 1, 1], [1, 0, 0]] * 50)
-    monkeypatch.setattr("evaluation.generate.training_labels", lambda name: training)
-
-    drawn = empirical_labels("whatever", 200, torch.Generator().manual_seed(0))
-
-    assert drawn.shape == (200, 3)
-    rows = {tuple(row) for row in drawn.tolist()}
-    assert rows <= {(0, 1, 1), (1, 0, 0)}
-    assert len(rows) == 2
-
-
-def test_empirical_schedule_rejects_an_empty_request(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        "evaluation.generate.training_labels", lambda name: torch.zeros(4, 3).long()
-    )
-    with pytest.raises(ValueError, match="at least 1"):
-        empirical_labels("whatever", 0)
-
-
-def test_a_pool_accepts_a_label_space_that_is_not_colour_mnists(tmp_path: Path) -> None:
-    """CelebA carries 40 binary attributes, not [digit, fg, bg]."""
-    manifest = ReferenceManifest(
-        vae_checkpoint="vae:v1",
-        dataset="celeba",
-        split="val",
-        n_samples=4,
-        git_commit=None,
-    )
-    save_pool(
-        tmp_path / "celeba",
+    assert not is_complete(directory)
+    manifest = RealManifest(dataset=DATASET, split="val", n=4, git_commit=None)
+    write_dir(
+        directory,
         manifest,
-        latents=torch.zeros(4, LATENT_DIM),
-        images=torch.zeros(4, 3, IMAGE_SIZE, IMAGE_SIZE, dtype=torch.uint8),
-        labels=torch.randint(0, 2, (4, 40)),
+        {
+            IMAGES: torch.zeros(4, 3, IMAGE_SIZE, IMAGE_SIZE, dtype=torch.uint8),
+            LABELS: all_combinations()[:4],
+        },
     )
-    assert load_labels(tmp_path / "celeba").shape == (4, 40)
+
+    assert is_complete(directory)
+    assert not crashed.exists()
+    assert load_manifest(directory, RealManifest) == manifest
 
 
-def test_a_judged_metric_without_a_judge_says_so(
+def test_write_dir_rejects_tensors_that_disagree(tmp_path: Path) -> None:
+    manifest = RealManifest(dataset=DATASET, split="val", n=4, git_commit=None)
+    with pytest.raises(ValueError, match="disagree"):
+        write_dir(
+            tmp_path / "bad",
+            manifest,
+            {
+                IMAGES: torch.zeros(3, 3, IMAGE_SIZE, IMAGE_SIZE, dtype=torch.uint8),
+                LABELS: all_combinations()[:4],
+            },
+        )
+
+
+def test_write_dir_rejects_float_images(tmp_path: Path) -> None:
+    manifest = RealManifest(dataset=DATASET, split="val", n=4, git_commit=None)
+    with pytest.raises(ValueError, match="must be uint8"):
+        write_dir(
+            tmp_path / "bad",
+            manifest,
+            {IMAGES: torch.zeros(4, 3, IMAGE_SIZE, IMAGE_SIZE)},
+        )
+
+
+def test_reading_one_kind_of_directory_as_another_is_refused(tmp_path: Path) -> None:
+    write_dir(
+        tmp_path / "real",
+        RealManifest(dataset=DATASET, split="val", n=4, git_commit=None),
+        {LABELS: all_combinations()[:4]},
+    )
+
+    with pytest.raises(ValueError, match="not 'samples'"):
+        load_manifest(tmp_path / "real", ModelManifest)
+
+
+def test_a_label_space_that_is_not_colour_mnists_fits(tmp_path: Path) -> None:
+    """CelebA's 40 binary attributes."""
+    write_dir(
+        tmp_path / "real",
+        RealManifest(dataset="celeba", split="val", n=4, git_commit=None),
+        {LABELS: torch.randint(0, 2, (4, 40))},
+    )
+    assert load_tensor(tmp_path / "real", LABELS).shape == (4, 40)
+
+
+# --- generate_pools ---
+def test_generate_pools_writes_real_vae_and_model_directories(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     cfg = build_config(tmp_path, n_per_cell=2)
-    cfg.classifier = None
-    write_pool(tmp_path, n_per_cell=2, pool_dir=cfg.pool_dir)
+    patch_generation(monkeypatch)
 
-    with pytest.raises(ValueError, match="evaluate_sets"):
-        evaluate_pool(cfg, DEVICE)
+    report = generate_pools(cfg, DEVICE)
+
+    root = cfg.dataset_dir
+    assert load_tensor(real_dir(root), LABELS).shape == (NUM_COMBINATIONS, 3)
+    assert load_conditioning(root, "stratified_2").shape == (NUM_COMBINATIONS * 2, 3)
+    assert load_tensor(vae_dir(root, "vae:v1"), IMAGES).shape[0] == NUM_COMBINATIONS
+    samples = model_dir(root, 0, "cspn", "cspn:v2", 1.0)
+    manifest = load_manifest(samples, ModelManifest)
+    assert manifest.model_checkpoint == "cspn:v2"
+    assert manifest.vae_checkpoint == "vae:v1"
+    assert manifest.labels == "stratified_2"
+    assert load_tensor(samples, LATENTS).shape == (NUM_COMBINATIONS * 2, LATENT_DIM)
+    assert load_tensor(samples, IMAGES).dtype == torch.uint8
+    assert len(report.generated) == 1
+
+
+def test_a_second_run_skips_what_is_already_there(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = build_config(tmp_path)
+    patch_generation(monkeypatch)
+
+    generate_pools(cfg, DEVICE)
+    again = generate_pools(cfg, DEVICE)
+
+    assert again.generated == []
+    assert len(again.skipped) == 1
+
+
+def test_a_new_version_is_sampled_beside_the_old_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = build_config(tmp_path)
+    versions = patch_generation(monkeypatch)
+    generate_pools(cfg, DEVICE)
+
+    versions["cspn"] = 3
+    report = generate_pools(cfg, DEVICE)
+
+    assert len(report.generated) == 1
+    assert is_complete(model_dir(cfg.dataset_dir, 0, "cspn", "cspn:v2", 1.0))
+    assert is_complete(model_dir(cfg.dataset_dir, 0, "cspn", "cspn:v3", 1.0))
+
+
+def test_a_model_wandb_does_not_have_is_reported_not_fatal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    models = [
+        PoolModelConfig(type="cspn", name="cspn"),
+        PoolModelConfig(type="joint_pc", name="joint_pc_anchored"),
+    ]
+    cfg = build_config(tmp_path, models=models)
+    patch_generation(monkeypatch)
+
+    report = generate_pools(cfg, DEVICE)
+
+    assert report.missing == ["joint_pc_anchored:latest"]
+    assert len(report.generated) == 1
+    assert "WARNING: joint_pc_anchored:latest" in capsys.readouterr().out
+
+
+def test_real_labels_condition_sample_i_on_image_i(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = build_config(tmp_path, labels="real")
+    patch_generation(monkeypatch, n_real_per_cell=2)
+
+    generate_pools(cfg, DEVICE)
+
+    samples = model_dir(cfg.dataset_dir, 0, "cspn", "cspn:v2", 1.0)
+    real_labels = load_tensor(real_dir(cfg.dataset_dir), LABELS)
+    # The stub puts the digit in the latent, so the pairing is checkable.
+    assert torch.equal(load_tensor(samples, LATENTS)[:, 0], real_labels[:, 0].float())
+    assert not (cfg.dataset_dir / "stratified_1").exists()
+
+
+def test_a_label_subset_model_sees_only_its_columns(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: list[torch.Tensor] = []
+
+    class Recording(ConstantSampler):
+        def sample(self, labels: torch.Tensor, std_correction: float = 1.0):
+            seen.append(labels)
+            return super().sample(labels, std_correction)
+
+    models = [PoolModelConfig(type="joint_pc", name="digit_only", labels=("digit",))]
+    cfg = build_config(tmp_path, models=models)
+    patch_generation(monkeypatch, versions={"digit_only": 1}, sampler=Recording())
+
+    generate_pools(cfg, DEVICE)
+
+    assert all(labels.shape[1] == 1 for labels in seen)
+    samples = model_dir(cfg.dataset_dir, 0, "joint_pc", "digit_only:v1", 1.0)
+    assert load_manifest(samples, ModelManifest).label_columns == [0]
+
+
+def test_every_seed_gets_its_own_samples_and_shares_the_rest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = build_config(tmp_path, seeds=[0, 1])
+    patch_generation(monkeypatch)
+
+    generate_pools(cfg, DEVICE)
+
+    for seed in (0, 1):
+        assert is_complete(model_dir(cfg.dataset_dir, seed, "cspn", "cspn:v2", 1.0))
+    assert sorted(p.name for p in cfg.dataset_dir.iterdir()) == [
+        "real",
+        "seed0",
+        "seed1",
+        "stratified_1",
+        "vaes",
+    ]
+
+
+def test_generation_checks_the_latent_dim_before_sampling(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A decoder that cannot read the model's latents must fail naming both artifacts,
+    not as a matmul error thousands of samples later."""
+    cfg = build_config(tmp_path)
+    patch_generation(monkeypatch, sampler=WideSampler(LATENT_DIM + 4))
+
+    with pytest.raises(ValueError, match="were not trained together"):
+        generate_pools(cfg, DEVICE)
 
 
 # --- metrics ---
@@ -509,14 +588,22 @@ def patch_judge(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-def test_evaluate_pool_writes_one_csv_per_metric(
+def generated_pool(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, **config
+) -> PoolRunConfig:
+    cfg = build_config(tmp_path, n_per_cell=2, **config)
+    patch_generation(monkeypatch)
+    generate_pools(cfg, DEVICE)
+    return cfg
+
+
+def test_evaluate_pools_writes_one_csv_per_metric(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    cfg = build_config(tmp_path, n_per_cell=2)
-    write_pool(tmp_path, n_per_cell=2, pool_dir=cfg.pool_dir)
+    cfg = generated_pool(tmp_path, monkeypatch)
     patch_judge(monkeypatch)
 
-    evaluate_pool(cfg, DEVICE)
+    evaluate_pools(cfg, DEVICE)
 
     results = cfg.evaluation.results_root
     assert sorted(p.name for p in results.glob("*.csv")) == [
@@ -533,18 +620,17 @@ def test_evaluate_pool_writes_one_csv_per_metric(
 def test_every_csv_identifies_the_run_and_the_image_source(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    cfg = build_config(tmp_path, n_per_cell=2)
-    write_pool(tmp_path, n_per_cell=2, pool_dir=cfg.pool_dir)
+    cfg = generated_pool(tmp_path, monkeypatch)
     patch_judge(monkeypatch)
 
-    evaluate_pool(cfg, DEVICE)
+    evaluate_pools(cfg, DEVICE)
 
     results = cfg.evaluation.results_root
-
     for path in results.glob("*.csv"):
         frame = pd.read_csv(path)
         assert {"checkpoint", "seed", "std_correction", "source"} <= set(frame.columns)
         assert frame["checkpoint"].unique().tolist() == ["cspn:v2"]
+        assert frame["vae"].unique().tolist() == ["vae:v1"]
         assert frame["classifier"].unique().tolist() == ["judge:v7"]
         assert set(frame["source"]) == {"generated", "real", "reconstruction"}
 
@@ -556,14 +642,30 @@ def test_every_csv_identifies_the_run_and_the_image_source(
     assert len(cells) == 3 * NUM_COMBINATIONS
 
 
+def test_one_run_scores_every_model_in_the_pool(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    models = [
+        PoolModelConfig(type="cspn", name="cspn"),
+        PoolModelConfig(type="cspn", name="cspn", std_correction=0.5),
+    ]
+    cfg = generated_pool(tmp_path, monkeypatch, models=models)
+    patch_judge(monkeypatch)
+
+    evaluate_pools(cfg, DEVICE)
+
+    scores = pd.read_csv(cfg.evaluation.results_root / "digit_accuracy.csv")
+    assert sorted(scores["std_correction"].unique()) == [0.5, 1.0]
+    assert len(scores) == 2 * 3
+
+
 def test_the_config_selects_which_metrics_run(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    cfg = build_config(tmp_path, n_per_cell=2, metrics=["colour_accuracy"])
-    write_pool(tmp_path, n_per_cell=2, pool_dir=cfg.pool_dir)
+    cfg = generated_pool(tmp_path, monkeypatch, metrics=["colour_accuracy"])
     patch_judge(monkeypatch)
 
-    evaluate_pool(cfg, DEVICE)
+    evaluate_pools(cfg, DEVICE)
 
     results = cfg.evaluation.results_root
     assert [p.name for p in results.glob("*.csv")] == ["colour_accuracy.csv"]
@@ -591,14 +693,13 @@ def test_a_repeated_metric_fails(tmp_path: Path) -> None:
 def test_re_evaluating_a_run_replaces_its_rows_rather_than_appending(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    cfg = build_config(tmp_path, n_per_cell=2)
-    write_pool(tmp_path, n_per_cell=2, pool_dir=cfg.pool_dir)
+    cfg = generated_pool(tmp_path, monkeypatch)
     patch_judge(monkeypatch)
     results = cfg.evaluation.results_root
 
-    evaluate_pool(cfg, DEVICE)
+    evaluate_pools(cfg, DEVICE)
     once = pd.read_csv(results / "digit_accuracy.csv")
-    evaluate_pool(cfg, DEVICE)
+    evaluate_pools(cfg, DEVICE)
     twice = pd.read_csv(results / "digit_accuracy.csv")
 
     assert len(once) == len(twice) == 3
@@ -620,64 +721,83 @@ def test_a_second_run_appends_alongside_the_first(tmp_path: Path) -> None:
     assert frame["checkpoint"].tolist() == ["a:v1", "b:v1"]
 
 
-def test_evaluate_pool_refuses_a_ceiling_from_a_different_vae(
+def test_a_judged_metric_without_a_judge_says_so(tmp_path: Path) -> None:
+    cfg = build_config(tmp_path)
+    cfg.classifier = None
+
+    with pytest.raises(ValueError, match="evaluate_sets"):
+        evaluate_pools(cfg, DEVICE)
+
+
+def test_evaluation_takes_the_newest_version_unless_one_is_pinned(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     cfg = build_config(tmp_path)
-    write_pool(tmp_path, pool_dir=cfg.pool_dir)
-    reference = reference_dir(cfg.pool_dir) / "manifest.json"
-    data = json.loads(reference.read_text())
-    data["vae_checkpoint"] = "other_vae:v9"
-    reference.write_text(json.dumps(data))
-    patch_judge(monkeypatch)
+    versions = patch_generation(monkeypatch)
+    generate_pools(cfg, DEVICE)
+    versions["cspn"] = 10
+    generate_pools(cfg, DEVICE)
 
-    with pytest.raises(ValueError, match="would not bound the samples"):
-        evaluate_pool(cfg, DEVICE)
+    [(_, newest)] = find_models(cfg)
+    cfg.models[0].version = "v2"
+    [(_, pinned)] = find_models(cfg)
+
+    assert newest.model_checkpoint == "cspn:v10"
+    assert pinned.model_checkpoint == "cspn:v2"
+
+
+def test_a_listed_model_with_nothing_generated_is_skipped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    cfg = generated_pool(tmp_path, monkeypatch)
+    cfg.models.append(PoolModelConfig(type="joint_pc", name="never_trained"))
+
+    assert len(find_models(cfg)) == 1
+    assert "nothing generated for never_trained" in capsys.readouterr().out
+
+
+def test_an_empty_pool_says_to_generate_first(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError, match="generate_pools"):
+        find_models(build_config(tmp_path))
 
 
 # --- config ---
-def test_pool_dir_is_determined_by_the_config_alone() -> None:
-    cfg = build_config(Path("results/samples"), seed=3)
-
-    assert cfg.pool_dir == Path("results/samples/colour_mnist_uniform__cspn__seed3")
-
-
-def test_changing_the_seed_moves_the_pool(tmp_path: Path) -> None:
-    assert (
-        build_config(tmp_path, seed=0).pool_dir
-        != build_config(tmp_path, seed=1).pool_dir
-    )
+def test_shipped_pool_configs_validate() -> None:
+    paths = sorted(Path("configs/pools").glob("*.yaml"))
+    assert paths
+    for path in paths:
+        raw = _apply_dataset_defaults(yaml.safe_load(path.read_text()))
+        cfg = PoolRunConfig.model_validate(raw)
+        assert cfg.dataset.channels == 3
+        assert all(model.type in MODEL_TYPES for model in cfg.models)
 
 
-def test_shipped_configs_validate() -> None:
+def test_shipped_marginal_configs_validate() -> None:
     for path in sorted(Path("configs/evaluation").glob("*.yaml")):
         raw = _apply_dataset_defaults(yaml.safe_load(path.read_text()))
         cfg = EvaluationRunConfig.model_validate(raw)
-        assert cfg.type == "evaluation"
-        assert cfg.dataset.channels == 3
-        assert cfg.model.model_type in MODEL_TYPES
+        assert cfg.marginal is not None
 
 
-def test_an_unknown_config_key_is_refused(tmp_path: Path) -> None:
+def test_an_unknown_config_key_is_refused() -> None:
     raw = _apply_dataset_defaults(
-        yaml.safe_load(
-            (Path("configs/evaluation") / "colour_mnist_uniform.yaml").read_text()
-        )
+        yaml.safe_load(Path("configs/pools/colour_mnist_uniform.yaml").read_text())
     )
     raw["generation"]["n_per_cel"] = 10  # typo
 
     with pytest.raises(ValidationError, match="n_per_cel"):
-        EvaluationRunConfig.model_validate(raw)
+        PoolRunConfig.model_validate(raw)
 
 
-def test_evaluate_pool_says_which_pool_is_missing(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    cfg = build_config(tmp_path)
-    patch_judge(monkeypatch)
+def test_a_version_must_be_a_version() -> None:
+    with pytest.raises(ValidationError, match="look like v3"):
+        PoolModelConfig(type="cspn", name="cspn", version="latest")
 
-    with pytest.raises(FileNotFoundError, match="No sample pool at"):
-        evaluate_pool(cfg, DEVICE)
+
+def test_a_model_listed_twice_is_refused(tmp_path: Path) -> None:
+    twice = [PoolModelConfig(type="cspn", name="cspn")] * 2
+    with pytest.raises(ValidationError, match="twice"):
+        build_config(tmp_path, models=twice)
 
 
 # --- pairing the model with the decoder it was trained against ---
@@ -766,9 +886,7 @@ def test_an_unresolvable_autoencoder_says_to_pin_one(
 
 
 # --- set metrics ---
-def test_set_metrics_write_one_row_per_halving_and_source(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def stub_networks(monkeypatch: pytest.MonkeyPatch) -> None:
     import evaluation.sets as sets
 
     def stub(device: torch.device):
@@ -779,10 +897,17 @@ def test_set_metrics_write_one_row_per_halving_and_source(
         )
 
     monkeypatch.setattr(sets, "NETWORKS", dict.fromkeys(sets.NETWORKS, stub))
-    cfg = build_config(tmp_path, n_per_cell=1)
+
+
+def test_set_metrics_write_one_row_per_halving_and_source(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import evaluation.sets as sets
+
+    stub_networks(monkeypatch)
+    cfg = generated_pool(tmp_path, monkeypatch)
     cfg.evaluation.set_metrics = list(sets.SET_METRICS)
     cfg.evaluation.halvings = 2
-    write_pool(tmp_path, n_per_cell=1, pool_dir=cfg.pool_dir)
 
     sets.run_sets(cfg, DEVICE)
 
@@ -790,9 +915,52 @@ def test_set_metrics_write_one_row_per_halving_and_source(
         table = pd.read_csv(tmp_path / "results" / f"{name}.csv")
         assert len(table) == 2 * 3
         assert set(table["source"]) == {"real", "reconstruction", "generated"}
-        assert (table["n"] == 90).all()
+        assert (table["n"] == NUM_COMBINATIONS // 2).all()
+
+
+def test_paired_halvings_score_the_held_out_halfs_own_samples() -> None:
+    from evaluation.sets import halvings
+
+    n, splits = halvings(10, 10, 3, seed=0, paired=True)
+    _, unpaired = halvings(10, 40, 3, seed=0, paired=False)
+
+    assert n == 5
+    for (reference, held_out, generated), (ref_u, held_u, _) in zip(
+        splits, unpaired, strict=True
+    ):
+        assert torch.equal(generated, held_out)
+        assert set(reference.tolist()).isdisjoint(held_out.tolist())
+        # The real splits depend on the seed alone, so every model shares them.
+        assert torch.equal(reference, ref_u) and torch.equal(held_out, held_u)
 
 
 def test_an_unknown_set_metric_is_refused(tmp_path: Path) -> None:
     with pytest.raises(ValidationError, match="unknown set metrics"):
         EvaluationConfig(results_root=tmp_path, set_metrics=["fid", "isc"])
+
+
+def test_a_flat_label_dataset_hands_the_model_flat_labels(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """MNIST yields `(N,)` labels, and the categorical encoder expects exactly that."""
+    seen: list[torch.Tensor] = []
+
+    class Recording(ConstantSampler):
+        def sample(self, labels: torch.Tensor, std_correction: float = 1.0):
+            seen.append(labels)
+            return labels.float().unsqueeze(1).expand(-1, LATENT_DIM).contiguous()
+
+    cfg = build_config(tmp_path, labels="real")
+    patch_generation(monkeypatch, sampler=Recording())
+    digits = torch.arange(20) % NUM_DIGITS
+    monkeypatch.setattr(
+        "evaluation.generate.build_dataset",
+        lambda *a, **k: TensorDataset(
+            torch.rand(20, 3, IMAGE_SIZE, IMAGE_SIZE), digits
+        ),
+    )
+
+    generate_pools(cfg, DEVICE)
+
+    assert all(labels.dim() == 1 for labels in seen)
+    assert load_tensor(real_dir(cfg.dataset_dir), LABELS).shape == (20, 1)

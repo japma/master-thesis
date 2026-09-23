@@ -4,7 +4,7 @@ from enum import StrEnum
 from itertools import accumulate, pairwise
 from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from utils.config.common import (
     BaseTrainingConfig,
@@ -18,6 +18,13 @@ class AutoencoderType(StrEnum):
     SUPERVISED = "supervised"
     ANCHORED = "anchored"
     OTHER = "other"
+
+
+class AutoencoderVariant(StrEnum):
+    """What distinguishes two autoencoders of the same model_type on one dataset."""
+
+    # Anchored: the digit gets its own one-hot anchor block, not a classification head.
+    DIGIT = "digit"
 
 
 class AnchorScheme(StrEnum):
@@ -156,10 +163,15 @@ class AutoencoderConfig(BaseModel):
     num_decoder_resblocks: int = 1
     # Required by (and only read by) model_type=supervised/anchored.
     supervision: SupervisionConfig | None = None
-    # Appended to the checkpoint and artifact name. Two configs with the same
-    # model_type and dataset otherwise land in one wandb collection, where `:latest`
-    # would resolve to whichever ran last -- and they may not even share a latent_dim.
-    variant: str = ""
+    # Part of the artifact name (see `utils.naming.vae_kind`). Two configs with the same
+    # model_type and dataset otherwise land in one wandb collection.
+    variant: AutoencoderVariant | None = None
+
+    @field_validator("variant", mode="before")
+    @classmethod
+    def _legacy_empty_variant(cls, variant: object) -> object:
+        """Checkpoints written before the enum stored no variant as ``""``."""
+        return None if variant == "" else variant
 
     @model_validator(mode="after")
     def validate_supervision(self) -> Self:

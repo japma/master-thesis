@@ -63,7 +63,7 @@ def test_selection_changes_artifact_name():
     assert DatasetConfig(**base).artifact_name == "colour_mnist_uniform"
     assert (
         DatasetConfig(**base, labels=("digit", "fg")).artifact_name
-        == "colour_mnist_uniform_labels-digit-fg"
+        == "colour_mnist_uniform_labels_digit_fg"
     )
 
 

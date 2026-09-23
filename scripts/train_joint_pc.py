@@ -7,20 +7,20 @@ from torchinfo import summary
 import wandb
 from dataset_loaders import build_data_loaders
 from dataset_loaders.latent_normalizer import LatentNormalizer
-from models.autoencoder.pretrained import PretrainedVAE
 from models.cspn.joint_pc import JointPC
+from training.inputs import load_training_autoencoder
 from training.loop import CheckpointSpec, run_training_loop
 from training.objectives.joint_pc import JointPCObjective
 from utils.checkpoints import (
     final_checkpoint_path,
     intermediate_checkpoint_path,
-    load_ae_from_path,
     load_joint_pc_from_path,
 )
 from utils.compilation import maybe_compile
 from utils.config import JointPCRunConfig, load_config
+from utils.naming import ModelFamily, artifact_name
 from utils.reproducibility import resolve_device, seed_everything
-from utils.wandb_utils import download_artifact, init_run
+from utils.wandb_utils import init_run, rename_run
 
 
 def _build_sample_labels(
@@ -43,22 +43,12 @@ def main() -> None:
     seed = seed_everything(cfg_seed)
     device = resolve_device()
     dataset_name = dataset_cfg.artifact_name
-    run_name = f"joint_pc_{dataset_name}"
-    if model_cfg.variant:
-        run_name = f"{run_name}_{model_cfg.variant}"
+    init_run(cfg.wandb, f"joint_pc_{dataset_name}", cfg.model_dump())
 
-    init_run(cfg.wandb, run_name, cfg.model_dump())
-
-    ae_cfg = cfg.autoencoder
-    ae_artifact: str | None = None
-    if ae_cfg.external:
-        ae = PretrainedVAE(
-            name=ae_cfg.name, height=dataset_cfg.height, width=dataset_cfg.width
-        )
-    else:
-        ae_path, ae_artifact = download_artifact(ckpt_name=ae_cfg.name, tag=ae_cfg.tag)
-        ae = load_ae_from_path(ae_path, device=device)
-    ae = ae.to(device)
+    autoencoder = load_training_autoencoder(cfg.autoencoder, dataset_cfg, device)
+    ae, ae_artifact = autoencoder.model, autoencoder.ref
+    run_name = artifact_name(ModelFamily.JOINT_PC, dataset_cfg, autoencoder.kind)
+    rename_run(run_name)
 
     if ae.get_latent_dim().numel() != model_cfg.num_latents:
         raise ValueError(
@@ -72,9 +62,7 @@ def main() -> None:
         f"{model_cfg.label_cardinalities} labels | device={device} | seed={seed}"
     )
 
-    ckpt_path = intermediate_checkpoint_path(
-        "joint_pc", dataset_name, model_cfg.variant
-    )
+    ckpt_path = intermediate_checkpoint_path(run_name)
     resumed = False
     if resume and ckpt_path.exists():
         model = load_joint_pc_from_path(ckpt_path, device=device)
@@ -128,7 +116,8 @@ def main() -> None:
 
     checkpoint = CheckpointSpec(
         intermediate_path=ckpt_path,
-        final_path=final_checkpoint_path("joint_pc", dataset_name, model_cfg.variant),
+        final_path=final_checkpoint_path(run_name),
+        metadata={**autoencoder.metadata(), "config": cfg.model_dump(mode="json")},
         artifact_type="joint_pc",
     )
 

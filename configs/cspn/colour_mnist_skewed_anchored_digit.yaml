@@ -3,9 +3,6 @@
 # Every factor anchored, digits on ten orthogonal unit vectors. The CSPN does
 # not need this -- its hypernetwork emits parameters per label either way -- but it is
 # the control the joint PC has to be compared against on the same latent space.
-#
-# `variant` keeps this out of the psinet_colour_mnist_skewed collection: same model_type and dataset, but a
-# different autoencoder means a different model, and `:latest` must not mix them.
 
 type: cspn
 
@@ -19,7 +16,6 @@ autoencoder:
 
 model:
   model_type: "psinet"
-  variant: "anchored_digit"
   num_vars: 20
   num_repetitions: 3
   num_input_distributions: 8

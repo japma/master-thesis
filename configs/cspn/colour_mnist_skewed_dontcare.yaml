@@ -20,7 +20,6 @@ autoencoder:
 
 model:
   model_type: "psinet"
-  variant: "dontcare"
   num_vars: 16
   num_repetitions: 3
   num_input_distributions: 8

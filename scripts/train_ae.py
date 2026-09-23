@@ -32,6 +32,7 @@ from utils.config import (
     VAETrainingType,
     load_config,
 )
+from utils.naming import VAE_KIND_KEY, ModelFamily, artifact_name, vae_kind
 from utils.reproducibility import resolve_device, seed_everything
 from utils.wandb_utils import init_run, log_images
 
@@ -56,20 +57,14 @@ def main() -> None:
     beta = training_cfg.beta
     device = resolve_device()
     dataset_name = dataset_cfg.artifact_name
-    model_name = f"autoencoder_{dataset_name}"
-    run_name = f"{model_name}_{training_cfg.vae_type}"
-    if supervised or anchored:
-        run_name = f"{run_name}_{autoencoder_cfg.model_type}"
-    if autoencoder_cfg.variant:
-        run_name = f"{run_name}_{autoencoder_cfg.variant}"
+    kind = vae_kind(autoencoder_cfg, training_cfg)
+    run_name = artifact_name(ModelFamily.VAE, dataset_cfg, kind)
 
     init_run(wandb_cfg, run_name, cfg.model_dump())
 
     print(f"Training Autoencoder on {dataset_name} | device={device} | seed={seed}")
 
-    ae_ckpt_path = intermediate_checkpoint_path(
-        autoencoder_cfg.model_type, dataset_name, autoencoder_cfg.variant
-    )
+    ae_ckpt_path = intermediate_checkpoint_path(run_name)
     if resume and ae_ckpt_path.exists():
         ae = load_ae_from_path(ae_ckpt_path, device=device).to(device)
         print(f"Resumed model weights from {ae_ckpt_path}")
@@ -219,10 +214,9 @@ def main() -> None:
 
     checkpoint = CheckpointSpec(
         intermediate_path=ae_ckpt_path,
-        final_path=final_checkpoint_path(
-            autoencoder_cfg.model_type, dataset_name, autoencoder_cfg.variant
-        ),
+        final_path=final_checkpoint_path(run_name),
         artifact_type="autoencoder",
+        metadata={VAE_KIND_KEY: kind, "config": cfg.model_dump(mode="json")},
     )
 
     run_training_loop(

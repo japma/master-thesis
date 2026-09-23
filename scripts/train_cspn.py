@@ -9,29 +9,28 @@ from torchinfo import summary
 import wandb
 from dataset_loaders import build_data_loaders
 from dataset_loaders.latent_normalizer import LatentNormalizer
-from models.autoencoder.pretrained import PretrainedVAE
 from models.cspn.psinet.label_pc import LabelPC
 from models.cspn.psinet_cspn import PsiNetCSPN
+from training.inputs import load_training_autoencoder
 from training.loop import CheckpointSpec, run_training_loop
 from training.objectives.cspn import CSPNObjective
 from utils.checkpoints import (
     final_checkpoint_path,
     intermediate_checkpoint_path,
     label_pc_checkpoint_path,
-    load_ae_from_path,
     load_cspn_from_path,
     load_label_pc_from_path,
 )
 from utils.compilation import maybe_compile
 from utils.config import (
-    ConditioningType,
     CSPNEncoderType,
     CSPNRunConfig,
     CSPNType,
     load_config,
 )
+from utils.naming import ModelFamily, artifact_name, cspn_extras
 from utils.reproducibility import resolve_device, seed_everything
-from utils.wandb_utils import download_artifact, init_run
+from utils.wandb_utils import download_artifact, init_run, rename_run
 
 
 def _themed_multi_binary_labels(
@@ -168,33 +167,14 @@ def main() -> None:
     device = resolve_device()
     dataset_name = dataset_cfg.artifact_name
 
-    variant = "_".join(
-        part
-        for part in (
-            ""
-            if cspn_cfg.conditioning_type is ConditioningType.JOINT
-            else str(cspn_cfg.conditioning_type),
-            cspn_cfg.variant,
-        )
-        if part
+    init_run(wandb_cfg, f"cspn_{dataset_name}", cfg.model_dump())
+
+    autoencoder = load_training_autoencoder(cfg.autoencoder, dataset_cfg, device)
+    ae, ae_artifact = autoencoder.model, autoencoder.ref
+    run_name = artifact_name(
+        ModelFamily.CSPN, dataset_cfg, autoencoder.kind, *cspn_extras(cspn_cfg)
     )
-
-    run_name = f"cspn_{dataset_name}_{cspn_cfg.model_type}" + (
-        f"_{variant}" if variant else ""
-    )
-
-    init_run(wandb_cfg, run_name, cfg.model_dump())
-
-    ae_cfg = cfg.autoencoder
-    ae_artifact: str | None = None
-    if ae_cfg.external:
-        ae = PretrainedVAE(
-            name=ae_cfg.name, height=dataset_cfg.height, width=dataset_cfg.width
-        )
-    else:
-        ae_path, ae_artifact = download_artifact(ckpt_name=ae_cfg.name, tag=ae_cfg.tag)
-        ae = load_ae_from_path(ae_path, device=device)
-    ae = ae.to(device)
+    rename_run(run_name)
 
     if ae.get_latent_dim().numel() != cspn_cfg.num_vars:
         raise ValueError(
@@ -206,9 +186,7 @@ def main() -> None:
     if cspn_cfg.model_type != CSPNType.PSINET:
         raise ValueError(f"Unknown model type {cspn_cfg.model_type}")
 
-    cspn_ckpt_path = intermediate_checkpoint_path(
-        cspn_cfg.model_type, dataset_name, variant
-    )
+    cspn_ckpt_path = intermediate_checkpoint_path(run_name)
     resumed_cspn = False
     if resume and cspn_ckpt_path.exists():
         cspn = load_cspn_from_path(cspn_ckpt_path, device=device).to(device)
@@ -266,8 +244,9 @@ def main() -> None:
 
     checkpoint = CheckpointSpec(
         intermediate_path=cspn_ckpt_path,
-        final_path=final_checkpoint_path(cspn_cfg.model_type, dataset_name, variant),
+        final_path=final_checkpoint_path(run_name),
         artifact_type="cspn",
+        metadata={**autoencoder.metadata(), "config": cfg.model_dump(mode="json")},
     )
 
     run_training_loop(

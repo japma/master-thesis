@@ -17,6 +17,7 @@ from utils.checkpoints import (
 )
 from utils.compilation import maybe_compile
 from utils.config import ClassifierRunConfig, load_config
+from utils.naming import ModelFamily, artifact_name
 from utils.reproducibility import resolve_device, seed_everything
 from utils.wandb_utils import init_run, log_summary
 
@@ -43,7 +44,8 @@ def main() -> None:
         f"Training digit classifier on {dataset_name} | device={device} | seed={seed}"
     )
 
-    ckpt_path = intermediate_checkpoint_path("digit_classifier", dataset_name)
+    name = artifact_name(ModelFamily.DIGIT_CLASSIFIER, dataset_cfg)
+    ckpt_path = intermediate_checkpoint_path(name)
     if resume and ckpt_path.exists():
         model = load_classifier_from_path(ckpt_path, device=device).to(device)
         print(f"Resumed model weights from {ckpt_path}")
@@ -82,7 +84,7 @@ def main() -> None:
 
     checkpoint = CheckpointSpec(
         intermediate_path=ckpt_path,
-        final_path=final_checkpoint_path("digit_classifier", dataset_name),
+        final_path=final_checkpoint_path(name),
         artifact_type="classifier",
     )
 

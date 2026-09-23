@@ -1,21 +1,49 @@
 """Config fragments shared by every run type."""
 
+from enum import StrEnum
 from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
 
+class DatasetName(StrEnum):
+    """Every dataset `dataset_loaders.build_dataset` can load."""
+
+    MNIST = "mnist"
+    BINARY_MNIST = "binary_mnist"
+    FASHION_MNIST = "fashion_mnist"
+    CIFAR10 = "cifar10"
+    TINYIMAGENET = "tinyimagenet"
+    FLOWERS102 = "flowers102"
+    CUB200 = "cub200"
+    CELEBA = "celeba"
+    CELEBA_SINGLE_ATTRIBUTE = "celeba_single_attribute"
+    COLOUR_MNIST_UNIFORM = "colour_mnist_uniform"
+    COLOUR_MNIST_SKEWED = "colour_mnist_skewed"
+    COLOUR_MNIST_RGB = "colour_mnist_rgb"
+    COLOUR_MNIST_UNIFORM_X2 = "colour_mnist_uniform_x2"
+    COLOUR_MNIST_SKEWED_X2 = "colour_mnist_skewed_x2"
+
+
+class LabelFactor(StrEnum):
+    """A colour-MNIST label column, in target-vector order."""
+
+    DIGIT = "digit"
+    FG = "fg"
+    BG = "bg"
+
+
 class DatasetConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    name: str
+    name: DatasetName
     channels: int
     height: int
     width: int
     num_classes: int
     # Colour-MNIST only: the label factors a batch carries, e.g. `[digit]`. Omit for
     # all of them.
-    labels: tuple[str, ...] | None = None
+    labels: tuple[LabelFactor, ...] | None = None
 
     @model_validator(mode="after")
     def is_square(self) -> Self:
@@ -30,8 +58,8 @@ class DatasetConfig(BaseModel):
         name too, or a digit-only run would overwrite the full-label one.
         """
         if self.labels is None:
-            return self.name
-        return f"{self.name}_labels-{'-'.join(self.labels)}"
+            return str(self.name)
+        return "_".join([self.name, "labels", *self.labels])
 
 
 class PretrainedAutoencoderConfig(BaseModel):

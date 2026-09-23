@@ -1,7 +1,21 @@
-"""Set metrics: a pool's images against the real ones, as whole sets rather than per
-sample, averaged over random halvings of the val set"""
+"""Set metrics: each model's images against the real ones, as whole sets rather than per
+sample, averaged over random halvings of the val split. No judge and no labels, which
+is why this is its own entrypoint and not a module in `metrics/`.
+
+Each halving cuts the val set in two: one half is the reference, the other is scored
+against it as the `real` floor -- the distance of the data to itself at this n. The
+reconstruction ceiling is the VAE round trip of that same held-out half, so the gap
+between the two rows is the VAE alone. When a model was conditioned on the real labels
+(sample i on image i), its generated set is the samples of that same held-out half, so
+all three sets carry identical labels; otherwise it is a random subset of the same n.
+
+The halvings depend only on the seed, so every model of a seed is scored on the same
+splits, and the real and reconstruction scores are computed once and shared. Features
+do not depend on the reference either: each network embeds every image once.
+"""
 
 from collections.abc import Callable
+from functools import partial
 
 import pandas as pd
 import torch
@@ -18,20 +32,21 @@ from evaluation.evaluate import (
     REAL,
     RECONSTRUCTION,
     RUN_KEYS,
+    find_models,
     run_columns,
     tag,
     write_metric,
 )
 from evaluation.features import NETWORKS, extract
-from evaluation.samples import (
-    SampleManifest,
-    load_images,
-    load_originals,
-    load_reference_manifest,
-    load_sample_manifest,
-    reference_dir,
+from evaluation.pools import (
+    IMAGES,
+    REAL_LABELS,
+    ModelManifest,
+    load_tensor,
+    real_dir,
+    vae_dir,
 )
-from utils.config import EvaluationRunConfig
+from utils.config import PoolRunConfig
 from utils.progress import batch_count, start_rtpt
 from utils.reproducibility import float64_device
 
@@ -47,52 +62,41 @@ SET_METRICS: dict[str, tuple[str, Callable[[torch.Tensor, torch.Tensor], float]]
 }
 
 
-def load_set_pool(
-    cfg: EvaluationRunConfig,
-) -> tuple[SampleManifest, torch.Tensor, torch.Tensor, torch.Tensor]:
-    """A pool's manifest, then its originals, reconstructions and generated images."""
-    pool_dir = cfg.pool_dir
-    if not pool_dir.is_dir():
-        raise FileNotFoundError(
-            f"No sample pool at {pool_dir}. Run `uv run generate_samples` with this "
-            "config first."
-        )
-    reference_pool = reference_dir(pool_dir)
-    manifest = load_sample_manifest(pool_dir)
-    load_reference_manifest(reference_pool)
-
-    originals = load_originals(reference_pool)
-    reconstructions = load_images(reference_pool)
-    if reconstructions.shape[0] != originals.shape[0]:
-        raise ValueError(
-            f"{reference_pool} holds {reconstructions.shape[0]} reconstructions for "
-            f"{originals.shape[0]} originals; they must be paired."
-        )
-    return manifest, originals, reconstructions, load_images(pool_dir)
+Split = tuple[torch.Tensor, torch.Tensor, torch.Tensor]
 
 
 def halvings(
-    n_originals: int, n_generated: int, n_splits: int, generator: torch.Generator
-) -> tuple[int, list[tuple[torch.Tensor, torch.Tensor, torch.Tensor]]]:
+    n_real: int, n_generated: int, n_splits: int, seed: int, paired: bool
+) -> tuple[int, list[Split]]:
     """The common n, and per split the reference, held-out and generated indices.
 
-    Half the val split is the most the real floor can have.
+    Half the val split is the most the real floor can have. `paired` generated sets
+    line up with the real ones, so they take the held-out indices themselves.
     """
-    n = min(n_originals // 2, n_generated)
+    if paired and n_generated != n_real:
+        raise ValueError(
+            f"paired sets must match: {n_generated} generated, {n_real} real"
+        )
+    n = min(n_real // 2, n_generated)
+    real_order = torch.Generator().manual_seed(seed)
+    generated_order = torch.Generator().manual_seed(seed + 1)
     splits = []
     for _ in range(n_splits):
-        order = torch.randperm(n_originals, generator=generator)
-        if n_generated <= n:
+        order = torch.randperm(n_real, generator=real_order)
+        reference, held_out = order[:n], order[n : 2 * n]
+        if paired:
+            generated = held_out
+        elif n_generated <= n:
             generated = torch.arange(n_generated)
         else:
-            generated = torch.randperm(n_generated, generator=generator)[:n]
-        splits.append((order[:n], order[n : 2 * n], generated))
+            generated = torch.randperm(n_generated, generator=generated_order)[:n]
+        splits.append((reference, held_out, generated))
     return n, splits
 
 
 def write_set_metric(
-    cfg: EvaluationRunConfig,
-    manifest: SampleManifest,
+    cfg: PoolRunConfig,
+    manifest: ModelManifest,
     name: str,
     scores: list[dict[str, float]],
     n: int,
@@ -114,49 +118,91 @@ def write_set_metric(
         print(f"  {source:<16} {row['mean']:.4f} ± {row['std']:.4f}")
 
 
-def run_sets(cfg: EvaluationRunConfig, device: torch.device) -> None:
-    """Every metric in `cfg.evaluation.set_metrics` for one pool, one CSV each."""
-    manifest, originals, reconstructions, generated = load_set_pool(cfg)
+def run_sets(cfg: PoolRunConfig, device: torch.device) -> None:
+    """Every metric in `cfg.evaluation.set_metrics` for every generated model."""
+    dataset_dir = cfg.dataset_dir
+    models = find_models(cfg)
     names = cfg.evaluation.set_metrics
     networks = list(dict.fromkeys(SET_METRICS[name][0] for name in names))
     batch_size = cfg.evaluation.batch_size
-
-    sets = {REAL: originals, RECONSTRUCTION: reconstructions, GENERATED: generated}
-    per_network = sum(batch_count(x.shape[0], batch_size) for x in sets.values())
-    rtpt = start_rtpt(f"sets_{manifest.dataset}", per_network * len(networks))
     metric_device = float64_device(device)
+    halving_count = cfg.evaluation.halvings
 
-    features: dict[str, dict[str, torch.Tensor]] = {}
+    real_images = load_tensor(real_dir(dataset_dir), IMAGES)
+    vae_refs = sorted({manifest.vae_checkpoint for _, manifest in models})
+    n_real = real_images.shape[0]
+    per_network = batch_count(n_real, batch_size) * (1 + len(vae_refs)) + sum(
+        batch_count(manifest.n, batch_size) for _, manifest in models
+    )
+    rtpt = start_rtpt(f"sets_{cfg.dataset.name}", per_network * len(networks))
+
+    plans = [
+        halvings(
+            n_real,
+            manifest.n,
+            halving_count,
+            manifest.seed,
+            paired=manifest.labels == REAL_LABELS and manifest.n == n_real,
+        )
+        for _, manifest in models
+    ]
+    scores: dict[tuple[int, str], list[dict[str, float]]] = {}
     for network_name in networks:
         network = NETWORKS[network_name](device)
-        features[network_name] = {
-            source: extract(
-                network,
-                images,
-                device,
-                metric_device,
-                batch_size,
-                f"{network_name} {source}",
-                rtpt,
-            )
-            for source, images in sets.items()
-        }
-        del network
+        embed = partial(
+            extract,
+            network,
+            device=device,
+            out_device=metric_device,
+            batch_size=batch_size,
+            rtpt=rtpt,
+        )
 
-    generator = torch.Generator().manual_seed(manifest.seed)
-    n, splits = halvings(
-        originals.shape[0], generated.shape[0], cfg.evaluation.halvings, generator
-    )
-    print(f"\n{len(splits)} halvings of the val set, every set cut to n={n}")
-    for name in names:
-        network_name, score = SET_METRICS[name]
-        f = features[network_name]
-        scores = [
-            {
-                REAL: score(f[REAL][held_out], f[REAL][reference]),
-                RECONSTRUCTION: score(f[RECONSTRUCTION][held_out], f[REAL][reference]),
-                GENERATED: score(f[GENERATED][sampled], f[REAL][reference]),
-            }
-            for reference, held_out, sampled in splits
-        ]
-        write_set_metric(cfg, manifest, name, scores, n)
+        real = embed(real_images, desc=f"{network_name} real")
+        reconstructions = {
+            vae_ref: embed(
+                load_tensor(vae_dir(dataset_dir, vae_ref), IMAGES),
+                desc=f"{network_name} {vae_ref}",
+            )
+            for vae_ref in vae_refs
+        }
+        shared: dict[tuple, float] = {}
+        for index, ((directory, manifest), (n, splits)) in enumerate(
+            zip(models, plans, strict=True)
+        ):
+            generated = embed(
+                load_tensor(directory, IMAGES),
+                desc=f"{network_name} {manifest.model_checkpoint}",
+            )
+            recon = reconstructions[manifest.vae_checkpoint]
+            for name in names:
+                metric_network, score = SET_METRICS[name]
+                if metric_network != network_name:
+                    continue
+                per_split = []
+                for split, (reference, held_out, sampled) in enumerate(splits):
+                    floor_key = (name, manifest.seed, n, split)
+                    if floor_key not in shared:
+                        shared[floor_key] = score(real[held_out], real[reference])
+                    ceiling_key = (*floor_key, manifest.vae_checkpoint)
+                    if ceiling_key not in shared:
+                        shared[ceiling_key] = score(recon[held_out], real[reference])
+                    per_split.append(
+                        {
+                            REAL: shared[floor_key],
+                            RECONSTRUCTION: shared[ceiling_key],
+                            GENERATED: score(generated[sampled], real[reference]),
+                        }
+                    )
+                scores[(index, name)] = per_split
+        del network, embed
+
+    for index, ((_, manifest), (n, splits)) in enumerate(
+        zip(models, plans, strict=True)
+    ):
+        print(
+            f"\n=== {manifest.model_checkpoint} (std={manifest.std_correction:g}, "
+            f"seed={manifest.seed}): {len(splits)} halvings, every set cut to n={n}"
+        )
+        for name in names:
+            write_set_metric(cfg, manifest, name, scores[(index, name)], n)

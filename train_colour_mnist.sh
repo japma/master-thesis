@@ -1,7 +1,7 @@
 #!/bin/bash
 # train_colour_mnist.sh
-# Trains the whole colour-MNIST stack -- autoencoder, CSPN, joint PC, and both neural
-# baselines -- for one or more dataset variants.
+# Trains the whole colour-MNIST stack for one or more dataset variants: the plain and the
+# anchored autoencoder, then a CSPN, joint PCs and both neural baselines on each of them.
 #
 #   bash train_colour_mnist.sh skewed
 #   bash train_colour_mnist.sh rgb uniform
@@ -49,28 +49,53 @@ for variant in "${VARIANTS[@]}"; do
 done
 
 # --- what to run, in dependency order ------------------------------------------------
-# Each entry is "label|command|config template", with @ standing in for the variant.
+# Each entry is "label|command|config template|autoencoder step it needs", with @ standing
+# in for the variant. A label ending in ? is optional: skipped where the variant has no
+# such config (rgb has no anchored autoencoder, for instance). Every latent-space config
+# names its autoencoder with `tag: latest`, so it picks up the one trained just before.
 STEPS=(
-    "autoencoder|train_ae|configs/autoencoder/colour_mnist_@.yaml"
-    "cspn|train_cspn|configs/cspn/colour_mnist_@.yaml"
-    "joint_pc|train_joint_pc|configs/joint_pc/colour_mnist_@.yaml"
-    "baseline_deterministic|train_nn_baseline|configs/nn_baseline/colour_mnist_@_deterministic.yaml"
-    "baseline_mixture|train_nn_baseline|configs/nn_baseline/colour_mnist_@_mixture.yaml"
+    "autoencoder|train_ae|configs/autoencoder/colour_mnist_@.yaml|"
+    "autoencoder_anchored?|train_ae|configs/autoencoder/colour_mnist_@_anchored.yaml|"
+    "cspn|train_cspn|configs/cspn/colour_mnist_@.yaml|autoencoder"
+    "cspn_anchored?|train_cspn|configs/cspn/colour_mnist_@_anchored.yaml|autoencoder_anchored"
+    "joint_pc|train_joint_pc|configs/joint_pc/colour_mnist_@.yaml|autoencoder"
+    "joint_pc_anchored?|train_joint_pc|configs/joint_pc/colour_mnist_@_anchored.yaml|autoencoder_anchored"
+    "joint_pc_digit_only?|train_joint_pc|configs/joint_pc/colour_mnist_@_digit_only.yaml|autoencoder"
+    "joint_pc_x2?|train_joint_pc|configs/joint_pc/colour_mnist_@_x2.yaml|autoencoder"
+    "baseline_deterministic|train_nn_baseline|configs/nn_baseline/colour_mnist_@_deterministic.yaml|autoencoder"
+    "baseline_mixture|train_nn_baseline|configs/nn_baseline/colour_mnist_@_mixture.yaml|autoencoder"
+    "baseline_deterministic_anchored?|train_nn_baseline|configs/nn_baseline/colour_mnist_@_anchored_deterministic.yaml|autoencoder_anchored"
+    "baseline_mixture_anchored?|train_nn_baseline|configs/nn_baseline/colour_mnist_@_anchored_mixture.yaml|autoencoder_anchored"
 )
+
+# Split one STEPS entry for `variant` into LABEL, OPTIONAL, COMMAND, CONFIG, NEEDS.
+parse_step() {
+    local step="$1" variant="$2"
+    IFS='|' read -r LABEL COMMAND CONFIG NEEDS <<< "$step"
+    OPTIONAL=0
+    if [[ "$LABEL" == *"?" ]]; then
+        OPTIONAL=1
+        LABEL="${LABEL%\?}"
+    fi
+    CONFIG="${CONFIG//@/$variant}"
+}
 
 # --- preflight: every config and dataset present, before anything long starts ---------
 missing=0
 for variant in "${VARIANTS[@]}"; do
-    if [[ ! -d "data/colour-mnist/$variant/train" ]]; then
-        echo "Missing dataset: data/colour-mnist/$variant/train" >&2
-        echo "  generate it with: uv run generate_colour_mnist configs/colour_mnist/$variant.csv" >&2
-        missing=1
-    fi
+    datasets=("$variant")
+    [[ -f "configs/joint_pc/colour_mnist_${variant}_x2.yaml" ]] && datasets+=("${variant}_x2")
+    for dataset in "${datasets[@]}"; do
+        if [[ ! -d "data/colour-mnist/$dataset/train" ]]; then
+            echo "Missing dataset: data/colour-mnist/$dataset/train" >&2
+            echo "  generate it with: uv run generate_colour_mnist configs/colour_mnist/$dataset.csv" >&2
+            missing=1
+        fi
+    done
     for step in "${STEPS[@]}"; do
-        config="${step##*|}"
-        config="${config//@/$variant}"
-        if [[ ! -f "$config" ]]; then
-            echo "Missing config: $config" >&2
+        parse_step "$step" "$variant"
+        if [[ ! -f "$CONFIG" && $OPTIONAL -eq 0 ]]; then
+            echo "Missing config: $CONFIG" >&2
             missing=1
         fi
     done
@@ -123,21 +148,24 @@ for variant in "${VARIANTS[@]}"; do
     echo "########################################"
     echo
 
+    # Autoencoder steps that failed; everything trained on one reads its artifact, so
+    # without it those runs would only fail more slowly.
+    BROKEN=()
     for step in "${STEPS[@]}"; do
-        label="${step%%|*}"
-        rest="${step#*|}"
-        command="${rest%%|*}"
-        config="${rest#*|}"
-        config="${config//@/$variant}"
-
-        if ! run_step "$variant/$label" "$command" "$config"; then
-            # Everything downstream reads the autoencoder's artifact, so without it the
-            # rest of this variant would only fail more slowly.
-            if [[ "$label" == "autoencoder" ]]; then
-                echo "Autoencoder failed for $variant -- skipping its remaining models."
-                echo
-                break
-            fi
+        parse_step "$step" "$variant"
+        if [[ ! -f "$CONFIG" ]]; then
+            echo "  (no $CONFIG -- skipping $variant/$LABEL)"
+            echo
+            continue
+        fi
+        if [[ -n "$NEEDS" && " ${BROKEN[*]-} " == *" $NEEDS "* ]]; then
+            echo "  skipping $variant/$LABEL: its autoencoder ($NEEDS) failed"
+            echo
+            FAILED+=("$variant/$LABEL (skipped)")
+            continue
+        fi
+        if ! run_step "$variant/$LABEL" "$COMMAND" "$CONFIG"; then
+            [[ -z "$NEEDS" ]] && BROKEN+=("$LABEL")
         fi
     done
 done
@@ -146,8 +174,9 @@ echo "========================================"
 if [[ ${#FAILED[@]} -eq 0 ]]; then
     echo "All runs finished."
     echo
-    echo "Next: uv run generate_samples configs/evaluation/colour_mnist_<variant>.yaml"
-    echo "Then: uv run evaluate_samples configs/evaluation/colour_mnist_<variant>.yaml"
+    echo "Next: uv run generate_pools   configs/pools/colour_mnist_<variant>.yaml"
+    echo "Then: uv run evaluate_samples configs/pools/colour_mnist_<variant>.yaml"
+    echo "      uv run evaluate_sets    configs/pools/colour_mnist_<variant>.yaml"
 else
     echo "${#FAILED[@]} run(s) failed:"
     printf '  %s\n' "${FAILED[@]}"

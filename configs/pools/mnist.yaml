@@ -1,0 +1,33 @@
+# Plain MNIST: a quick end-to-end check of the pool pipeline on a small, fast dataset.
+# Every model is conditioned on the test-split labels, one sample per real image.
+#
+#   uv run generate_pools   configs/pools/mnist.yaml
+#   uv run evaluate_samples configs/pools/mnist.yaml
+#   uv run evaluate_sets    configs/pools/mnist.yaml
+
+type: pools
+
+dataset:
+  name: mnist
+
+models:
+  - { type: cspn, name: psinet_mnist }
+
+# The colour-MNIST digit judge: it was never trained on white-on-black digits, so read
+# generated accuracy against the `real` row, which is this judge on real MNIST.
+classifier:
+  name: digit_classifier_colour_mnist_uniform
+  tag: latest
+
+generation:
+  labels: real
+  seeds: [0]
+  batch_size: 256
+
+evaluation:
+  batch_size: 512
+  results_root: results
+  # MNIST has only the digit; every other judged metric reads colour columns.
+  metrics: [digit_accuracy, confusion_digit]
+  halvings: 5
+  set_metrics: [fid, kid, precision, recall]

@@ -1,0 +1,27 @@
+# The rgb colour-MNIST pool. See colour_mnist_skewed.yaml for how it is used.
+
+type: pools
+
+dataset:
+  name: colour_mnist_rgb
+
+models:
+  - { type: cspn, name: psinet_colour_mnist_rgb }
+  - { type: cspn, name: psinet_colour_mnist_rgb_factorized }
+  - { type: joint_pc, name: joint_pc_colour_mnist_rgb }
+  - { type: nn_baseline, name: nn_baseline_colour_mnist_rgb_deterministic }
+  - { type: nn_baseline, name: nn_baseline_colour_mnist_rgb_mixture }
+
+classifier:
+  name: digit_classifier_colour_mnist_uniform
+  tag: latest
+
+generation:
+  labels: stratified
+  n_per_cell: 100
+  seeds: [0]
+  batch_size: 256
+
+evaluation:
+  batch_size: 512
+  results_root: results

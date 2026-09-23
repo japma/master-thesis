@@ -6,21 +6,21 @@ from torchinfo import summary
 
 import wandb
 from dataset_loaders import build_data_loaders
-from models.autoencoder.pretrained import PretrainedVAE
 from models.neural_baseline import build_neural_baseline
 from training.early_stopping import EarlyStopping
+from training.inputs import load_training_autoencoder
 from training.loop import CheckpointSpec, run_training_loop
 from training.objectives.nn_baseline import NeuralBaselineObjective
 from utils.checkpoints import (
     final_checkpoint_path,
     intermediate_checkpoint_path,
-    load_ae_from_path,
     load_nn_baseline_from_path,
 )
 from utils.compilation import maybe_compile
 from utils.config import NeuralBaselineRunConfig, load_config
+from utils.naming import ModelFamily, artifact_name, nn_baseline_extras
 from utils.reproducibility import resolve_device, seed_everything
-from utils.wandb_utils import download_artifact, init_run
+from utils.wandb_utils import init_run, rename_run
 
 
 def main() -> None:
@@ -33,21 +33,17 @@ def main() -> None:
     seed = seed_everything(cfg_seed)
     device = resolve_device()
     dataset_name = dataset_cfg.artifact_name
-    variant = str(model_cfg.model_type)
+    init_run(cfg.wandb, f"nn_baseline_{dataset_name}", cfg.model_dump())
 
-    run_name = f"nn_baseline_{dataset_name}_{variant}"
-    init_run(cfg.wandb, run_name, cfg.model_dump())
-
-    ae_cfg = cfg.autoencoder
-    ae_artifact: str | None = None
-    if ae_cfg.external:
-        ae = PretrainedVAE(
-            name=ae_cfg.name, height=dataset_cfg.height, width=dataset_cfg.width
-        )
-    else:
-        ae_path, ae_artifact = download_artifact(ckpt_name=ae_cfg.name, tag=ae_cfg.tag)
-        ae = load_ae_from_path(ae_path, device=device)
-    ae = ae.to(device)
+    autoencoder = load_training_autoencoder(cfg.autoencoder, dataset_cfg, device)
+    ae, ae_artifact = autoencoder.model, autoencoder.ref
+    run_name = artifact_name(
+        ModelFamily.NN_BASELINE,
+        dataset_cfg,
+        autoencoder.kind,
+        *nn_baseline_extras(model_cfg),
+    )
+    rename_run(run_name)
 
     if ae.get_latent_dim().numel() != model_cfg.num_vars:
         raise ValueError(
@@ -57,7 +53,7 @@ def main() -> None:
 
     print(f"Training neural baseline on {dataset_name} | device={device} | seed={seed}")
 
-    ckpt_path = intermediate_checkpoint_path("nn_baseline", dataset_name, variant)
+    ckpt_path = intermediate_checkpoint_path(run_name)
     if resume and ckpt_path.exists():
         model = load_nn_baseline_from_path(ckpt_path, device=device).to(device)
         print(f"Resumed model weights from {ckpt_path}")
@@ -110,7 +106,8 @@ def main() -> None:
 
     checkpoint = CheckpointSpec(
         intermediate_path=ckpt_path,
-        final_path=final_checkpoint_path("nn_baseline", dataset_name, variant),
+        final_path=final_checkpoint_path(run_name),
+        metadata={**autoencoder.metadata(), "config": cfg.model_dump(mode="json")},
         artifact_type="nn_baseline",
     )
 

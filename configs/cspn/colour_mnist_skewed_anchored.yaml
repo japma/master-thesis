@@ -2,9 +2,6 @@
 #
 # Colours sit on their palette coordinates; the digit is still a
 # classification head, so only fg and bg are mean-separated here.
-#
-# `variant` keeps this out of the psinet_colour_mnist_skewed collection: same model_type and dataset, but a
-# different autoencoder means a different model, and `:latest` must not mix them.
 
 type: cspn
 
@@ -18,7 +15,6 @@ autoencoder:
 
 model:
   model_type: "psinet"
-  variant: "anchored"
   num_vars: 16
   num_repetitions: 3
   num_input_distributions: 8

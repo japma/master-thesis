@@ -32,7 +32,6 @@ generation:
   seed: 0
   std_correction: 1.0
   batch_size: 256
-  output_root: results/samples
 
 evaluation:
   batch_size: 512

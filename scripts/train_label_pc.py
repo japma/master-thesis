@@ -16,6 +16,7 @@ from utils.checkpoints import (
 )
 from utils.compilation import maybe_compile
 from utils.config import LabelPCRunConfig, load_config
+from utils.naming import ModelFamily, artifact_name
 from utils.reproducibility import resolve_device, seed_everything
 from utils.wandb_utils import init_run
 
@@ -45,7 +46,9 @@ def main() -> None:
         f"device={device} | seed={seed}"
     )
 
-    label_pc_ckpt_path = intermediate_checkpoint_path("label_pc", dataset_name)
+    label_pc_ckpt_path = intermediate_checkpoint_path(
+        artifact_name(ModelFamily.LABEL_PC, dataset_cfg)
+    )
     if resume and label_pc_ckpt_path.exists():
         label_pc = load_label_pc_from_path(label_pc_ckpt_path, device=device)
         print(f"Resumed model weights from {label_pc_ckpt_path}")
