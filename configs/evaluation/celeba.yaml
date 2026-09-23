@@ -40,6 +40,8 @@ evaluation:
   # FID's Inception pass is the cost here, not the metric.
   batch_size: 128
   results_root: results
+  # Random halvings of the val set: the reference half, and the real-vs-real floor.
+  halvings: 5
 
 # Still missing, and worth adding before the writeup:
 #   - attribute accuracy: does a sample conditioned on `Smiling` actually smile? Needs a

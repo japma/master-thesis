@@ -50,6 +50,11 @@ def resolve_device() -> torch.device:
     return torch.device("cpu")
 
 
+def float64_device(device: torch.device) -> torch.device:
+    """Where float64 maths can run alongside `device`: MPS has no float64."""
+    return torch.device("cpu") if device.type == "mps" else device
+
+
 def get_rng_state() -> dict:
     """Snapshot of every RNG seed_everything touches, for exact-resume checkpointing."""
     state: dict = {

@@ -7,7 +7,9 @@
     marginal.py   queries with a factor left free: the mixture reference and
                   the calibration that scores it (its own entrypoint)
     metrics/      one module per metric: a FILENAME and a compute(), listed in METRICS
-    fid.py        FID between two image sets -- present, deliberately not wired in
+    halvings.py   the val-split halvings FID and CMMD average over
+    fid.py        FID between two image sets -- its own entrypoint, not a metric
+    cmmd.py       CMMD (CLIP embeddings, MMD) -- likewise its own entrypoint
     evaluate.py   stage 2 -- run the judge, write one CSV per metric
 
 Stage 1 computes no metric and stage 2 loads no VAE; the pool directory is the only

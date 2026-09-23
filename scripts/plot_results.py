@@ -19,6 +19,7 @@ import matplotlib.pyplot as plt
 
 BAR = "#2a78d6"
 CEILING = "#6b7280"
+FLOOR = "#1f2328"
 INK = "#1f2328"
 MUTED = "#6b7280"
 GRID = "#e5e7eb"
@@ -142,9 +143,13 @@ def plot_accuracy(table: pd.DataFrame, out: Path, dataset: str) -> Path:
     return path
 
 
-def plot_fid(results: Path, out: Path, dataset: str) -> Path | None:
-    """Generated FID per model, each against its own VAE round-trip ceiling."""
-    path = results / "fid.csv"
+# The set distances `evaluate_fid` and `evaluate_cmmd` write, with how to print each.
+SET_METRICS = {"fid": ".1f", "cmmd": ".3f"}
+
+
+def plot_set_metric(results: Path, out: Path, dataset: str, metric: str) -> Path | None:
+    """Generated FID or CMMD per model, against its VAE round trip and real vs real."""
+    path = results / f"{metric}.csv"
     if not path.exists():
         return None
     table = pd.read_csv(path)
@@ -155,31 +160,33 @@ def plot_fid(results: Path, out: Path, dataset: str) -> Path | None:
         model=table["checkpoint"].map(lambda c: short_name(c, dataset))
     )
 
-    generated = table[table["source"] == "generated"].set_index("model")
-    reconstruction = table[table["source"] == "reconstruction"].set_index("model")
-    models = sorted(generated.index.unique(), key=model_rank, reverse=True)
-    values = [float(generated["value"].get(m, float("nan"))) for m in models]
+    by_source = table.groupby(["source", "model"])["value"]
+    means, stds = by_source.mean(), by_source.std()
+    models = sorted(means["generated"].index, key=model_rank, reverse=True)
+    values = [float(means["generated"].get(m, float("nan"))) for m in models]
+    errors = [float(stds["generated"].get(m, float("nan"))) for m in models]
 
     fig, ax = plt.subplots(figsize=(8, 1.2 + 0.42 * len(models)))
     fig.set_facecolor(SURFACE)
     style_axes(ax)
-    ax.barh(models, values, height=0.6, color=BAR, zorder=2)
+    ax.barh(models, values, height=0.6, color=BAR, xerr=errors, ecolor=INK, zorder=2)
 
     for y, model in enumerate(models):
-        ceiling = reconstruction["value"].get(model)
-        if pd.notna(ceiling):
-            ax.plot(
-                [ceiling, ceiling],
-                [y - 0.34, y + 0.34],
-                color=CEILING,
-                linewidth=2.5,
-                zorder=4,
-            )
+        for source, color in (("reconstruction", CEILING), ("real", FLOOR)):
+            tick = means.get(source, pd.Series(dtype=float)).get(model)
+            if pd.notna(tick):
+                ax.plot(
+                    [tick, tick],
+                    [y - 0.34, y + 0.34],
+                    color=color,
+                    linewidth=2.5,
+                    zorder=4,
+                )
         if pd.notna(values[y]):
             ax.text(
-                values[y] * 1.02,
+                values[y] * 1.02 + (errors[y] if pd.notna(errors[y]) else 0),
                 y,
-                f"{values[y]:.1f}",
+                f"{values[y]:{SET_METRICS[metric]}}",
                 va="center",
                 ha="left",
                 fontsize=9,
@@ -187,15 +194,15 @@ def plot_fid(results: Path, out: Path, dataset: str) -> Path | None:
             )
 
     ax.set_xlim(0, max(v for v in values if pd.notna(v)) * 1.2)
-    ax.set_xlabel("FID (lower is better)", color=INK)
+    ax.set_xlabel(f"{metric.upper()} (lower is better)", color=INK)
     ax.set_title(
-        f"FID on {dataset}   (grey tick = that model's VAE round trip)",
+        f"{metric.upper()} on {dataset}   (grey = VAE round trip, black = real vs real)",
         color=INK,
         fontsize=12,
         loc="left",
     )
     fig.tight_layout()
-    figure = out / "fid.png"
+    figure = out / f"{metric}.png"
     fig.savefig(figure, dpi=200, bbox_inches="tight")
     plt.close(fig)
     return figure
@@ -270,20 +277,26 @@ def print_table(table: pd.DataFrame, results: Path, dataset: str) -> None:
     )
     wide = wide.reindex(sorted(wide.index, key=model_rank))
 
-    fid_path = results / "fid.csv"
-    if fid_path.exists():
-        fid = pd.read_csv(fid_path)
-        fid = fid[(fid["dataset"] == dataset) & (fid["source"] == "generated")]
-        if not fid.empty:
-            named = fid.assign(
-                model=fid["checkpoint"].map(lambda c: short_name(c, dataset))
-            ).set_index("model")["value"]
-            wide["fid"] = [named.get(m) for m in wide.index]
+    for metric in SET_METRICS:
+        path = results / f"{metric}.csv"
+        if not path.exists():
+            continue
+        rows = pd.read_csv(path)
+        rows = rows[(rows["dataset"] == dataset) & (rows["source"] == "generated")]
+        if not rows.empty:
+            named = (
+                rows.assign(
+                    model=rows["checkpoint"].map(lambda c: short_name(c, dataset))
+                )
+                .groupby("model")["value"]
+                .mean()
+            )
+            wide[metric] = [named.get(m) for m in wide.index]
 
     ceilings = table.drop_duplicates("factor").set_index("factor")["ceiling"]
-    wide.loc["real data (ceiling)"] = [ceilings.get(f) for f in FACTORS] + (
-        [float("nan")] if "fid" in wide.columns else []
-    )
+    wide.loc["real data (ceiling)"] = [ceilings.get(f) for f in FACTORS] + [
+        float("nan") for c in wide.columns if c in SET_METRICS
+    ]
 
     columns = list(wide.columns)
     print(f"\n### {dataset}\n")
@@ -291,7 +304,7 @@ def print_table(table: pd.DataFrame, results: Path, dataset: str) -> None:
     print("|" + "---|" * (len(columns) + 1))
     for name, row in wide.iterrows():
         cells = " | ".join(
-            "--" if pd.isna(v) else (f"{v:.1f}" if c == "fid" else f"{v:.3f}")
+            "--" if pd.isna(v) else f"{v:{SET_METRICS.get(c, '.3f')}}"
             for c, v in zip(columns, row, strict=True)
         )
         print(f"| {name} | {cells} |")
@@ -313,7 +326,10 @@ def main() -> None:
     written += [
         figure
         for figure in (
-            plot_fid(args.results, out, args.dataset),
+            *(
+                plot_set_metric(args.results, out, args.dataset, metric)
+                for metric in SET_METRICS
+            ),
             plot_steering(args.results, out, args.dataset),
         )
         if figure is not None

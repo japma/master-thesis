@@ -58,6 +58,9 @@ class EvaluationConfig(BaseModel):
     # Which metrics to write, by module name in `evaluation/metrics/`. Omit for all of
     # them, so a new metric applies to every existing config.
     metrics: list[str] | None = None
+    # Random halvings of the val split that `evaluate_fid` and `evaluate_cmmd` average
+    # over.
+    halvings: int = Field(default=5, ge=1)
 
     @field_validator("metrics")
     @classmethod
