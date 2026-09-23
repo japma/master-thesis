@@ -166,7 +166,7 @@ def main() -> None:
 
     seed = seed_everything(cfg_seed)
     device = resolve_device()
-    dataset_name = dataset_cfg.name
+    dataset_name = dataset_cfg.artifact_name
 
     variant = "_".join(
         part
@@ -207,7 +207,7 @@ def main() -> None:
         raise ValueError(f"Unknown model type {cspn_cfg.model_type}")
 
     cspn_ckpt_path = intermediate_checkpoint_path(
-        cspn_cfg.model_type, dataset_cfg.name, variant
+        cspn_cfg.model_type, dataset_name, variant
     )
     resumed_cspn = False
     if resume and cspn_ckpt_path.exists():

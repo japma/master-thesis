@@ -34,7 +34,7 @@ def main() -> None:
 
     seed = seed_everything(cfg_seed)
     device = resolve_device()
-    dataset_name = dataset_cfg.name
+    dataset_name = dataset_cfg.artifact_name
 
     run_name = f"digit_classifier_{dataset_name}"
     init_run(cfg.wandb, run_name, cfg.model_dump())

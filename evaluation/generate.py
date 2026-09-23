@@ -14,7 +14,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from dataset_loaders import build_data_loaders
-from dataset_loaders.colour_mnist import all_combinations
+from dataset_loaders.colour_mnist import all_combinations, label_columns
 from evaluation.conditionals import training_labels
 from evaluation.samples import (
     EMPIRICAL_SCHEDULE,
@@ -266,12 +266,22 @@ def generate_pool(cfg: EvaluationRunConfig, device: torch.device) -> Path:
         )
     else:
         labels = stratified_labels(generation.n_per_cell)
-    check_latent_dim(model, vae, device, resolved_model, resolved_vae, labels)
+    # The pool keeps every factor for the judge; the model only sees the ones it was
+    # trained on.
+    conditioning = (
+        labels
+        if cfg.dataset.labels is None
+        else labels[:, label_columns(cfg.dataset.labels)]
+    )
+    check_latent_dim(model, vae, device, resolved_model, resolved_vae, conditioning)
 
     # Both phases are sized up front, so the ETA covers the whole run and not just
-    # sampling -- the reference pass is the longer half for CelebA.
+    # sampling -- the reference pass is the longer half for CelebA. Real images keep
+    # every factor, whatever the model conditioned on.
     _, val_loader = build_data_loaders(
-        cfg.dataset, batch_size=generation.batch_size, drop_last=False
+        cfg.dataset.model_copy(update={"labels": None}),
+        batch_size=generation.batch_size,
+        drop_last=False,
     )
     rtpt = start_rtpt(
         f"generate_{cfg.dataset.name}",
@@ -281,7 +291,7 @@ def generate_pool(cfg: EvaluationRunConfig, device: torch.device) -> Path:
     latents, images = sample_and_decode(
         model,
         vae,
-        labels,
+        conditioning,
         device,
         std_correction=generation.std_correction,
         batch_size=generation.batch_size,

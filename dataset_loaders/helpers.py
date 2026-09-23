@@ -1,4 +1,5 @@
 import os
+from collections.abc import Sequence
 from functools import partial
 from pathlib import Path
 
@@ -189,6 +190,7 @@ def _load_colour_mnist(
     train: bool = True,
     size: tuple[int, int] = (28, 28),
     variant: str = DEFAULT_VARIANT,
+    labels: Sequence[str] | None = None,
 ) -> ColourMNIST:
     transform = transforms.Compose(
         [
@@ -200,6 +202,7 @@ def _load_colour_mnist(
         root=DATA_DIR,
         split="train" if train else "val",
         variant=variant,
+        labels=labels,
         transform=transform,
     )
 
@@ -218,18 +221,27 @@ _DATASETS = {
     "colour_mnist_uniform": partial(_load_colour_mnist, variant="uniform"),
     "colour_mnist_skewed": partial(_load_colour_mnist, variant="skewed"),
     "colour_mnist_rgb": partial(_load_colour_mnist, variant="rgb"),
+    "colour_mnist_uniform_x2": partial(_load_colour_mnist, variant="uniform_x2"),
+    "colour_mnist_skewed_x2": partial(_load_colour_mnist, variant="skewed_x2"),
 }
 
 
 def build_dataset(
-    name: str, train: bool = True, size: tuple[int, int] = (28, 28)
+    name: str,
+    train: bool = True,
+    size: tuple[int, int] = (28, 28),
+    labels: Sequence[str] | None = None,
 ) -> Dataset:
     """One split of a registered dataset. `_DATASETS` stays the only place a name is
     bound to a variant, so nothing has to parse `colour_mnist_<variant>`."""
     loader_fn = _DATASETS.get(name)
     if loader_fn is None:
         raise ValueError(f"Unsupported dataset '{name}'")
-    return loader_fn(train=train, size=size)
+    if labels is None:
+        return loader_fn(train=train, size=size)
+    if getattr(loader_fn, "func", None) is not _load_colour_mnist:
+        raise ValueError(f"'{name}' has no label factors to select from")
+    return loader_fn(train=train, size=size, labels=labels)
 
 
 def build_data_loaders(
@@ -241,8 +253,8 @@ def build_data_loaders(
 ) -> tuple[DataLoader, DataLoader]:
     size = (cfg.height, cfg.width)
 
-    train_dataset = build_dataset(cfg.name, train=True, size=size)
-    test_dataset = build_dataset(cfg.name, train=False, size=size)
+    train_dataset = build_dataset(cfg.name, train=True, size=size, labels=cfg.labels)
+    test_dataset = build_dataset(cfg.name, train=False, size=size, labels=cfg.labels)
 
     train_loader = DataLoader(
         train_dataset,

@@ -32,7 +32,7 @@ def main() -> None:
 
     seed = seed_everything(cfg_seed)
     device = resolve_device()
-    dataset_name = dataset_cfg.name
+    dataset_name = dataset_cfg.artifact_name
     variant = str(model_cfg.model_type)
 
     run_name = f"nn_baseline_{dataset_name}_{variant}"

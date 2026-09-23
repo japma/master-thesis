@@ -55,7 +55,7 @@ def main() -> None:
     seed = seed_everything(cfg_seed)
     beta = training_cfg.beta
     device = resolve_device()
-    dataset_name = dataset_cfg.name
+    dataset_name = dataset_cfg.artifact_name
     model_name = f"autoencoder_{dataset_name}"
     run_name = f"{model_name}_{training_cfg.vae_type}"
     if supervised or anchored:
@@ -68,7 +68,7 @@ def main() -> None:
     print(f"Training Autoencoder on {dataset_name} | device={device} | seed={seed}")
 
     ae_ckpt_path = intermediate_checkpoint_path(
-        autoencoder_cfg.model_type, dataset_cfg.name, autoencoder_cfg.variant
+        autoencoder_cfg.model_type, dataset_name, autoencoder_cfg.variant
     )
     if resume and ae_ckpt_path.exists():
         ae = load_ae_from_path(ae_ckpt_path, device=device).to(device)

@@ -1,0 +1,4 @@
+channels: 3
+height: 28
+width: 28
+num_classes: 10

@@ -42,7 +42,7 @@ def main() -> None:
 
     seed = seed_everything(cfg_seed)
     device = resolve_device()
-    dataset_name = dataset_cfg.name
+    dataset_name = dataset_cfg.artifact_name
     run_name = f"joint_pc_{dataset_name}"
     if model_cfg.variant:
         run_name = f"{run_name}_{model_cfg.variant}"

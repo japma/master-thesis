@@ -19,7 +19,8 @@ import pandas as pd
 import torch
 
 from dataset_loaders import build_data_loaders
-from evaluation.conditionals import CARDINALITIES, FACTOR_NAMES, training_labels
+from dataset_loaders.colour_mnist import FACTOR_NAMES
+from evaluation.conditionals import CARDINALITIES, training_labels
 from evaluation.evaluate import RUN_KEYS, write_metric
 from evaluation.generate import (
     encode_and_decode,

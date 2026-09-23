@@ -13,11 +13,25 @@ class DatasetConfig(BaseModel):
     height: int
     width: int
     num_classes: int
+    # Colour-MNIST only: the label factors a batch carries, e.g. `[digit]`. Omit for
+    # all of them.
+    labels: tuple[str, ...] | None = None
 
     @model_validator(mode="after")
     def is_square(self) -> Self:
         assert self.height == self.width
         return self
+
+    @property
+    def artifact_name(self) -> str:
+        """The dataset as checkpoint and wandb names spell it.
+
+        A label selection changes what a model is trained on, so it has to change the
+        name too, or a digit-only run would overwrite the full-label one.
+        """
+        if self.labels is None:
+            return self.name
+        return f"{self.name}_labels-{'-'.join(self.labels)}"
 
 
 class PretrainedAutoencoderConfig(BaseModel):

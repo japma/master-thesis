@@ -29,7 +29,7 @@ def main() -> None:
 
     seed = seed_everything(cfg_seed)
     device = resolve_device()
-    dataset_name = dataset_cfg.name
+    dataset_name = dataset_cfg.artifact_name
 
     label_pc_cfg = cfg.model
     # Matches PretrainedLabelPCConfig.resolve_name on the CSPN side: this run's

@@ -1,6 +1,6 @@
 """Colour-MNIST dataset and the canonical definition of its label space."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 import numpy as np
@@ -31,6 +31,9 @@ FG_TO_IDX: dict[str, int] = {name: i for i, name in enumerate(FG_NAMES)}
 BG_TO_IDX: dict[str, int] = {name: i for i, name in enumerate(BG_NAMES)}
 IDX_TO_FG: dict[int, str] = dict(enumerate(FG_NAMES))
 IDX_TO_BG: dict[int, str] = dict(enumerate(BG_NAMES))
+
+# Order of the columns in `ColourMNIST.targets`.
+FACTOR_NAMES: tuple[str, ...] = ("digit", "fg", "bg")
 
 NUM_DIGITS: int = 10
 NUM_FG: int = len(FG_NAMES)
@@ -83,6 +86,21 @@ def all_combinations() -> torch.Tensor:
     )
 
 
+def label_columns(labels: Sequence[str] | None) -> list[int]:
+    if labels is None:
+        return list(range(len(FACTOR_NAMES)))
+    unknown = [name for name in labels if name not in FACTOR_NAMES]
+    if unknown:
+        raise ValueError(f"unknown label factors {unknown}; choose from {FACTOR_NAMES}")
+    columns = [FACTOR_NAMES.index(name) for name in labels]
+    if not columns or columns != sorted(set(columns)):
+        raise ValueError(
+            f"labels {list(labels)} must be a non-empty, duplicate-free selection in "
+            f"the order {FACTOR_NAMES}"
+        )
+    return columns
+
+
 def combination_index(labels: torch.Tensor) -> torch.Tensor:
     """Row of each `(digit, fg, bg)` label in `all_combinations()`."""
     return labels[:, 0] * NUM_FG * NUM_BG + labels[:, 1] * NUM_BG + labels[:, 2]
@@ -92,6 +110,8 @@ class ColourMNIST(Dataset):
     """MNIST digits tinted with a (foreground, background) colour pair.
 
     Targets are `[digit, fg_idx, bg_idx]`, indexed by `FG_TO_IDX`/`BG_TO_IDX`.
+    `labels` restricts what `__getitem__` returns to those factors; `targets` always
+    keeps all three, since evaluation scores factors the model never conditioned on.
     """
 
     def __init__(
@@ -100,7 +120,9 @@ class ColourMNIST(Dataset):
         split: str = "train",
         transform: Callable | None = None,
         variant: str = DEFAULT_VARIANT,
+        labels: Sequence[str] | None = None,
     ):
+        self.label_columns = label_columns(labels)
         self.root = variant_root(root, variant)
         self.transform = transform
         self.split = split
@@ -118,7 +140,9 @@ class ColourMNIST(Dataset):
                     if base.exists()
                     else []
                 )
-                detail = f"no variant {variant!r}; generated variants: {found or 'none'}"
+                detail = (
+                    f"no variant {variant!r}; generated variants: {found or 'none'}"
+                )
             raise FileNotFoundError(
                 f"No colour-MNIST split {split!r} at {self.csv_path} — {detail}. "
                 "Generate one with "
@@ -149,4 +173,4 @@ class ColourMNIST(Dataset):
         if self.transform:
             img = self.transform(img)
 
-        return img, self.targets[index]
+        return img, self.targets[index, self.label_columns]

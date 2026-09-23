@@ -16,6 +16,7 @@ from collections.abc import Sequence
 import pandas as pd
 import torch
 
+from dataset_loaders.colour_mnist import FACTOR_NAMES
 from evaluation.colour import (
     BG_PALETTE,
     FG_PALETTE,
@@ -25,7 +26,6 @@ from evaluation.colour import (
 )
 from evaluation.conditionals import (
     CARDINALITIES,
-    FACTOR_NAMES,
     UNSPECIFIED,
     conditional,
     matching,
@@ -281,6 +281,11 @@ def run_marginal(cfg: EvaluationRunConfig, device: torch.device) -> None:
             "this config has no `marginal:` block, so there are no queries to run"
         )
 
+    if cfg.dataset.labels is not None:
+        raise ValueError(
+            f"dataset.labels is {list(cfg.dataset.labels)}, but marginal queries "
+            "condition on every factor"
+        )
     model, resolved_model, model_path = load_generative_model(
         cfg.model.model_type, cfg.model.name, device, cfg.model.tag
     )

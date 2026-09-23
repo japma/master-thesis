@@ -13,7 +13,6 @@ from dataset_loaders.colour_mnist import NUM_BG, NUM_DIGITS, NUM_FG
 # A query is a label row with UNSPECIFIED where a factor is free to vary.
 UNSPECIFIED = -1
 
-FACTOR_NAMES = ("digit", "fg", "bg")
 CARDINALITIES = (NUM_DIGITS, NUM_FG, NUM_BG)
 
 

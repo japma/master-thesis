@@ -98,9 +98,10 @@ def _write_split(
     source: MNIST,
     positions: pd.Index,
     weights: pd.DataFrame,
-    rng: np.random.Generator,
+    rngs: list[np.random.Generator],
     root: Path,
 ) -> None:
+    """Tint every image in `positions` once per generator, each pass drawing new colours."""
     img_dir = root / name / "images"
     # Regenerating with fewer images would otherwise leave orphaned PNGs behind.
     if img_dir.exists():
@@ -108,7 +109,9 @@ def _write_split(
     img_dir.mkdir(parents=True, exist_ok=True)
 
     labels = pd.Series(source.targets.numpy(), name="label").loc[positions]
-    frame = labels.to_frame().join(_sample_colours(labels, weights, rng))
+    frame = pd.concat(
+        [labels.to_frame().join(_sample_colours(labels, weights, rng)) for rng in rngs]
+    )
     frame["filename"] = [f"{i:06d}.png" for i in range(len(frame))]
 
     for row in tqdm(frame.itertuples(), total=len(frame), desc=f"{name:5s}"):
@@ -122,7 +125,7 @@ def _write_split(
     print(f"[{name:5s}] {len(frame)} images -> {img_dir}")
 
 
-def generate(weights_path: Path, root: Path) -> None:
+def generate(weights_path: Path, root: Path, passes: int = 1) -> None:
     weights = _load_weights(weights_path)
     uniform = weights.assign(weight=1.0)
 
@@ -141,8 +144,15 @@ def generate(weights_path: Path, root: Path) -> None:
     ]
 
     for stream, (name, source, positions, table) in enumerate(plan, start=1):
-        rng = np.random.default_rng([SEED, stream])
-        _write_split(name, source, positions, table, rng, root)
+        rngs = [np.random.default_rng([SEED, stream])]
+        # Only train is extended. The first pass reuses the base stream, so an extended
+        # variant contains its base variant's train split unchanged.
+        if name == "train":
+            rngs += [
+                np.random.default_rng([SEED, stream, extra])
+                for extra in range(1, passes)
+            ]
+        _write_split(name, source, positions, table, rngs, root)
 
 
 def main() -> None:
@@ -154,13 +164,24 @@ def main() -> None:
         default=DEFAULT_WEIGHTS,
         help="weight-table CSV to draw the train split from",
     )
+    parser.add_argument(
+        "--passes",
+        type=int,
+        default=1,
+        help="times each train image is tinted; writes the variant `<name>_x<passes>`",
+    )
     args = parser.parse_args()
+    if args.passes < 1:
+        raise ValueError(f"--passes must be at least 1, got {args.passes}")
 
     if not args.weights.exists():
         raise FileNotFoundError(f"No weight table found at {args.weights}")
     # The weight table names the variant, so variants sit side by side instead of
     # overwriting each other.
-    generate(args.weights, variant_root(DATA_ROOT, args.weights.stem))
+    variant = args.weights.stem
+    if args.passes > 1:
+        variant = f"{variant}_x{args.passes}"
+    generate(args.weights, variant_root(DATA_ROOT, variant), args.passes)
 
 
 if __name__ == "__main__":
