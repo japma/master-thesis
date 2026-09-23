@@ -1,0 +1,29 @@
+# The joint PC conditioned on the digit alone. Samples are drawn from the digit and
+# still judged on all three factors, so colour spread shows what it does unprompted.
+# No `marginal:` block -- there are no colour factors left to marginalize.
+
+type: evaluation
+
+dataset:
+  name: colour_mnist_uniform
+  labels: [ digit ]
+
+model:
+  name: joint_pc_colour_mnist_uniform_labels-digit
+  model_type: joint_pc
+  tag: latest
+
+classifier:
+  name: digit_classifier_colour_mnist_uniform
+  tag: latest
+
+generation:
+  n_per_cell: 100
+  seed: 0
+  std_correction: 1.0
+  batch_size: 256
+  output_root: results/samples
+
+evaluation:
+  batch_size: 512
+  results_root: results
