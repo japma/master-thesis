@@ -35,7 +35,7 @@ python visualize.py
 ### Evaluation
 
 Two stages that communicate through a sample pool directory, both driven by one config
-file. Stage 1 samples p(z | y), decodes through the VAE and caches the images; stage 2
+file. Stage 1 samples p (z | y), decodes through the VAE and caches the images; stage 2
 scores them with a frozen classifier and writes one CSV per metric. No metric is computed
 in stage 1, and stage 2 never loads the VAE.
 
@@ -50,11 +50,11 @@ overrides `generation.seed` for both, which moves the pool together.
 
 ```yaml
 type: evaluation
-dataset:      { name: colour_mnist_uniform }
-model:        { name: psinet_colour_mnist_uniform, model_type: cspn, tag: latest }
-classifier:   { name: digit_classifier_colour_mnist_uniform, tag: latest }
-generation:   { n_per_cell: 100, seed: 0, std_correction: 1.0, output_root: results/samples }
-evaluation:   { batch_size: 512, results_root: results }
+dataset: { name: colour_mnist_uniform }
+model: { name: psinet_colour_mnist_uniform, model_type: cspn, tag: latest }
+classifier: { name: digit_classifier_colour_mnist_uniform, tag: latest }
+generation: { n_per_cell: 100, seed: 0, std_correction: 1.0, output_root: results/samples }
+evaluation: { batch_size: 512, results_root: results }
 ```
 
 `model_type` is one of `cspn`, `joint_pc`, `nn_baseline` -- they all expose the same
@@ -95,6 +95,7 @@ exact version they resolved to.
 ## Configuration
 
 All configuration is handled through YAML files located in `configs/`:
+
 - `configs/config.yaml` – main config
 - `configs/dataset/*.yaml` – dataset configurations
 - `configs/training/*.yaml` – training parameter sets
@@ -103,20 +104,6 @@ All configuration is handled through YAML files located in `configs/`:
 
 ### Modifying Configs
 
-Edit the `defaults` section in `config.yaml` to compose different configurations:
-
-```yaml
-defaults:
-  - dataset: mnist
-  - training: default
-  - _self_
-
-wandb_mode: "offline"
-seed: 42
-```
-
-To use a different dataset, training setup, or model architecture, modify the corresponding YAML file or the defaults list.
-
 ## Podman
 
 Run
@@ -124,8 +111,3 @@ Run
 ```bash
 ./run.sh
 ```
-
-## Legacy Hydra Usage (Deprecated)
-
-The old `main.py` with Hydra is deprecated. Use the new split entrypoints instead.
-
