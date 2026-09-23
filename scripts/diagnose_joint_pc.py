@@ -20,6 +20,7 @@ import torch
 
 from dataset_loaders import build_data_loaders
 from evaluation.conditionals import CARDINALITIES, FACTOR_NAMES, training_labels
+from evaluation.evaluate import RUN_KEYS, write_metric
 from evaluation.generate import (
     encode_and_decode,
     load_generative_model,
@@ -31,6 +32,7 @@ from utils.config import EvaluationRunConfig, load_config
 from utils.progress import start_rtpt
 from utils.reproducibility import resolve_device
 
+FILENAME = "factor_steering.csv"
 SAMPLES_PER_VALUE = 256
 
 
@@ -123,6 +125,22 @@ def main() -> None:
     real_latents, _, _, real_labels = encode_and_decode(vae, val_loader, device)
 
     report = factor_report(model, real_latents, real_labels, device, labels)
+
+    # Written out as well as printed: the ratio is the headline of this diagnosis and
+    # belongs in a figure, not only in a terminal.
+    columns = {
+        "model": cfg.model.model_type,
+        "dataset": cfg.dataset.name,
+        "checkpoint": resolved,
+        "seed": cfg.generation.seed,
+        "std_correction": cfg.generation.std_correction,
+        "vae": resolved_vae,
+    }
+    write_metric(
+        cfg.evaluation.results_root / FILENAME,
+        report.assign(**columns)[[*columns, *report.columns]],
+        {key: columns[key] for key in RUN_KEYS},
+    )
 
     print(f"\nmodel    {resolved}    decoder {resolved_vae}")
     print("\nper factor:")

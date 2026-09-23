@@ -1,0 +1,29 @@
+# nn_mixture on uniform colour-MNIST -- generated to complete the comparison grid.
+#
+# Same dataset, judge and queries as every other config for this variant, so all rows
+# land in the same results/*.csv and compare directly.
+
+type: evaluation
+
+dataset:
+  name: colour_mnist_uniform
+
+model:
+  name: nn_baseline_colour_mnist_uniform_mixture
+  model_type: nn_baseline
+  tag: latest
+
+classifier:
+  name: digit_classifier_colour_mnist_uniform
+  tag: latest
+
+generation:
+  n_per_cell: 100
+  seed: 0
+  std_correction: 1.0
+  batch_size: 256
+  output_root: results/samples
+
+evaluation:
+  batch_size: 512
+  results_root: results
