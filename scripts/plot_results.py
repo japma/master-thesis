@@ -143,12 +143,19 @@ def plot_accuracy(table: pd.DataFrame, out: Path, dataset: str) -> Path:
     return path
 
 
-# The set distances `evaluate_fid` and `evaluate_cmmd` write, with how to print each.
-SET_METRICS = {"fid": ".1f", "cmmd": ".3f"}
+# The set metrics `evaluate_sets` writes: how to print each, and whether lower is better.
+SET_METRICS = {
+    "fid": (".1f", True),
+    "kid": (".4f", True),
+    "precision": (".3f", False),
+    "recall": (".3f", False),
+    "cmmd": (".3f", True),
+    "fd_dinov2": (".1f", True),
+}
 
 
 def plot_set_metric(results: Path, out: Path, dataset: str, metric: str) -> Path | None:
-    """Generated FID or CMMD per model, against its VAE round trip and real vs real."""
+    """One set metric per model, against its VAE round trip and real vs real."""
     path = results / f"{metric}.csv"
     if not path.exists():
         return None
@@ -186,7 +193,7 @@ def plot_set_metric(results: Path, out: Path, dataset: str, metric: str) -> Path
             ax.text(
                 values[y] * 1.02 + (errors[y] if pd.notna(errors[y]) else 0),
                 y,
-                f"{values[y]:{SET_METRICS[metric]}}",
+                f"{values[y]:{SET_METRICS[metric][0]}}",
                 va="center",
                 ha="left",
                 fontsize=9,
@@ -194,7 +201,8 @@ def plot_set_metric(results: Path, out: Path, dataset: str, metric: str) -> Path
             )
 
     ax.set_xlim(0, max(v for v in values if pd.notna(v)) * 1.2)
-    ax.set_xlabel(f"{metric.upper()} (lower is better)", color=INK)
+    better = "lower" if SET_METRICS[metric][1] else "higher"
+    ax.set_xlabel(f"{metric.upper()} ({better} is better)", color=INK)
     ax.set_title(
         f"{metric.upper()} on {dataset}   (grey = VAE round trip, black = real vs real)",
         color=INK,
@@ -304,7 +312,7 @@ def print_table(table: pd.DataFrame, results: Path, dataset: str) -> None:
     print("|" + "---|" * (len(columns) + 1))
     for name, row in wide.iterrows():
         cells = " | ".join(
-            "--" if pd.isna(v) else f"{v:{SET_METRICS.get(c, '.3f')}}"
+            "--" if pd.isna(v) else f"{v:{SET_METRICS.get(c, ('.3f',))[0]}}"
             for c, v in zip(columns, row, strict=True)
         )
         print(f"| {name} | {cells} |")

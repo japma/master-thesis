@@ -4,13 +4,13 @@
 # CelebA has 40 binary attributes -- 2^40 combinations -- so the generation schedule
 # draws whole label rows from the training split instead of enumerating cells. And there
 # is no judge: `evaluate_samples` would have nothing to score, so stage 2 is
-# `evaluate_fid`.
+# `evaluate_sets`.
 #
 #   uv run generate_samples configs/evaluation/celeba.yaml
-#   uv run evaluate_fid     configs/evaluation/celeba.yaml
+#   uv run evaluate_sets    configs/evaluation/celeba.yaml
 #
-# FID is the only metric here for now. It says a set of images looks like CelebA; it
-# says nothing about whether a sample carries the attributes it was conditioned on.
+# The set metrics say a set of images looks like CelebA (and, with recall, covers it);
+# they say nothing about whether a sample carries the attributes it was conditioned on.
 # An attribute judge is the obvious next one -- see the note at the bottom.
 
 type: evaluation
@@ -37,11 +37,12 @@ generation:
   output_root: results/samples
 
 evaluation:
-  # FID's Inception pass is the cost here, not the metric.
+  # The networks' forward passes are the cost here, not the metrics.
   batch_size: 128
   results_root: results
   # Random halvings of the val set: the reference half, and the real-vs-real floor.
   halvings: 5
+  set_metrics: [fid, kid, precision, recall, cmmd]
 
 # Still missing, and worth adding before the writeup:
 #   - attribute accuracy: does a sample conditioned on `Smiling` actually smile? Needs a

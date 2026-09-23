@@ -339,7 +339,7 @@ def test_a_judged_metric_without_a_judge_says_so(
     cfg.classifier = None
     write_pool(tmp_path, n_per_cell=2, pool_dir=cfg.pool_dir)
 
-    with pytest.raises(ValueError, match="evaluate_fid"):
+    with pytest.raises(ValueError, match="evaluate_sets"):
         evaluate_pool(cfg, DEVICE)
 
 
@@ -763,3 +763,36 @@ def test_an_unresolvable_autoencoder_says_to_pin_one(
 
     with pytest.raises(ValueError, match="Pin one in the config"):
         resolve_autoencoder(None, tmp_path / "model.pt", "model:v1")
+
+
+# --- set metrics ---
+def test_set_metrics_write_one_row_per_halving_and_source(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import evaluation.sets as sets
+
+    def stub(device: torch.device):
+        generator = torch.Generator().manual_seed(0)
+        return lambda images: (
+            images.float().flatten(1)[:, :6]
+            + torch.randn(images.shape[0], 6, generator=generator)
+        )
+
+    monkeypatch.setattr(sets, "NETWORKS", dict.fromkeys(sets.NETWORKS, stub))
+    cfg = build_config(tmp_path, n_per_cell=1)
+    cfg.evaluation.set_metrics = list(sets.SET_METRICS)
+    cfg.evaluation.halvings = 2
+    write_pool(tmp_path, n_per_cell=1, pool_dir=cfg.pool_dir)
+
+    sets.run_sets(cfg, DEVICE)
+
+    for name in sets.SET_METRICS:
+        table = pd.read_csv(tmp_path / "results" / f"{name}.csv")
+        assert len(table) == 2 * 3
+        assert set(table["source"]) == {"real", "reconstruction", "generated"}
+        assert (table["n"] == 90).all()
+
+
+def test_an_unknown_set_metric_is_refused(tmp_path: Path) -> None:
+    with pytest.raises(ValidationError, match="unknown set metrics"):
+        EvaluationConfig(results_root=tmp_path, set_metrics=["fid", "isc"])

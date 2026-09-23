@@ -58,8 +58,11 @@ class EvaluationConfig(BaseModel):
     # Which metrics to write, by module name in `evaluation/metrics/`. Omit for all of
     # them, so a new metric applies to every existing config.
     metrics: list[str] | None = None
-    # Random halvings of the val split that `evaluate_fid` and `evaluate_cmmd` average
-    # over.
+    # Which metrics `evaluate_sets` computes, by name in `evaluation.sets.SET_METRICS`.
+    set_metrics: list[str] = Field(
+        default_factory=lambda: ["fid", "kid", "precision", "recall", "cmmd"]
+    )
+    # Random halvings of the val split that `evaluate_sets` averages over.
     halvings: int = Field(default=5, ge=1)
 
     @field_validator("metrics")
@@ -79,6 +82,23 @@ class EvaluationConfig(BaseModel):
             raise ValueError(
                 f"unknown metrics {unknown}; known metrics are "
                 f"{sorted(METRICS_BY_NAME)}"
+            )
+        return names
+
+    @field_validator("set_metrics")
+    @classmethod
+    def _known_set_metrics(cls, names: list[str]) -> list[str]:
+        from evaluation.sets import SET_METRICS
+
+        if not names:
+            raise ValueError("set_metrics is empty")
+        if len(set(names)) != len(names):
+            raise ValueError(f"set_metrics lists the same metric twice: {names}")
+        unknown = [name for name in names if name not in SET_METRICS]
+        if unknown:
+            raise ValueError(
+                f"unknown set metrics {unknown}; known set metrics are "
+                f"{sorted(SET_METRICS)}"
             )
         return names
 

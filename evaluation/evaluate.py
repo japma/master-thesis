@@ -75,7 +75,7 @@ def predict(
 def run_columns(manifest: SampleManifest, classifier: str | None = None) -> dict:
     """The identity columns every metric CSV starts with.
 
-    `classifier` is None where no judge was involved, as in FID.
+    `classifier` is None where no judge was involved, as in the set metrics.
     """
     return {
         "model": manifest.model_type,
@@ -129,7 +129,7 @@ def evaluate_pool(cfg: EvaluationRunConfig, device: torch.device) -> None:
     if cfg.classifier is None:
         raise ValueError(
             f"{cfg.dataset.name} has no `classifier:` in its config, but every metric "
-            "here is judged. Score this model with `evaluate_fid` instead."
+            "here is judged. Score this model with `evaluate_sets` instead."
         )
     model, classifier = load_judge(cfg.classifier, device)
     num_classes = model.config.num_classes

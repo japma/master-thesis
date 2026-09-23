@@ -7,9 +7,9 @@
     marginal.py   queries with a factor left free: the mixture reference and
                   the calibration that scores it (its own entrypoint)
     metrics/      one module per metric: a FILENAME and a compute(), listed in METRICS
-    halvings.py   the val-split halvings FID and CMMD average over
-    fid.py        FID between two image sets -- its own entrypoint, not a metric
-    cmmd.py       CMMD (CLIP embeddings, MMD) -- likewise its own entrypoint
+    features.py   the pretrained networks set metrics compare images in
+    distances.py  FID, KID, precision/recall, CMMD between two feature sets
+    sets.py       set metrics over val-split halvings (its own entrypoint)
     evaluate.py   stage 2 -- run the judge, write one CSV per metric
 
 Stage 1 computes no metric and stage 2 loads no VAE; the pool directory is the only
@@ -18,7 +18,6 @@ thing they share.
 
 from evaluation.conditionals import conditional, total_variation, training_labels
 from evaluation.evaluate import evaluate_pool, load_judge, predict
-from evaluation.fid import frechet_inception_distance
 from evaluation.generate import (
     MODEL_TYPES,
     generate_pool,
@@ -50,7 +49,6 @@ __all__ = [
     "calibration",
     "conditional",
     "evaluate_pool",
-    "frechet_inception_distance",
     "generate_pool",
     "load_generative_model",
     "load_images",
