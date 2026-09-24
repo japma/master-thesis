@@ -16,7 +16,7 @@ source .venv/bin/activate
 ALL_VARIANTS=(uniform skewed rgb)
 # `COMPILE= bash ...` disables it; unset means compile, which is the default here.
 COMPILE="${COMPILE---compile}"
-CLASSIFIER="checkpoints/digit_classifier_colour_mnist_uniform.pt"
+#CLASSIFIER="checkpoints/digit_classifier_colour_mnist_uniform.pt"
 
 # --- arguments: variants, then optional `--` followed by flags for every run ----------
 VARIANTS=()
@@ -112,8 +112,6 @@ echo
 # --- the eval judge, once: variant-independent and needed by evaluate_samples ---------
 if [[ ! -f "$CLASSIFIER" ]]; then
     echo "No digit classifier at $CLASSIFIER -- training it now."
-    echo "It judges generated digits during evaluation and is deliberately trained on"
-    echo "the uniform variant, so it is not itself weaker on combinations a model never saw."
     if ! uv run train_classifier configs/classifier/colour_mnist_uniform.yaml; then
         echo "WARNING: classifier training failed; evaluate_samples has nothing to judge with"
     fi

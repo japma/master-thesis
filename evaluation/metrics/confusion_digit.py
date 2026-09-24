@@ -16,7 +16,7 @@ def compute(
 ) -> pd.DataFrame:
     truth_labels = labels[:, DIGIT]
     counts = torch.bincount(
-        truth_labels * num_classes + predictions, minlength=num_classes**2
+        truth_labels * num_classes + predictions[:, DIGIT], minlength=num_classes**2
     )
     truth, predicted = torch.meshgrid(
         torch.arange(num_classes), torch.arange(num_classes), indexing="ij"

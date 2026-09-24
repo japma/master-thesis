@@ -1,4 +1,4 @@
-"""Digit classifier model and run configs."""
+"""Colour-MNIST classifier model and run configs."""
 
 from typing import Literal, Self
 
@@ -12,11 +12,17 @@ from utils.config.common import (
 
 
 class ClassifierConfig(BaseModel):
-    """A small CNN: two conv blocks, a max-pool after each, then a linear head."""
+    """A small CNN: two conv blocks, a max-pool after each, then one linear head per
+    label factor on a shared hidden layer.
+
+    `cardinalities` and `names` are parallel lists in label-column order; colour-MNIST
+    labels are [digit, fg, bg].
+    """
 
     model_config = ConfigDict(extra="forbid")
 
-    num_classes: int = 10
+    cardinalities: list[int] = Field(default_factory=lambda: [10, 6, 3])
+    names: list[str] = Field(default_factory=lambda: ["digit", "fg", "bg"])
     channels: int = 3
     image_size: int = 28
     conv_channels: list[int] = Field(default_factory=lambda: [32, 32, 64])
@@ -25,6 +31,15 @@ class ClassifierConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_shape(self) -> Self:
+        if len(self.cardinalities) != len(self.names):
+            raise ValueError(
+                f"cardinalities ({len(self.cardinalities)}) and names "
+                f"({len(self.names)}) must name the same label factors"
+            )
+        if not self.cardinalities or any(c < 2 for c in self.cardinalities):
+            raise ValueError(
+                f"every label factor needs at least two classes: {self.cardinalities}"
+            )
         if len(self.conv_channels) != 3:
             raise ValueError(
                 "conv_channels names the two convolutions before the first pool and "

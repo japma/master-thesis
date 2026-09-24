@@ -42,6 +42,7 @@ from evaluation.metrics import (
     confusion_digit,
     digit_accuracy,
     digit_accuracy_by_combination,
+    judge_colour_accuracy,
     selected,
 )
 from evaluation.pools import (
@@ -430,6 +431,7 @@ def test_every_metric_names_the_csv_it_writes() -> None:
         "confusion_digit.csv",
         "colour_accuracy.csv",
         "colour_accuracy_by_combination.csv",
+        "judge_colour_accuracy.csv",
         "colour_drift.csv",
         "colour_contrast.csv",
     ]
@@ -442,7 +444,14 @@ def blank(labels: torch.Tensor) -> torch.Tensor:
 
 def unused(labels: torch.Tensor) -> torch.Tensor:
     """Judge predictions, for the colour metrics that never look at them."""
-    return torch.zeros(labels.shape[0], dtype=torch.long)
+    return torch.zeros(labels.shape[0], 3, dtype=torch.long)
+
+
+def digit_predictions(digits: list[int]) -> torch.Tensor:
+    """Judge predictions whose colour columns are all class 0."""
+    predictions = torch.zeros(len(digits), 3, dtype=torch.long)
+    predictions[:, 0] = torch.tensor(digits)
+    return predictions
 
 
 def painted(labels: torch.Tensor) -> torch.Tensor:
@@ -466,7 +475,7 @@ def painted(labels: torch.Tensor) -> torch.Tensor:
 
 def test_accuracy_counts_matches() -> None:
     labels = torch.tensor([[1, 0, 0], [2, 0, 0], [0, 0, 0], [0, 0, 0]])
-    predictions = torch.tensor([1, 2, 3, 4])
+    predictions = digit_predictions([1, 2, 3, 4])
 
     scores = digit_accuracy.compute(blank(labels), predictions, labels, num_classes=10)
 
@@ -477,7 +486,7 @@ def test_accuracy_counts_matches() -> None:
 
 def test_accuracy_by_combination_has_a_row_per_cell_present() -> None:
     labels = torch.tensor([[0, 0, 0], [0, 0, 0], [1, 2, 1]])
-    predictions = torch.tensor([0, 9, 1])
+    predictions = digit_predictions([0, 9, 1])
 
     cells = digit_accuracy_by_combination.compute(
         blank(labels), predictions, labels, num_classes=10
@@ -491,7 +500,7 @@ def test_accuracy_by_combination_has_a_row_per_cell_present() -> None:
 
 def test_accuracy_by_combination_covers_every_cell_of_a_stratified_pool() -> None:
     labels = stratified_labels(2)
-    predictions = torch.zeros(labels.shape[0], dtype=torch.long)
+    predictions = unused(labels)
 
     cells = digit_accuracy_by_combination.compute(
         blank(labels), predictions, labels, num_classes=10
@@ -506,7 +515,7 @@ def test_accuracy_by_combination_covers_every_cell_of_a_stratified_pool() -> Non
 
 def test_confusion_is_a_complete_grid_with_truth_as_rows() -> None:
     labels = torch.tensor([[0, 0, 0], [0, 0, 0], [1, 0, 0]])
-    predictions = torch.tensor([0, 1, 1])
+    predictions = digit_predictions([0, 1, 1])
 
     pairs = confusion_digit.compute(blank(labels), predictions, labels, num_classes=2)
 
@@ -572,13 +581,29 @@ def test_contrast_separates_a_painted_digit_from_a_flat_image() -> None:
 
 
 # --- evaluation ---
-def test_predict_returns_one_digit_per_image() -> None:
+def test_predict_returns_one_class_per_factor_and_image() -> None:
     images = torch.randint(0, 255, (20, 3, IMAGE_SIZE, IMAGE_SIZE), dtype=torch.uint8)
 
     predictions = predict(build_judge(), images, DEVICE, batch_size=8)
 
-    assert predictions.shape == (20,)
-    assert predictions.min() >= 0 and predictions.max() < 10
+    assert predictions.shape == (20, 3)
+    assert predictions.min() >= 0
+    assert (
+        predictions.max(dim=0).values < torch.tensor([NUM_DIGITS, NUM_FG, NUM_BG])
+    ).all()
+
+
+def test_judge_colour_accuracy_reads_the_colour_columns() -> None:
+    labels = torch.tensor([[0, 1, 2], [0, 3, 0], [5, 4, 1], [7, 0, 0]])
+    predictions = torch.tensor([[9, 1, 2], [9, 3, 1], [9, 0, 1], [9, 5, 1]])
+
+    scores = judge_colour_accuracy.compute(
+        blank(labels), predictions, labels, num_classes=10
+    )
+
+    assert scores["factor"].tolist() == ["fg", "bg"]
+    assert scores["value"].tolist() == [0.5, 0.5]
+    assert scores["n"].tolist() == [4, 4]
 
 
 def patch_judge(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -614,6 +639,7 @@ def test_evaluate_pools_writes_one_csv_per_metric(
         "confusion_digit.csv",
         "digit_accuracy.csv",
         "digit_accuracy_by_combination.csv",
+        "judge_colour_accuracy.csv",
     ]
 
 

@@ -19,7 +19,7 @@ def compute(
             "digit": labels[:, DIGIT].numpy(),
             "fg": labels[:, FG].numpy(),
             "bg": labels[:, BG].numpy(),
-            "correct": (predictions == labels[:, DIGIT]).float().numpy(),
+            "correct": (predictions[:, DIGIT] == labels[:, DIGIT]).float().numpy(),
         }
     )
     return frame.groupby(["digit", "fg", "bg"], as_index=False).agg(

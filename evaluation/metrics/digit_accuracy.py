@@ -15,5 +15,5 @@ def compute(
     num_classes: int,
 ) -> pd.DataFrame:
     truth = labels[:, DIGIT]
-    correct = float((predictions == truth).float().mean())
+    correct = float((predictions[:, DIGIT] == truth).float().mean())
     return pd.DataFrame([{"value": correct, "n": int(truth.shape[0])}])

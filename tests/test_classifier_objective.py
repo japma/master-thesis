@@ -37,12 +37,38 @@ def make_batch(n: int = 8) -> Batch:
     return Batch(images=torch.rand(n, 3, IMAGE_SIZE, IMAGE_SIZE), labels=labels)
 
 
-def test_train_step_reports_total_and_error_rate() -> None:
+def test_train_step_reports_total_and_an_error_rate_per_factor() -> None:
     step = build_objective().train_step(make_batch())
 
-    assert set(step.metrics) == {"total", "error_rate"}
+    assert set(step.metrics) == {
+        "total",
+        "error_rate/digit",
+        "error_rate/fg",
+        "error_rate/bg",
+    }
     assert step.batch_size == 8
-    assert 0.0 <= float(step.metrics["error_rate"]) <= 1.0
+    for name in ("digit", "fg", "bg"):
+        assert 0.0 <= float(step.metrics[f"error_rate/{name}"]) <= 1.0
+
+
+def test_forward_has_one_head_per_factor() -> None:
+    objective = build_objective()
+    batch = make_batch()
+    assert batch.images is not None
+
+    logits = objective.model(batch.images)
+
+    assert [head.shape for head in logits] == [(8, c) for c in CARDINALITIES]
+    assert objective.model.predict(batch.images).shape == (8, len(CARDINALITIES))
+
+
+def test_labels_missing_a_factor_are_rejected() -> None:
+    batch = make_batch()
+    assert batch.labels is not None
+    digits_only = Batch(images=batch.images, labels=batch.labels[:, :1])
+
+    with pytest.raises(ValueError, match=r"dataset\.labels"):
+        build_objective().train_step(digits_only)
 
 
 def test_error_rate_agrees_with_the_logits() -> None:
@@ -53,23 +79,24 @@ def test_error_rate_agrees_with_the_logits() -> None:
     step = objective.val_step(batch)
 
     objective.model.eval()
-    with torch.no_grad():
-        predictions = objective.model(batch.images).argmax(dim=1)
-    expected = (predictions != batch.labels[:, 0]).float().mean()
-    assert torch.isclose(step.metrics["error_rate"], expected)
+    predictions = objective.model.predict(batch.images)
+    for i, name in enumerate(("digit", "fg", "bg")):
+        expected = (predictions[:, i] != batch.labels[:, i]).float().mean()
+        assert torch.isclose(step.metrics[f"error_rate/{name}"], expected)
 
 
-def test_val_step_accumulates_per_digit_counts() -> None:
+def test_val_step_accumulates_per_class_counts_for_every_factor() -> None:
     objective = build_objective()
     batch = make_batch(16)
     assert batch.labels is not None
 
     objective.val_step(batch)
 
-    seen = objective.val_accuracy._seen
-    assert seen.sum() == 16
-    for digit in range(10):
-        assert seen[digit] == (batch.labels[:, 0] == digit).sum()
+    for factor, cardinality in enumerate(CARDINALITIES):
+        seen = objective.val_accuracy[factor]._seen
+        assert seen.sum() == 16
+        for c in range(cardinality):
+            assert seen[c] == (batch.labels[:, factor] == c).sum()
 
 
 def test_train_step_reduces_the_loss() -> None:
@@ -91,7 +118,7 @@ def test_epoch_end_resets_counts_and_advances_the_scheduler() -> None:
 
     objective.on_epoch_end()
 
-    assert objective.val_accuracy._seen.sum() == 0
+    assert all(accuracy._seen.sum() == 0 for accuracy in objective.val_accuracy)
     assert objective.lr_scheduler.get_last_lr()[0] != before
     assert objective.extra_train_state() == {"epoch": 1}
 
@@ -116,7 +143,8 @@ def test_checkpoint_round_trips_through_its_config() -> None:
     restored.eval()
     assert restored.config == objective.model.config
     with torch.no_grad():
-        assert torch.allclose(restored(images), objective.model(images))
+        for mine, theirs in zip(restored(images), objective.model(images), strict=True):
+            assert torch.allclose(mine, theirs)
 
 
 def test_per_class_accuracy_marks_unseen_classes() -> None:

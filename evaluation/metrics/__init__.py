@@ -2,9 +2,10 @@
 
 Each exports `FILENAME`, the CSV it writes, and
 `compute(images, predictions, labels, num_classes) -> pd.DataFrame`, its own table.
-`images` are float in [0, 1]; every metric takes the same arguments and uses what it
-needs. Adding a metric is a new module plus one entry in `METRICS`; `evaluate.py` loops
-over the list and needs no other change.
+`images` are float in [0, 1] and `predictions` are the judge's classes, laid out like
+`labels`; every metric takes the same arguments and uses what it needs. Adding a metric
+is a new module plus one entry in `METRICS`; `evaluate.py` loops over the list and
+needs no other change.
 """
 
 from types import ModuleType
@@ -17,6 +18,7 @@ from evaluation.metrics import (
     confusion_digit,
     digit_accuracy,
     digit_accuracy_by_combination,
+    judge_colour_accuracy,
 )
 
 METRICS = [
@@ -25,6 +27,7 @@ METRICS = [
     confusion_digit,
     colour_accuracy,
     colour_accuracy_by_combination,
+    judge_colour_accuracy,
     colour_drift,
     colour_contrast,
 ]
@@ -49,5 +52,6 @@ __all__ = [
     "confusion_digit",
     "digit_accuracy",
     "digit_accuracy_by_combination",
+    "judge_colour_accuracy",
     "selected",
 ]

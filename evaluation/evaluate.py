@@ -27,7 +27,7 @@ from evaluation.pools import (
     vae_dir,
     version_number,
 )
-from evaluation.samples import to_float
+from evaluation.samples import DIGIT, to_float
 from models.classifier import DigitClassifier
 from utils.checkpoints import load_classifier_from_path
 from utils.config import CheckpointConfig, PoolRunConfig
@@ -69,12 +69,13 @@ def predict(
     desc: str = "judging",
     rtpt: RTPT | None = None,
 ) -> torch.Tensor:
-    """Predicted digit per image, for `(N, C, H, W)` uint8 images."""
+    """`(N, num_factors)` predicted classes, laid out like the labels, for `(N, C, H, W)`
+    uint8 images."""
     predictions = []
     for batch in tqdm(images.split(batch_size), desc=desc):
         if rtpt is not None:
             rtpt.step(subtitle=desc)
-        predictions.append(model(to_float(batch).to(device)).argmax(dim=1).cpu())
+        predictions.append(model.predict(to_float(batch).to(device)).cpu())
     return torch.cat(predictions)
 
 
@@ -158,7 +159,7 @@ def evaluate_pools(cfg: PoolRunConfig, device: torch.device) -> None:
     real_labels = load_tensor(real_dir(dataset_dir), LABELS)
 
     model, classifier = load_judge(cfg.classifier, device)
-    num_classes = model.config.num_classes
+    num_classes = model.config.cardinalities[DIGIT]
     metrics = selected(cfg.evaluation.metrics)
     vae_refs = sorted({manifest.vae_checkpoint for _, manifest in models})
     rtpt = start_rtpt(

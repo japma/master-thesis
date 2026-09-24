@@ -1,4 +1,4 @@
-# The fixed digit judge the generation metrics score samples with.
+# The fixed judge the generation metrics score samples with: digit, fg and bg heads.
 
 type: classifier
 
@@ -6,7 +6,8 @@ dataset:
   name: colour_mnist_uniform
 
 model:
-  num_classes: 10
+  cardinalities: [ 10, 6, 3 ]
+  names: [ digit, fg, bg ]
   channels: 3
   image_size: 28
   conv_channels: [ 32, 32, 64 ]

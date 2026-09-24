@@ -1,4 +1,4 @@
-"""Entry point for digit classifier training."""
+"""Entry point for training the colour-MNIST judge (digit, fg and bg heads)."""
 
 import torch
 from rtpt import RTPT
@@ -9,20 +9,20 @@ from dataset_loaders import build_data_loaders
 from models.classifier import DigitClassifier
 from training.loop import CheckpointSpec, run_training_loop
 from training.metrics import PerClassAccuracy
-from training.objectives.classifier import DIGIT_FACTOR, ClassifierObjective
+from training.objectives.classifier import ClassifierObjective
 from utils.checkpoints import (
     final_checkpoint_path,
     intermediate_checkpoint_path,
     load_classifier_from_path,
 )
-from utils.compilation import maybe_compile
+from utils.compilation import maybe_compile, uncompiled
 from utils.config import ClassifierRunConfig, load_config
 from utils.naming import ModelFamily, artifact_name
 from utils.reproducibility import resolve_device, seed_everything
 from utils.wandb_utils import init_run, log_summary
 
-# Below this the judge understates every model it scores, and a digit metric computed
-# with it cannot be told apart from a genuine failure of the model under test.
+# Below this the judge understates every model it scores, and a metric computed with it
+# cannot be told apart from a genuine failure of the model under test.
 MIN_JUDGE_ACCURACY = 0.95
 
 
@@ -99,7 +99,7 @@ def main() -> None:
         resume=resume,
     )
 
-    _report_judge_quality(model, test_loader, device, model_cfg.num_classes)
+    _report_judge_quality(model, test_loader, device)
 
     wandb.finish()
 
@@ -109,40 +109,43 @@ def _report_judge_quality(
     model: DigitClassifier,
     loader: torch.utils.data.DataLoader,
     device: torch.device,
-    num_classes: int,
 ) -> None:
-    """Scores the saved weights over the whole validation set."""
+    """Scores the saved weights over the whole validation set, per label factor."""
     model.eval()
-    accuracy = PerClassAccuracy(num_classes)
+    config = uncompiled(model).config
+    accuracies = [PerClassAccuracy(c) for c in config.cardinalities]
     for images, labels in loader:
         images = images.to(device, non_blocking=True)
-        digits = labels[:, DIGIT_FACTOR].to(device, non_blocking=True).long()
-        accuracy.update(model(images).argmax(dim=1), digits)
+        labels = labels.to(device, non_blocking=True).long()
+        for i, logits in enumerate(model(images)):
+            accuracies[i].update(logits.argmax(dim=1), labels[:, i])
 
-    per_digit = accuracy.per_class
-    print(f"\nFinal judge accuracy: {accuracy.overall:.4f}")
-    for digit, value in enumerate(per_digit):
-        print(f"  digit {digit}: {value:.4f}")
+    summary_metrics = {}
+    for name, accuracy in zip(config.names, accuracies, strict=True):
+        per_class = accuracy.per_class
+        print(f"\nFinal judge {name} accuracy: {accuracy.overall:.4f}")
+        for c, value in enumerate(per_class):
+            print(f"  {name} {c}: {value:.4f}")
 
-    log_summary(
-        {"judge/accuracy": accuracy.overall}
-        | {
-            f"judge/digit_accuracy/{digit}": float(value)
-            for digit, value in enumerate(per_digit)
+        summary_metrics[f"judge/{name}_accuracy"] = accuracy.overall
+        summary_metrics |= {
+            f"judge/{name}_accuracy/{c}": float(value)
+            for c, value in enumerate(per_class)
         }
-    )
 
-    if accuracy.overall < MIN_JUDGE_ACCURACY:
-        print(
-            f"WARNING: accuracy {accuracy.overall:.3f} is below {MIN_JUDGE_ACCURACY} "
-            "-- digit metrics computed with this judge will understate every model."
-        )
-    worst = int(per_digit.nan_to_num(1.0).argmin())
-    if float(per_digit[worst]) < MIN_JUDGE_ACCURACY:
-        print(
-            f"WARNING: digit {worst} is at {float(per_digit[worst]):.3f}. A judge blind "
-            "to one digit scores every model unfairly on that digit alone."
-        )
+        if accuracy.overall < MIN_JUDGE_ACCURACY:
+            print(
+                f"WARNING: {name} accuracy {accuracy.overall:.3f} is below "
+                f"{MIN_JUDGE_ACCURACY} -- {name} metrics computed with this judge will "
+                "understate every model."
+            )
+        worst = int(per_class.nan_to_num(1.0).argmin())
+        if float(per_class[worst]) < MIN_JUDGE_ACCURACY:
+            print(
+                f"WARNING: {name} {worst} is at {float(per_class[worst]):.3f}. A judge "
+                f"blind to one class scores every model unfairly on that {name} alone."
+            )
+    log_summary(summary_metrics)
 
 
 if __name__ == "__main__":

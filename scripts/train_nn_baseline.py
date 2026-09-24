@@ -122,7 +122,7 @@ def main() -> None:
         resume=resume,
         sample_probe=_sample_labels(cfg, device),
         sample_log_key="samples/nn_baseline_generated_images",
-        early_stopping=early_stopping,
+        early_stopping=None,
     )
 
     wandb.finish()
