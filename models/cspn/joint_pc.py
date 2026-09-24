@@ -120,7 +120,10 @@ class JointPC(AbstractCSPN):
         return z * self.latent_std + self.latent_mean
 
     def _pack(self, z: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
-        """Latents and labels as the single variable vector the circuit expects."""
+        """Latents and labels as the single variable vector the circuit expects.
+        1-D `labels` are read as a single factor, as plain MNIST yields them."""
+        if labels.dim() == 1:
+            labels = labels.unsqueeze(1)
         if z.shape[1] != self.num_latents:
             raise ValueError(
                 f"z has {z.shape[1]} dims, expected {self.num_latents}"

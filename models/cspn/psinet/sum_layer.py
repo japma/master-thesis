@@ -82,18 +82,12 @@ class SumLayer(Layer):
     # --------------------------------------------------------------------------------
 
     def default_initializer(self) -> Tensor:
+        """Random logits for the sum-weights, which `reparam` softmaxes.
+
+        They must spread on the order of 1: near-equal logits make every sum node of a
+        region the same function, and identical nodes receive identical gradients.
         """
-        A simple initializer for normalized sum-weights.
-        :return: initial parameters
-        """
-        params = 0.01 + 0.98 * torch.rand(self.params_shape)
-        with torch.no_grad():
-            if self.params_mask is not None:
-                params.data *= self.params_mask
-            params.data = params.data / (
-                params.data.sum(self.normalization_dims, keepdim=True)
-            )
-        return params
+        return torch.randn(self.params_shape)
 
     def initialize(self, initializer: str = "default") -> None:
         """

@@ -67,6 +67,33 @@ def test_variable_layout() -> None:
     assert model.label_idx == [NUM_LATENTS, NUM_LATENTS + 1, NUM_LATENTS + 2]
 
 
+def test_sum_nodes_of_a_region_start_distinct() -> None:
+    model = build()
+    z, labels = make_batch(64, seed=8)
+    model(z, labels)
+    for layer in model.einet.einet_layers[1:]:
+        if layer.prob.shape[1] == 1:
+            continue
+        spread = layer.prob.amax(1) - layer.prob.amin(1)
+        assert spread.median() > 1e-2
+
+
+def test_one_dimensional_labels_are_a_single_factor() -> None:
+    seed_everything(0)
+    model = JointPC(
+        config=JointPCConfig(
+            num_latents=NUM_LATENTS,
+            label_cardinalities=[10],
+            num_repetitions=2,
+            num_input_distributions=4,
+            num_sums=4,
+        )
+    )
+    z = torch.randn(8, NUM_LATENTS)
+    digits = torch.randint(0, 10, (8,))
+    torch.testing.assert_close(model(z, digits), model(z, digits[:, None]))
+
+
 def test_forward_is_a_normalized_joint_density(trained: JointPC) -> None:
     z, labels = make_batch(16, seed=1)
     log_prob = trained(z, labels)

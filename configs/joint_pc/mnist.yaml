@@ -1,0 +1,29 @@
+# Sanity check for the joint PC: plain MNIST, one label (the digit), no colour factors.
+# Mirrors configs/joint_pc/colour_mnist_uniform_digit_only.yaml otherwise.
+
+type: joint_pc
+
+dataset:
+  name: mnist
+
+autoencoder:
+  name: "vae_mnist_variational"
+  external: false
+  tag: "latest"
+
+model:
+  num_latents: 16
+  label_cardinalities: [ 10 ]
+  num_repetitions: 8
+  num_input_distributions: 32
+  num_sums: 32
+  min_var: 0.0001
+  max_var: 4.0
+  normalize_latents: true
+
+training:
+  epochs: 200
+  learning_rate: 0.001
+  batch_size: 128
+  early_stopping_patience: 10
+  early_stopping_min_delta: 0.01
