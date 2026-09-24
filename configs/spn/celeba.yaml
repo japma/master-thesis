@@ -1,0 +1,31 @@
+# The unconditional baseline to configs/cspn/celeba.yaml: the same circuit over the
+# same latents, with the hypernetwork dropped and its parameters learned directly.
+# What changes is the conditioning, and with it the parameter count -- nearly all of
+# the CSPN's parameters sit in the hypernetwork heads.
+#
+#   uv run train_spn configs/spn/celeba.yaml
+
+type: spn
+
+dataset:
+  name: celeba
+
+autoencoder:
+  name: "variational_celeba"
+  external: false
+  tag: "best"
+
+model:
+  num_vars: 128
+  num_repetitions: 2
+  num_input_distributions: 6
+  num_sums: 8
+  min_var: 0.001
+  max_var: 4.0
+
+training:
+  epochs: 200
+  learning_rate: 0.001
+  batch_size: 256
+  early_stopping_patience: 10
+  early_stopping_min_delta: 0.01

@@ -14,8 +14,17 @@ type: pools
 dataset:
   name: celeba
 
+# The baselines ignore the labels (vae_prior, gmm, spn) or are not PCs (nn_baseline).
+# The trained ones are named as their trainers derive it; `vae_prior` names the VAE
+# itself, which also decodes it. `variational_celeba` holds several VAEs, so it follows
+# the `best` alias every trainer's config uses -- `latest` could be a different one.
 models:
-  - { type: cspn, name: psinet_celeba }
+  - { type: cspn, name: cspn_celeba_variational }
+  - { type: vae_prior, name: variational_celeba, version: best }
+  - { type: gmm, name: gmm_celeba_variational_k10 }
+  - { type: spn, name: spn_celeba_variational }
+  - { type: nn_baseline, name: nn_baseline_celeba_variational_deterministic }
+  - { type: nn_baseline, name: nn_baseline_celeba_variational_mixture }
 
 generation:
   labels: real

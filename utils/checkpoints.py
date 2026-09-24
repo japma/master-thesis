@@ -17,6 +17,8 @@ from models.cspn.joint_pc import JointPC
 from models.cspn.psinet.graph import DistributionVector, EiNetAddress, Product
 from models.cspn.psinet.label_pc import LabelPC
 from models.cspn.psinet_cspn import PsiNetCSPN
+from models.cspn.spn import SPN
+from models.latent_prior import GaussianMixturePrior, StandardNormalPrior
 from models.neural_baseline import AbstractNeuralBaseline, build_neural_baseline
 from utils.compilation import uncompiled
 from utils.config import (
@@ -30,6 +32,7 @@ from utils.config import (
     JointPCConfig,
     NeuralBaselineConfig,
     NeuralBaselineType,
+    SPNConfig,
 )
 from utils.naming import intermediate_name
 from utils.reproducibility import get_rng_state, set_rng_state
@@ -140,6 +143,12 @@ def load_ae_from_path(path: Path, device=None) -> AbstractAutoencoder:
     return model
 
 
+def load_vae_prior_from_path(path: Path, device=None) -> StandardNormalPrior:
+    """The prior of the VAE checkpoint at `path`; only its latent size is read."""
+    vae = load_ae_from_path(path, device="cpu")
+    return StandardNormalPrior(int(vae.get_latent_dim().numel()))
+
+
 # --- CSPN ---
 # The autoencoder artifact a latent-space model was trained against, stored inside its
 # own checkpoint so the pairing survives without wandb -- a local file, an offline box,
@@ -239,6 +248,70 @@ def load_nn_baseline_from_path(path: Path, device=None) -> AbstractNeuralBaselin
 
     cfg = NeuralBaselineConfig.model_validate(ckpt["model_cfg"])
     model = build_neural_baseline(cfg)
+    model.load_state_dict(ckpt["model_state"])
+    return model.to(device) if device is not None else model
+
+
+# --- Unconditional SPN ---
+def save_spn(
+    model: AbstractCSPN, path: Path, source_artifact: str | None = None
+) -> None:
+    model = uncompiled(model)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    if not isinstance(model, SPN):
+        raise AssertionError("model is not an SPN")
+    torch.save(
+        {
+            "model_cfg": model.get_config(),
+            "model_state": model.state_dict(),
+            "graph": model.get_graph(),
+            SOURCE_ARTIFACT_KEY: source_artifact,
+        },
+        path,
+    )
+    print("Saved SPN checkpoint to", path)
+
+
+def load_spn_from_path(path: Path, device=None) -> SPN:
+    with (
+        torch.serialization.safe_globals([networkx.classes.digraph.DiGraph]),
+        torch.serialization.safe_globals([DistributionVector]),
+        torch.serialization.safe_globals([EiNetAddress]),
+        torch.serialization.safe_globals([Product]),
+        torch.serialization.safe_globals([numpy._core.multiarray.scalar]),
+        torch.serialization.safe_globals([numpy.dtype]),
+    ):
+        ckpt = torch.load(path, map_location=device, weights_only=False)
+
+    if "graph" not in ckpt:
+        raise AssertionError(f"Checkpoint at {path} has no saved `graph` entry")
+
+    cfg = SPNConfig.model_validate(ckpt["model_cfg"])
+    model = SPN(config=cfg, graph=ckpt["graph"])
+    model.load_state_dict(ckpt["model_state"])
+    return model.to(device) if device is not None else model
+
+
+# --- Gaussian mixture ---
+def save_gmm(
+    model: GaussianMixturePrior, path: Path, source_artifact: str | None = None
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    torch.save(
+        {
+            "model_cfg": model.get_config(),
+            "model_state": model.state_dict(),
+            SOURCE_ARTIFACT_KEY: source_artifact,
+        },
+        path,
+    )
+    print("Saved Gaussian mixture checkpoint to", path)
+
+
+def load_gmm_from_path(path: Path, device=None) -> GaussianMixturePrior:
+    ckpt = torch.load(path, map_location=device, weights_only=True)
+    model = GaussianMixturePrior(**ckpt["model_cfg"])
     model.load_state_dict(ckpt["model_state"])
     return model.to(device) if device is not None else model
 

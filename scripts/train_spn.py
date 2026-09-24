@@ -1,32 +1,33 @@
-"""Entry point for neural baseline training."""
+"""Entry point for unconditional SPN training."""
 
 import torch
 from rtpt import RTPT
-from torch.utils.data import DataLoader
 from torchinfo import summary
 
 import wandb
 from dataset_loaders import build_data_loaders
-from models.neural_baseline import build_neural_baseline
-from training.early_stopping import EarlyStopping
+from dataset_loaders.latent_normalizer import LatentNormalizer
+from models.cspn.spn import SPN
 from training.inputs import load_training_autoencoder
 from training.loop import CheckpointSpec, run_training_loop
-from training.objectives.nn_baseline import NeuralBaselineObjective
+from training.objectives.spn import SPNObjective
 from utils.checkpoints import (
     final_checkpoint_path,
     intermediate_checkpoint_path,
-    load_nn_baseline_from_path,
+    load_spn_from_path,
 )
 from utils.compilation import maybe_compile
-from utils.config import CSPNEncoderType, NeuralBaselineRunConfig, load_config
-from utils.naming import ModelFamily, artifact_name, nn_baseline_extras
+from utils.config import SPNRunConfig, load_config
+from utils.naming import ModelFamily, artifact_name
 from utils.reproducibility import resolve_device, seed_everything
 from utils.wandb_utils import init_run, rename_run
+
+NUM_SAMPLE_PROBES = 16
 
 
 def main() -> None:
     cfg, cfg_seed, resume = load_config()
-    assert isinstance(cfg, NeuralBaselineRunConfig)
+    assert isinstance(cfg, SPNRunConfig)
     dataset_cfg = cfg.dataset
     model_cfg = cfg.model
     training_cfg = cfg.training
@@ -34,29 +35,26 @@ def main() -> None:
     seed = seed_everything(cfg_seed)
     device = resolve_device()
     dataset_name = dataset_cfg.artifact_name
-    init_run(cfg.wandb, f"nn_baseline_{dataset_name}", cfg.model_dump())
+    init_run(cfg.wandb, f"spn_{dataset_name}", cfg.model_dump())
 
     autoencoder = load_training_autoencoder(cfg.autoencoder, dataset_cfg, device)
     ae, ae_artifact = autoencoder.model, autoencoder.ref
-    run_name = artifact_name(
-        ModelFamily.NN_BASELINE,
-        dataset_cfg,
-        autoencoder.kind,
-        *nn_baseline_extras(model_cfg),
-    )
+    run_name = artifact_name(ModelFamily.SPN, dataset_cfg, autoencoder.kind)
     rename_run(run_name)
 
     if ae.get_latent_dim().numel() != model_cfg.num_vars:
         raise ValueError(
-            f"AE latent dim {ae.get_latent_dim()} ({ae.get_latent_dim().numel()}) does "
-            f"not match baseline num_vars {model_cfg.num_vars}"
+            f"AE latent dim {ae.get_latent_dim()} ({ae.get_latent_dim().numel()}) "
+            f"does not match SPN num_vars {model_cfg.num_vars}"
         )
 
-    print(f"Training neural baseline on {dataset_name} | device={device} | seed={seed}")
+    print(f"Training SPN on {dataset_name} | device={device} | seed={seed}")
 
     ckpt_path = intermediate_checkpoint_path(run_name)
+    resumed = False
     if resume and ckpt_path.exists():
-        model = load_nn_baseline_from_path(ckpt_path, device=device).to(device)
+        model = load_spn_from_path(ckpt_path, device=device)
+        resumed = True
         print(f"Resumed model weights from {ckpt_path}")
     else:
         if resume:
@@ -64,14 +62,22 @@ def main() -> None:
                 f"--resume given but no checkpoint found at {ckpt_path}; "
                 "starting from scratch"
             )
-        model = build_neural_baseline(model_cfg).to(device)
-
-    print("Neural baseline architecture:")
-    summary(model)
+        model = SPN(config=model_cfg)
+    model = model.to(device)
 
     train_loader, test_loader = build_data_loaders(
         dataset_cfg, batch_size=training_cfg.batch_size
     )
+
+    if model_cfg.normalize_latents and not resumed:
+        normalizer = LatentNormalizer()
+        normalizer.fit(ae, train_loader, device)
+        assert normalizer.mean is not None
+        assert normalizer.std is not None
+        model.set_latent_stats(normalizer.mean, normalizer.std)
+
+    print("SPN architecture:")
+    summary(model)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=training_cfg.learning_rate)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
@@ -80,7 +86,7 @@ def main() -> None:
 
     model = maybe_compile(model, training_cfg.compile, training_cfg.compile_mode)
 
-    objective = NeuralBaselineObjective(
+    objective = SPNObjective(
         model=model,
         autoencoder=ae,
         optimizer=optimizer,
@@ -95,21 +101,11 @@ def main() -> None:
     )
     rtpt.start()
 
-    early_stopping = EarlyStopping(
-        patience=training_cfg.early_stopping_patience,
-        min_delta=training_cfg.early_stopping_min_delta,
-    )
-    print(
-        f"Early stopping on val total: patience "
-        f"{training_cfg.early_stopping_patience}, min_delta "
-        f"{training_cfg.early_stopping_min_delta}"
-    )
-
     checkpoint = CheckpointSpec(
         intermediate_path=ckpt_path,
         final_path=final_checkpoint_path(run_name),
         metadata={**autoencoder.metadata(), "config": cfg.model_dump(mode="json")},
-        artifact_type="nn_baseline",
+        artifact_type="spn",
     )
 
     run_training_loop(
@@ -121,23 +117,12 @@ def main() -> None:
         rtpt=rtpt,
         checkpoint=checkpoint,
         resume=resume,
-        sample_probe=_sample_labels(cfg, test_loader, device),
-        sample_log_key="samples/nn_baseline_generated_images",
-        early_stopping=None,
+        # Only the count matters: the SPN samples p(z) whatever the labels say.
+        sample_probe=torch.zeros(NUM_SAMPLE_PROBES, 1, device=device),
+        sample_log_key="samples/spn_generated_images",
     )
 
     wandb.finish()
-
-
-def _sample_labels(
-    cfg: NeuralBaselineRunConfig, test_loader: DataLoader, device: torch.device
-) -> torch.Tensor:
-    """Colour-MNIST's ten digits on the first colours; otherwise the first val labels."""
-    if cfg.model.encoder_config.encoder_type is CSPNEncoderType.MULTI_CATEGORICAL:
-        labels = torch.tensor([[digit, 0, 0] for digit in range(10)])
-    else:
-        labels = next(iter(test_loader))[1][:16]
-    return labels.to(device, non_blocking=True)
 
 
 if __name__ == "__main__":

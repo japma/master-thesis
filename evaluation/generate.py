@@ -46,8 +46,11 @@ from models.autoencoder.pretrained import PretrainedVAE
 from utils.checkpoints import (
     load_ae_from_path,
     load_cspn_from_path,
+    load_gmm_from_path,
     load_joint_pc_from_path,
     load_nn_baseline_from_path,
+    load_spn_from_path,
+    load_vae_prior_from_path,
     read_source_artifact,
 )
 from utils.config import (
@@ -72,6 +75,9 @@ MODEL_LOADERS = {
     GenerativeModelType.CSPN: load_cspn_from_path,
     GenerativeModelType.JOINT_PC: load_joint_pc_from_path,
     GenerativeModelType.NN_BASELINE: load_nn_baseline_from_path,
+    GenerativeModelType.VAE_PRIOR: load_vae_prior_from_path,
+    GenerativeModelType.GMM: load_gmm_from_path,
+    GenerativeModelType.SPN: load_spn_from_path,
 }
 MODEL_TYPES: tuple[GenerativeModelType, ...] = tuple(GenerativeModelType)
 
@@ -400,12 +406,15 @@ def generate_pools(cfg: PoolRunConfig, device: torch.device) -> PoolReport:
     vaes: dict[str, tuple[AbstractAutoencoder, str]] = {}
     for entry, ref, seeds in todo:
         model, ref, model_path = load_generative_model(entry.type, ref, device)
-        try:
-            vae_name, vae_tag, _ = resolve_autoencoder(None, model_path, ref)
-        except ValueError as error:
-            print(f"WARNING: {error}")
-            report.failed.append(f"{ref}: no autoencoder recorded")
-            continue
+        if entry.type == GenerativeModelType.VAE_PRIOR:
+            vae_name, vae_tag = ref, "latest"
+        else:
+            try:
+                vae_name, vae_tag, _ = resolve_autoencoder(None, model_path, ref)
+            except ValueError as error:
+                print(f"WARNING: {error}")
+                report.failed.append(f"{ref}: no autoencoder recorded")
+                continue
         if vae_name not in vaes:
             vaes[vae_name] = load_vae(vae_name, vae_tag, False, cfg.dataset, device)
         vae, vae_ref = vaes[vae_name]

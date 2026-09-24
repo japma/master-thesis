@@ -7,7 +7,7 @@ dataset:
 autoencoder:
   name: "variational_celeba"
   external: false
-  tag: "latest"
+  tag: "best"
 
 model:
   model_type: "psinet"

@@ -7,6 +7,7 @@ plotting a figure is one `read_csv`. Every file starts with the same columns ide
 the set; a real or reconstruction row leaves the model's columns empty.
 """
 
+import re
 from pathlib import Path
 
 import pandas as pd
@@ -25,15 +26,16 @@ from evaluation.pools import (
     load_tensor,
     model_root,
     real_dir,
+    split_ref,
     vae_dir,
     version_number,
 )
 from evaluation.samples import to_float
 from models.classifier import DigitClassifier
 from utils.checkpoints import load_classifier_from_path
-from utils.config import CheckpointConfig, PoolRunConfig
+from utils.config import CheckpointConfig, PoolModelConfig, PoolRunConfig
 from utils.progress import batch_count, start_rtpt
-from utils.wandb_utils import download_artifact
+from utils.wandb_utils import download_artifact, resolve_artifact
 
 DEFAULT_BATCH_SIZE = 512
 
@@ -131,17 +133,28 @@ def write_metric(path: Path, frame: pd.DataFrame, keys: dict) -> None:
     print(f"Wrote {path}")
 
 
+def pinned_version(entry: PoolModelConfig) -> str | None:
+    """The `vN` an entry pins: its version, or the one its alias names on wandb now.
+    An alias wandb does not know is returned as is, and matches nothing generated."""
+    if entry.version is None or re.fullmatch(r"v\d+", entry.version):
+        return entry.version
+    ref = resolve_artifact(entry.name, entry.version)
+    return entry.version if ref is None else split_ref(ref)[1]
+
+
 def find_models(cfg: PoolRunConfig) -> list[tuple[Path, ModelManifest]]:
     """Every listed model's generated samples, per seed: the pinned version, or the
     newest one generated. Models with nothing generated are reported and left out."""
     found = []
+    pinned = {id(entry): pinned_version(entry) for entry in cfg.models}
     for seed in cfg.generation.seeds:
         for entry in cfg.models:
             root = model_root(cfg.dataset_dir, seed, entry.type, entry.name)
             std = f"std{entry.std_correction:g}"
+            version = pinned[id(entry)]
             candidates = (
-                [root / entry.version]
-                if entry.version is not None
+                [root / version]
+                if version is not None
                 else sorted(root.glob("v*"), key=version_number, reverse=True)
             )
             complete = [v / std for v in candidates if is_complete(v / std)]

@@ -50,6 +50,11 @@ from utils.config.evaluation import (
     PoolModelConfig,
     PoolRunConfig,
 )
+from utils.config.gmm import (
+    GMMConfig,
+    GMMRunConfig,
+    GMMTrainingConfig,
+)
 from utils.config.joint_pc import (
     JointPCConfig,
     JointPCRunConfig,
@@ -63,6 +68,10 @@ from utils.config.neural_baseline import (
     NeuralBaselineConfig,
     NeuralBaselineRunConfig,
     NeuralBaselineType,
+)
+from utils.config.spn import (
+    SPNConfig,
+    SPNRunConfig,
 )
 
 for _enum in (
@@ -100,6 +109,11 @@ __all__ = [
     "DatasetName",
     "EvaluationConfig",
     "EvaluationRunConfig",
+    "SPNConfig",
+    "SPNRunConfig",
+    "GMMConfig",
+    "GMMRunConfig",
+    "GMMTrainingConfig",
     "GeneratedModelConfig",
     "GenerationConfig",
     "GenerativeModelType",

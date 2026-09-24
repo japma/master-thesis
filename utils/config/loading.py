@@ -10,9 +10,11 @@ from utils.config.classifier import ClassifierRunConfig
 from utils.config.common import DatasetConfig
 from utils.config.cspn import CSPNRunConfig
 from utils.config.evaluation import EvaluationRunConfig, PoolRunConfig
+from utils.config.gmm import GMMRunConfig
 from utils.config.joint_pc import JointPCRunConfig
 from utils.config.label_pc import LabelPCRunConfig
 from utils.config.neural_baseline import NeuralBaselineRunConfig
+from utils.config.spn import SPNRunConfig
 
 
 def _deep_merge(base: dict, override: dict) -> dict:
@@ -62,10 +64,12 @@ RunConfig = (
     | ClassifierRunConfig
     | CSPNRunConfig
     | EvaluationRunConfig
+    | GMMRunConfig
     | PoolRunConfig
     | JointPCRunConfig
     | LabelPCRunConfig
     | NeuralBaselineRunConfig
+    | SPNRunConfig
 )
 
 _RUN_TYPES: dict[str, type] = {
@@ -73,10 +77,12 @@ _RUN_TYPES: dict[str, type] = {
     "classifier": ClassifierRunConfig,
     "cspn": CSPNRunConfig,
     "evaluation": EvaluationRunConfig,
+    "gmm": GMMRunConfig,
     "joint_pc": JointPCRunConfig,
     "label_pc": LabelPCRunConfig,
     "nn_baseline": NeuralBaselineRunConfig,
     "pools": PoolRunConfig,
+    "spn": SPNRunConfig,
 }
 
 

@@ -1,0 +1,22 @@
+# Ex-post density estimation (Ghosh et al., 2020): a full-covariance Gaussian mixture
+# over the CelebA VAE's encoded training set, sampled instead of N(0, I). It asks
+# whether the PCs beat a plain mixture fitted to the same latents.
+#
+#   uv run fit_gmm configs/gmm/celeba.yaml
+
+type: gmm
+
+dataset:
+  name: celeba
+
+autoencoder:
+  name: "variational_celeba"
+  external: false
+  tag: "best"
+
+model:
+  # Ghosh et al. use 10.
+  num_components: 10
+
+training:
+  epochs: 200

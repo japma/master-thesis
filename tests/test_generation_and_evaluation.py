@@ -53,6 +53,7 @@ from evaluation.pools import (
 )
 from evaluation.samples import to_float, to_uint8
 from models.classifier import DigitClassifier
+from models.latent_prior import StandardNormalPrior
 from utils.config import (
     CheckpointConfig,
     ClassifierConfig,
@@ -328,6 +329,32 @@ def test_a_new_version_is_sampled_beside_the_old_one(
     assert len(report.generated) == 1
     assert is_complete(model_dir(cfg.dataset_dir, 0, "cspn", "cspn:v2", 1.0))
     assert is_complete(model_dir(cfg.dataset_dir, 0, "cspn", "cspn:v3", 1.0))
+
+
+def test_the_vae_prior_is_decoded_by_its_own_vae(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = build_config(tmp_path, models=[PoolModelConfig(type="vae_prior", name="vae")])
+    patch_generation(monkeypatch, versions={"vae": 1}, sampler=StandardNormalPrior(4))
+    requested = []
+
+    def load_vae(name: str, *args, **kwargs) -> tuple[StripeDecoder, str]:
+        requested.append(name)
+        return StripeDecoder(), "vae:v1"
+
+    def no_lineage(*args) -> None:
+        raise AssertionError("a prior has no autoencoder to look up")
+
+    monkeypatch.setattr("evaluation.generate.load_vae", load_vae)
+    monkeypatch.setattr("evaluation.generate.resolve_autoencoder", no_lineage)
+
+    generate_pools(cfg, DEVICE)
+
+    samples = model_dir(cfg.dataset_dir, 0, "vae_prior", "vae:v1", 1.0)
+    manifest = load_manifest(samples, ModelManifest)
+    assert requested == ["vae:v1"]
+    assert manifest.vae_checkpoint == manifest.model_checkpoint == "vae:v1"
+    assert load_tensor(samples, LATENTS).std() == pytest.approx(1.0, abs=0.1)
 
 
 def test_a_model_wandb_does_not_have_is_reported_not_fatal(
@@ -756,9 +783,29 @@ def test_an_unknown_config_key_is_refused() -> None:
         PoolRunConfig.model_validate(raw)
 
 
-def test_a_version_must_be_a_version() -> None:
-    with pytest.raises(ValidationError, match="look like v3"):
+def test_the_latest_is_asked_for_by_omission() -> None:
+    with pytest.raises(ValidationError, match="omit version"):
         PoolModelConfig(type="cspn", name="cspn", version="latest")
+    with pytest.raises(ValidationError, match="alias"):
+        PoolModelConfig(type="cspn", name="cspn", version="cspn:v3")
+
+
+def test_an_alias_is_followed_to_the_version_it_names(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = build_config(tmp_path, models=[PoolModelConfig(type="cspn", name="cspn")])
+    versions = patch_generation(monkeypatch)
+    generate_pools(cfg, DEVICE)
+    versions["cspn"] = 10
+    generate_pools(cfg, DEVICE)
+
+    monkeypatch.setattr(
+        "evaluation.evaluate.resolve_artifact", lambda name, tag: f"{name}:v2"
+    )
+    cfg.models[0].version = "best"
+    [(_, best)] = find_models(cfg)
+
+    assert best.model_checkpoint == "cspn:v2"
 
 
 def test_a_model_listed_twice_is_refused(tmp_path: Path) -> None:

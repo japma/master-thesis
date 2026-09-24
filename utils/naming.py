@@ -1,7 +1,7 @@
 """Checkpoint and wandb artifact names, derived from config so none can be forgotten.
 
     vae_<dataset>_<vae kind>
-    <family>_<dataset>_<vae kind>[_<extra>...]      cspn, joint_pc, nn_baseline
+    <family>_<dataset>_<vae kind>[_<extra>...]      cspn, joint_pc, nn_baseline, gmm, spn
     label_pc_<dataset>
     digit_classifier_<dataset>
 
@@ -22,6 +22,7 @@ from utils.config import (
     ConditioningType,
     CSPNConfig,
     DatasetConfig,
+    GMMConfig,
     NeuralBaselineConfig,
     PretrainedAutoencoderConfig,
     VAETrainingType,
@@ -36,6 +37,8 @@ class ModelFamily(StrEnum):
     CSPN = "cspn"
     JOINT_PC = "joint_pc"
     NN_BASELINE = "nn_baseline"
+    GMM = "gmm"
+    SPN = "spn"
     LABEL_PC = "label_pc"
     DIGIT_CLASSIFIER = "digit_classifier"
 
@@ -96,6 +99,10 @@ def cspn_extras(model: CSPNConfig) -> list[str]:
 
 def nn_baseline_extras(model: NeuralBaselineConfig) -> list[str]:
     return [str(model.model_type)]
+
+
+def gmm_extras(model: GMMConfig) -> list[str]:
+    return [f"k{model.num_components}"]
 
 
 def intermediate_name(name: str) -> str:

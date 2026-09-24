@@ -1,0 +1,33 @@
+# A conditional baseline that is not a PC: an MLP from the 40 CelebA attributes to
+# the latents of the VAE configs/cspn/celeba.yaml trains on, with the same label
+# encoder and hidden sizes as that CSPN.
+#
+#   uv run train_nn_baseline configs/nn_baseline/celeba_deterministic.yaml
+
+type: nn_baseline
+
+dataset:
+  name: celeba
+
+autoencoder:
+  name: "variational_celeba"
+  external: false
+  tag: "best"
+
+model:
+  model_type: deterministic
+  num_vars: 128
+  h_dims: [ 512, 256 ]
+  num_components: 1
+  # At 1.0 the NLL is MSE plus a constant.
+  fixed_std: 1.0
+  encoder_config:
+    encoder_type: multi_binary
+    num_classes: [ 40 ]
+
+training:
+  epochs: 200
+  learning_rate: 0.0003
+  batch_size: 256
+  early_stopping_patience: 15
+  early_stopping_min_delta: 0.01

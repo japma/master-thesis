@@ -23,11 +23,16 @@ from utils.config.common import (
 
 
 class GenerativeModelType(StrEnum):
-    """The conditional models over a VAE's latent space; all expose `sample(labels)`."""
+    """The models over a VAE's latent space; all expose `sample(labels)`, and the
+    unconditional ones use the labels only for the batch size."""
 
     CSPN = "cspn"
     JOINT_PC = "joint_pc"
     NN_BASELINE = "nn_baseline"
+    # N(0, I), decoded by the VAE named as the model itself.
+    VAE_PRIOR = "vae_prior"
+    GMM = "gmm"
+    SPN = "spn"
 
 
 class CheckpointConfig(BaseModel):
@@ -153,8 +158,8 @@ class PoolModelConfig(BaseModel):
     type: GenerativeModelType
     # The wandb artifact collection.
     name: str
-    # `v3` pins a version; omit for the latest, which is resolved to its `vN` and
-    # recorded, so no pool or result ever says `latest`.
+    # `v3` pins a version, an alias such as `best` follows it; omit for the latest.
+    # Either is resolved to its `vN` and recorded, so no pool or result names an alias.
     version: str | None = None
     # The label columns the model conditions on, for models trained on a subset, e.g.
     # `[digit]`. Omit for all of them.
@@ -164,8 +169,10 @@ class PoolModelConfig(BaseModel):
     @field_validator("version")
     @classmethod
     def _is_a_version(cls, version: str | None) -> str | None:
-        if version is not None and not re.fullmatch(r"v\d+", version):
-            raise ValueError(f"version must look like v3, got {version!r}")
+        if version == "latest":
+            raise ValueError("omit version for the latest instead of naming it")
+        if version is not None and not re.fullmatch(r"v\d+|[A-Za-z][\w-]*", version):
+            raise ValueError(f"version must look like v3 or an alias, got {version!r}")
         return version
 
 

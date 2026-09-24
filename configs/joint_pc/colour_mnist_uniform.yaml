@@ -24,7 +24,7 @@ model:
   normalize_latents: true
 
 training:
-  epochs: 200
+  epochs: 20
   learning_rate: 0.001
   batch_size: 128
   early_stopping_patience: 10
