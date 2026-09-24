@@ -457,6 +457,55 @@ def plot_image_rows(
     return figure
 
 
+def plot_captioned_images(
+    images: Tensor,
+    captions: list[str],
+    title: str | None = None,
+    ncols: int = 8,
+    caption_colours: list[str] | None = None,
+    dpi: int = 150,
+    scale: float = 1.2,
+):
+    """Images in rows of `ncols`, each with its own caption underneath."""
+    count = images.shape[0]
+    if len(captions) != count:
+        raise ValueError(f"{count} images but {len(captions)} captions")
+    if caption_colours is not None and len(caption_colours) != count:
+        raise ValueError(f"{count} images but {len(caption_colours)} caption colours")
+
+    ncols = min(ncols, count)
+    nrows = -(-count // ncols)
+    figure, axes = plt.subplots(
+        nrows,
+        ncols,
+        figsize=(ncols * scale, nrows * (scale + 0.35) + 0.4),
+        dpi=dpi,
+        squeeze=False,
+    )
+
+    for index, ax in enumerate(axes.flat):
+        ax.axis("off")
+        if index >= count:
+            continue
+        ax.imshow(images[index].detach().cpu().clamp(0, 1).permute(1, 2, 0).numpy())
+        colour = caption_colours[index] if caption_colours is not None else "black"
+        ax.text(
+            0.5,
+            -0.04,
+            captions[index],
+            transform=ax.transAxes,
+            ha="center",
+            va="top",
+            fontsize=6,
+            color=colour,
+        )
+
+    if title:
+        figure.suptitle(title, fontsize=11)
+    figure.tight_layout()
+    return figure
+
+
 def plot_combination_grid(
     images: Tensor,
     title: str = "",
