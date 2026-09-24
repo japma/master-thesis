@@ -63,25 +63,21 @@ def style_axes(ax: plt.Axes) -> None:
 
 def scores(results: Path, dataset: str, std: float) -> pd.DataFrame:
     """One row per (model, factor): the generated score and the real-data ceiling."""
-    frames = []
-    digit = results / "digit_accuracy.csv"
-    colour = results / "colour_accuracy.csv"
-    if digit.exists():
-        frames.append(pd.read_csv(digit).assign(factor="digit"))
-    if colour.exists():
-        frames.append(pd.read_csv(colour))
-    if not frames:
-        raise SystemExit(f"No digit_accuracy.csv or colour_accuracy.csv in {results}")
+    path = results / "accuracy.csv"
+    if not path.exists():
+        raise SystemExit(f"No accuracy.csv in {results}")
 
-    table = pd.concat(frames, ignore_index=True)
-    table = table[(table["dataset"] == dataset) & (table["std_correction"] == std)]
-    if table.empty:
+    table = pd.read_csv(path)
+    table = table[table["dataset"] == dataset]
+    generated = table[
+        (table["source"] == "generated") & (table["std_correction"] == std)
+    ]
+    if generated.empty:
         raise SystemExit(f"No rows for dataset={dataset} std_correction={std}")
 
-    table = table.assign(
-        model=table["checkpoint"].map(lambda c: short_name(c, dataset))
+    generated = generated.assign(
+        model=generated["checkpoint"].map(lambda c: short_name(c, dataset))
     )
-    generated = table[table["source"] == "generated"]
     ceiling = (
         table[table["source"] == "real"]
         .groupby("factor", as_index=False)["value"]

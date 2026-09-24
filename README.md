@@ -83,25 +83,26 @@ against (`read_source_artifact`, falling back to wandb lineage), so the latents 
 fit it. The sampled latent width is checked against the decoder before anything is
 decoded, so a mismatched pair fails naming both artifacts.
 
-Stage 2 scores three sets of images per model: its generated samples, the real
-validation images, and their round trip through that model's VAE. The last two are the
-ceilings; generated accuracy is not readable without them.
+Stage 2 judges every set of images in the pool once: the real validation images, their
+round trip through each VAE a listed model uses, and each model's generated samples. The
+real and reconstruction rows are the ceilings; generated accuracy is not readable
+without them. A model conditioned on a subset of the factors is scored on that subset.
 
 Stage 2 writes **one CSV per metric** under `results_root`, accumulating across runs, so
 a thesis figure is one `read_csv`:
 
 ```
-results/digit_accuracy.csv                 <run>,source,value,n
-results/digit_accuracy_by_combination.csv  <run>,source,digit,fg,bg,value,n
-results/confusion_digit.csv                <run>,source,truth,predicted,n
+results/accuracy.csv                  <set>,factor,value,n
+results/accuracy_by_combination.csv   <set>,factor,digit,fg,bg,value,n
+results/confusion.csv                 <set>,factor,truth,predicted,n
 ```
 
-`<run>` is the same identity prefix everywhere -- model, dataset, checkpoint, seed,
-std_correction, vae, classifier -- so every row is self-describing, and re-evaluating a
-run replaces its rows instead of duplicating them. `source` is `generated`, `real` or
-`reconstruction`, so the ceilings are rows rather than suffixes on metric names. Only the
-digit is judged for now; adding fg/bg means more metric functions and more CSVs, not a
-change to what exists.
+`<set>` is the same identity prefix everywhere -- model, dataset, checkpoint, seed,
+std_correction, vae, classifier, source -- so every row is self-describing, and
+re-scoring a set replaces its rows instead of duplicating them. `source` is `generated`,
+`real` or `reconstruction`; a real row leaves the model's columns and `vae` empty, a
+reconstruction row the model's columns. The metrics are plain functions in
+`evaluation/metrics.py`, named in its `METRICS`.
 
 Checkpoints are always wandb artifacts (`name` or `name:version`); manifests record the
 exact version they resolved to.

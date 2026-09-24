@@ -59,7 +59,7 @@ class EvaluationConfig(BaseModel):
     batch_size: int = Field(default=512, ge=1)
     # One CSV per metric lands here, accumulating across runs.
     results_root: Path = Path("results")
-    # Which metrics to write, by module name in `evaluation/metrics/`. Omit for all of
+    # Which metrics to write, by name in `evaluation.metrics.METRICS`. Omit for all of
     # them, so a new metric applies to every existing config.
     metrics: list[str] | None = None
     # Which metrics `evaluate_sets` computes, by name in `evaluation.sets.SET_METRICS`.
@@ -75,17 +75,16 @@ class EvaluationConfig(BaseModel):
         if names is None:
             return names
         # Imported here, not at module level: `evaluation` imports this module back.
-        from evaluation.metrics import METRICS_BY_NAME
+        from evaluation.metrics import METRICS
 
         if not names:
             raise ValueError("metrics is empty; omit the key to run all of them")
         if len(set(names)) != len(names):
             raise ValueError(f"metrics lists the same metric twice: {names}")
-        unknown = [name for name in names if name not in METRICS_BY_NAME]
+        unknown = [name for name in names if name not in METRICS]
         if unknown:
             raise ValueError(
-                f"unknown metrics {unknown}; known metrics are "
-                f"{sorted(METRICS_BY_NAME)}"
+                f"unknown metrics {unknown}; known metrics are {sorted(METRICS)}"
             )
         return names
 

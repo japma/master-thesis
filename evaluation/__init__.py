@@ -7,8 +7,8 @@
     conditionals.py  what the training split says a factor's distribution is
     marginal.py   queries with a factor left free: the mixture reference and
                   the calibration that scores it (its own entrypoint)
-    metrics/      one module per metric: a FILENAME and a compute(), listed in METRICS
-    evaluate.py   stage 2 -- run the judge, write one CSV per metric
+    metrics.py    the judged metrics, one function each, named in METRICS
+    evaluate.py   stage 2 -- judge each set once, write one CSV per metric
     features.py   the pretrained networks set metrics compare images in
     distances.py  FID, KID, precision/recall, CMMD between two feature sets
     sets.py       stage 2 -- set metrics over val-split halvings

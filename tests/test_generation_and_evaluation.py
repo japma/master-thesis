@@ -20,6 +20,8 @@ from dataset_loaders.colour_mnist import (
 from evaluation.colour import BG_PALETTE, FG_PALETTE
 from evaluation.evaluate import (
     GENERATED,
+    REAL,
+    RECONSTRUCTION,
     evaluate_pools,
     find_models,
     predict,
@@ -33,18 +35,7 @@ from evaluation.generate import (
     sample_and_decode,
     stratified_labels,
 )
-from evaluation.metrics import (
-    METRICS,
-    colour_accuracy,
-    colour_accuracy_by_combination,
-    colour_contrast,
-    colour_drift,
-    confusion_digit,
-    digit_accuracy,
-    digit_accuracy_by_combination,
-    judge_colour_accuracy,
-    selected,
-)
+from evaluation.metrics import accuracy, accuracy_by_combination, confusion
 from evaluation.pools import (
     IMAGES,
     LABELS,
@@ -424,34 +415,8 @@ def test_generation_checks_the_latent_dim_before_sampling(
 
 
 # --- metrics ---
-def test_every_metric_names_the_csv_it_writes() -> None:
-    assert [metric.FILENAME for metric in METRICS] == [
-        "digit_accuracy.csv",
-        "digit_accuracy_by_combination.csv",
-        "confusion_digit.csv",
-        "colour_accuracy.csv",
-        "colour_accuracy_by_combination.csv",
-        "judge_colour_accuracy.csv",
-        "colour_drift.csv",
-        "colour_contrast.csv",
-    ]
-
-
-def blank(labels: torch.Tensor) -> torch.Tensor:
-    """Flat images, for the metrics that never look at pixels."""
-    return torch.zeros(labels.shape[0], 3, IMAGE_SIZE, IMAGE_SIZE)
-
-
-def unused(labels: torch.Tensor) -> torch.Tensor:
-    """Judge predictions, for the colour metrics that never look at them."""
-    return torch.zeros(labels.shape[0], 3, dtype=torch.long)
-
-
-def digit_predictions(digits: list[int]) -> torch.Tensor:
-    """Judge predictions whose colour columns are all class 0."""
-    predictions = torch.zeros(len(digits), 3, dtype=torch.long)
-    predictions[:, 0] = torch.tensor(digits)
-    return predictions
+FACTORS = ["digit", "fg", "bg"]
+CARDINALITIES = [NUM_DIGITS, NUM_FG, NUM_BG]
 
 
 def painted(labels: torch.Tensor) -> torch.Tensor:
@@ -473,111 +438,80 @@ def painted(labels: torch.Tensor) -> torch.Tensor:
     return images
 
 
-def test_accuracy_counts_matches() -> None:
-    labels = torch.tensor([[1, 0, 0], [2, 0, 0], [0, 0, 0], [0, 0, 0]])
-    predictions = digit_predictions([1, 2, 3, 4])
+def test_accuracy_scores_every_factor() -> None:
+    labels = torch.tensor([[1, 0, 2], [2, 3, 0], [0, 0, 0], [0, 5, 1]])
+    predictions = torch.tensor([[1, 0, 1], [2, 3, 1], [3, 1, 0], [4, 5, 0]])
 
-    scores = digit_accuracy.compute(blank(labels), predictions, labels, num_classes=10)
+    scores = accuracy(predictions, labels, FACTORS, CARDINALITIES)
 
-    assert list(scores.columns) == ["value", "n"]
-    assert scores["value"].tolist() == [0.5]
-    assert scores["n"].tolist() == [4]
+    assert list(scores.columns) == ["factor", "value", "n"]
+    assert scores["factor"].tolist() == FACTORS
+    assert scores["value"].tolist() == [0.5, 0.75, 0.25]
+    assert scores["n"].tolist() == [4, 4, 4]
 
 
-def test_accuracy_by_combination_has_a_row_per_cell_present() -> None:
-    labels = torch.tensor([[0, 0, 0], [0, 0, 0], [1, 2, 1]])
-    predictions = digit_predictions([0, 9, 1])
-
-    cells = digit_accuracy_by_combination.compute(
-        blank(labels), predictions, labels, num_classes=10
+def test_accuracy_scores_only_the_factors_it_is_given() -> None:
+    scores = accuracy(
+        torch.tensor([[1], [3]]), torch.tensor([[1], [2]]), ["digit"], [NUM_DIGITS]
     )
 
-    assert list(cells.columns) == ["digit", "fg", "bg", "value", "n"]
-    assert len(cells) == 2
-    assert cells["value"].tolist() == [0.5, 1.0]
-    assert cells["n"].tolist() == [2, 1]
+    assert scores["factor"].tolist() == ["digit"]
+    assert scores["value"].tolist() == [0.5]
+
+
+def test_accuracy_by_combination_has_a_row_per_factor_and_cell_present() -> None:
+    labels = torch.tensor([[0, 0, 0], [0, 0, 0], [1, 2, 1]])
+    predictions = torch.tensor([[0, 0, 1], [9, 0, 1], [1, 3, 1]])
+
+    cells = accuracy_by_combination(predictions, labels, FACTORS, CARDINALITIES)
+
+    assert list(cells.columns) == ["factor", "digit", "fg", "bg", "value", "n"]
+    assert len(cells) == 3 * 2
+    digit = cells[cells["factor"] == "digit"]
+    assert digit["value"].tolist() == [0.5, 1.0]
+    assert digit["n"].tolist() == [2, 1]
+    assert cells[cells["factor"] == "fg"]["value"].tolist() == [1.0, 0.0]
+    assert cells[cells["factor"] == "bg"]["value"].tolist() == [0.0, 1.0]
 
 
 def test_accuracy_by_combination_covers_every_cell_of_a_stratified_pool() -> None:
     labels = stratified_labels(2)
-    predictions = unused(labels)
 
-    cells = digit_accuracy_by_combination.compute(
-        blank(labels), predictions, labels, num_classes=10
-    )
+    cells = accuracy_by_combination(labels.clone(), labels, FACTORS, CARDINALITIES)
 
-    assert len(cells) == NUM_COMBINATIONS
-    assert int(cells["n"].sum()) == NUM_COMBINATIONS * 2
+    assert len(cells) == 3 * NUM_COMBINATIONS
+    assert int(cells["n"].sum()) == 3 * NUM_COMBINATIONS * 2
+    assert cells["value"].min() == 1.0
     assert set(cells["digit"]) == set(range(NUM_DIGITS))
     assert set(cells["fg"]) == set(range(NUM_FG))
     assert set(cells["bg"]) == set(range(NUM_BG))
 
 
-def test_confusion_is_a_complete_grid_with_truth_as_rows() -> None:
-    labels = torch.tensor([[0, 0, 0], [0, 0, 0], [1, 0, 0]])
-    predictions = digit_predictions([0, 1, 1])
+def test_a_digit_only_set_is_grouped_by_digit_alone() -> None:
+    labels = torch.tensor([[0], [0], [3]])
 
-    pairs = confusion_digit.compute(blank(labels), predictions, labels, num_classes=2)
-
-    assert list(pairs.columns) == ["truth", "predicted", "n"]
-    assert len(pairs) == 4
-    assert int(pairs["n"].sum()) == 3
-    lookup = pairs.set_index(["truth", "predicted"])["n"]
-    assert lookup[(0, 0)] == 1 and lookup[(0, 1)] == 1
-    assert lookup[(1, 0)] == 0 and lookup[(1, 1)] == 1
-
-
-def test_colour_is_read_perfectly_off_correctly_painted_images() -> None:
-    labels = all_combinations()
-    images = painted(labels)
-
-    scores = colour_accuracy.compute(images, unused(labels), labels, num_classes=10)
-    drift = colour_drift.compute(images, unused(labels), labels, num_classes=10)
-
-    assert scores["factor"].tolist() == ["fg", "bg"]
-    assert scores["value"].tolist() == [1.0, 1.0]
-    assert drift["value"].max() < 1e-5
-
-
-def test_colour_accuracy_catches_a_swapped_background() -> None:
-    labels = all_combinations()
-    wrong = labels.clone()
-    wrong[:, 2] = (wrong[:, 2] + 1) % NUM_BG
-
-    scores = colour_accuracy.compute(
-        painted(wrong), unused(labels), labels, num_classes=10
-    )
-    drift = colour_drift.compute(painted(wrong), unused(labels), labels, num_classes=10)
-
-    background = scores[scores["factor"] == "bg"].iloc[0]
-    assert background["value"] == 0.0
-    assert drift[drift["factor"] == "bg"].iloc[0]["value"] > 0.1
-
-
-def test_colour_accuracy_by_combination_has_a_row_per_cell_and_factor() -> None:
-    labels = all_combinations()
-
-    cells = colour_accuracy_by_combination.compute(
-        painted(labels), unused(labels), labels, num_classes=10
+    cells = accuracy_by_combination(
+        torch.tensor([[0], [1], [3]]), labels, ["digit"], [NUM_DIGITS]
     )
 
-    assert list(cells.columns) == ["factor", "digit", "fg", "bg", "value", "n"]
-    assert len(cells) == 2 * NUM_COMBINATIONS
-    assert cells["value"].min() == 1.0
+    assert list(cells.columns) == ["factor", "digit", "value", "n"]
+    assert cells["value"].tolist() == [0.5, 1.0]
 
 
-def test_contrast_separates_a_painted_digit_from_a_flat_image() -> None:
-    labels = all_combinations()
+def test_confusion_is_a_complete_grid_per_factor_with_truth_as_rows() -> None:
+    labels = torch.tensor([[0, 0], [0, 0], [1, 2]])
+    predictions = torch.tensor([[0, 0], [1, 2], [1, 2]])
 
-    painted_contrast = colour_contrast.compute(
-        painted(labels), unused(labels), labels, num_classes=10
-    )
-    flat_contrast = colour_contrast.compute(
-        blank(labels), unused(labels), labels, num_classes=10
-    )
+    pairs = confusion(predictions, labels, ["digit", "bg"], [2, NUM_BG])
 
-    assert float(flat_contrast["value"].iloc[0]) == 0.0
-    assert float(painted_contrast["value"].iloc[0]) > 0.5
+    assert list(pairs.columns) == ["factor", "truth", "predicted", "n"]
+    digit = pairs[pairs["factor"] == "digit"].set_index(["truth", "predicted"])["n"]
+    assert len(digit) == 4 and int(digit.sum()) == 3
+    assert digit[(0, 0)] == 1 and digit[(0, 1)] == 1
+    assert digit[(1, 0)] == 0 and digit[(1, 1)] == 1
+    bg = pairs[pairs["factor"] == "bg"].set_index(["truth", "predicted"])["n"]
+    assert len(bg) == NUM_BG**2 and int(bg.sum()) == 3
+    assert bg[(0, 0)] == 1 and bg[(0, 2)] == 1 and bg[(2, 2)] == 1
 
 
 # --- evaluation ---
@@ -591,19 +525,6 @@ def test_predict_returns_one_class_per_factor_and_image() -> None:
     assert (
         predictions.max(dim=0).values < torch.tensor([NUM_DIGITS, NUM_FG, NUM_BG])
     ).all()
-
-
-def test_judge_colour_accuracy_reads_the_colour_columns() -> None:
-    labels = torch.tensor([[0, 1, 2], [0, 3, 0], [5, 4, 1], [7, 0, 0]])
-    predictions = torch.tensor([[9, 1, 2], [9, 3, 1], [9, 0, 1], [9, 5, 1]])
-
-    scores = judge_colour_accuracy.compute(
-        blank(labels), predictions, labels, num_classes=10
-    )
-
-    assert scores["factor"].tolist() == ["fg", "bg"]
-    assert scores["value"].tolist() == [0.5, 0.5]
-    assert scores["n"].tolist() == [4, 4]
 
 
 def patch_judge(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -632,18 +553,13 @@ def test_evaluate_pools_writes_one_csv_per_metric(
 
     results = cfg.evaluation.results_root
     assert sorted(p.name for p in results.glob("*.csv")) == [
-        "colour_accuracy.csv",
-        "colour_accuracy_by_combination.csv",
-        "colour_contrast.csv",
-        "colour_drift.csv",
-        "confusion_digit.csv",
-        "digit_accuracy.csv",
-        "digit_accuracy_by_combination.csv",
-        "judge_colour_accuracy.csv",
+        "accuracy.csv",
+        "accuracy_by_combination.csv",
+        "confusion.csv",
     ]
 
 
-def test_every_csv_identifies_the_run_and_the_image_source(
+def test_every_csv_identifies_the_set_and_its_source(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     cfg = generated_pool(tmp_path, monkeypatch)
@@ -654,21 +570,28 @@ def test_every_csv_identifies_the_run_and_the_image_source(
     results = cfg.evaluation.results_root
     for path in results.glob("*.csv"):
         frame = pd.read_csv(path)
-        assert {"checkpoint", "seed", "std_correction", "source"} <= set(frame.columns)
-        assert frame["checkpoint"].unique().tolist() == ["cspn:v2"]
-        assert frame["vae"].unique().tolist() == ["vae:v1"]
+        assert {"checkpoint", "seed", "std_correction", "vae", "source"} <= set(
+            frame.columns
+        )
         assert frame["classifier"].unique().tolist() == ["judge:v7"]
-        assert set(frame["source"]) == {"generated", "real", "reconstruction"}
+        by_source = dict(list(frame.groupby("source")))
+        assert set(by_source) == {GENERATED, REAL, RECONSTRUCTION}
+        assert by_source[GENERATED]["checkpoint"].unique().tolist() == ["cspn:v2"]
+        assert by_source[GENERATED]["vae"].unique().tolist() == ["vae:v1"]
+        assert by_source[RECONSTRUCTION]["vae"].unique().tolist() == ["vae:v1"]
+        assert by_source[RECONSTRUCTION]["checkpoint"].isna().all()
+        assert by_source[REAL][["checkpoint", "seed", "vae"]].isna().all().all()
 
-    scores = pd.read_csv(results / "digit_accuracy.csv")
-    generated = scores[scores["source"] == GENERATED].iloc[0]
-    assert int(generated["n"]) == NUM_COMBINATIONS * 2
+    scores = pd.read_csv(results / "accuracy.csv")
+    generated = scores[scores["source"] == GENERATED]
+    assert generated["factor"].tolist() == FACTORS
+    assert generated["n"].unique().tolist() == [NUM_COMBINATIONS * 2]
 
-    cells = pd.read_csv(results / "digit_accuracy_by_combination.csv")
-    assert len(cells) == 3 * NUM_COMBINATIONS
+    cells = pd.read_csv(results / "accuracy_by_combination.csv")
+    assert len(cells) == 3 * len(FACTORS) * NUM_COMBINATIONS
 
 
-def test_one_run_scores_every_model_in_the_pool(
+def test_the_real_and_reconstruction_sets_are_scored_once_for_every_model(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     models = [
@@ -680,30 +603,48 @@ def test_one_run_scores_every_model_in_the_pool(
 
     evaluate_pools(cfg, DEVICE)
 
-    scores = pd.read_csv(cfg.evaluation.results_root / "digit_accuracy.csv")
-    assert sorted(scores["std_correction"].unique()) == [0.5, 1.0]
-    assert len(scores) == 2 * 3
+    scores = pd.read_csv(cfg.evaluation.results_root / "accuracy.csv")
+    counts = scores.groupby("source").size()
+    assert counts[REAL] == counts[RECONSTRUCTION] == len(FACTORS)
+    assert counts[GENERATED] == 2 * len(FACTORS)
+    assert sorted(scores["std_correction"].dropna().unique()) == [0.5, 1.0]
 
 
-def test_the_config_selects_which_metrics_run(
+def test_a_model_is_scored_only_on_the_factors_it_was_conditioned_on(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    cfg = generated_pool(tmp_path, monkeypatch, metrics=["colour_accuracy"])
+    models = [
+        PoolModelConfig(type="cspn", name="cspn"),
+        PoolModelConfig(type="cspn", name="cspn", labels=["digit"], std_correction=0.5),
+    ]
+    cfg = generated_pool(tmp_path, monkeypatch, models=models)
     patch_judge(monkeypatch)
 
     evaluate_pools(cfg, DEVICE)
 
     results = cfg.evaluation.results_root
-    assert [p.name for p in results.glob("*.csv")] == ["colour_accuracy.csv"]
+    scores = pd.read_csv(results / "accuracy.csv")
+    digit_only = scores[scores["std_correction"] == 0.5]
+    assert digit_only["factor"].tolist() == ["digit"]
+    cells = pd.read_csv(results / "accuracy_by_combination.csv")
+    assert len(cells[cells["std_correction"] == 0.5]) == NUM_DIGITS
 
 
-def test_omitting_metrics_runs_all_of_them() -> None:
-    assert selected(None) == METRICS
+def test_the_config_selects_which_metrics_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = generated_pool(tmp_path, monkeypatch, metrics=["accuracy"])
+    patch_judge(monkeypatch)
+
+    evaluate_pools(cfg, DEVICE)
+
+    results = cfg.evaluation.results_root
+    assert [p.name for p in results.glob("*.csv")] == ["accuracy.csv"]
 
 
 def test_an_unknown_metric_fails_at_config_load(tmp_path: Path) -> None:
     with pytest.raises(ValidationError, match="unknown metrics"):
-        build_config(tmp_path, metrics=["colour_acuracy"])
+        build_config(tmp_path, metrics=["acuracy"])
 
 
 def test_an_empty_metric_list_fails_rather_than_writing_nothing(tmp_path: Path) -> None:
@@ -713,10 +654,10 @@ def test_an_empty_metric_list_fails_rather_than_writing_nothing(tmp_path: Path) 
 
 def test_a_repeated_metric_fails(tmp_path: Path) -> None:
     with pytest.raises(ValidationError, match="twice"):
-        build_config(tmp_path, metrics=["colour_drift", "colour_drift"])
+        build_config(tmp_path, metrics=["accuracy", "accuracy"])
 
 
-def test_re_evaluating_a_run_replaces_its_rows_rather_than_appending(
+def test_re_scoring_a_set_replaces_its_rows_rather_than_appending(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     cfg = generated_pool(tmp_path, monkeypatch)
@@ -724,15 +665,15 @@ def test_re_evaluating_a_run_replaces_its_rows_rather_than_appending(
     results = cfg.evaluation.results_root
 
     evaluate_pools(cfg, DEVICE)
-    once = pd.read_csv(results / "digit_accuracy.csv")
+    once = pd.read_csv(results / "accuracy.csv")
     evaluate_pools(cfg, DEVICE)
-    twice = pd.read_csv(results / "digit_accuracy.csv")
+    twice = pd.read_csv(results / "accuracy.csv")
 
-    assert len(once) == len(twice) == 3
+    assert len(once) == len(twice) == 3 * len(FACTORS)
 
 
 def test_a_second_run_appends_alongside_the_first(tmp_path: Path) -> None:
-    path = tmp_path / "digit_accuracy.csv"
+    path = tmp_path / "accuracy.csv"
     first = pd.DataFrame(
         [{"checkpoint": "a:v1", "seed": 0, "std_correction": 1.0, "value": 0.5}]
     )

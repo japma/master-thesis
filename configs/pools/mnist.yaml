@@ -27,7 +27,7 @@ generation:
 evaluation:
   batch_size: 512
   results_root: results
-  # MNIST has only the digit; every other judged metric reads colour columns.
-  metrics: [digit_accuracy, confusion_digit]
+  # MNIST has only the digit, so every metric scores that factor alone.
+  metrics: [accuracy, confusion]
   halvings: 5
   set_metrics: [fid, kid, precision, recall]

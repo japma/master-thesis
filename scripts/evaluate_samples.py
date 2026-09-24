@@ -1,8 +1,9 @@
 """Stage 2: score every generated model in a dataset's pool with a frozen judge.
 
-Colour-MNIST only for now: every metric needs the digit classifier or reads colours off
-the pixels. Writes one CSV per metric under `evaluation.results_root`, accumulating
-across runs; re-evaluating a model replaces its rows.
+Every metric reads the judge's predictions, so this needs the config's `classifier:`.
+The real set, each VAE round trip and each model are scored once. Writes one CSV per
+metric under `evaluation.results_root`, accumulating across runs; re-scoring a set
+replaces its rows.
 
     uv run evaluate_samples configs/pools/colour_mnist_skewed.yaml
 """
