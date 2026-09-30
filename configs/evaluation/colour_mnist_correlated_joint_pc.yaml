@@ -1,0 +1,49 @@
+# The joint PC on correlated colour-MNIST: the mixture arm plus the exact marginal
+# (`sample_partial_labels`). Same queries as colour_mnist_correlated.yaml, so the rows
+# compare.
+
+type: evaluation
+
+dataset:
+  name: colour_mnist_correlated
+
+model:
+  name: joint_pc_colour_mnist_correlated_variational
+  model_type: joint_pc
+  tag: latest
+
+# Unpinned on purpose: the decoder is whichever autoencoder this checkpoint records
+# being trained against, so the latents always fit.
+
+# Deliberately the uniform judge for every variant, so it is not itself biased towards
+# the combinations this variant over-represents.
+classifier:
+  name: digit_classifier_colour_mnist_uniform
+  tag: latest
+
+generation:
+  n_per_cell: 100
+  seed: 0
+  std_correction: 0.5
+  batch_size: 256
+
+evaluation:
+  batch_size: 512
+  results_root: results
+
+marginal:
+  # [digit, fg, bg]; -1 leaves that factor to the model. fg indices are
+  # red green blue cyan yellow pink; bg indices are white black grey. With several
+  # factors free, each is scored alone and all of them jointly.
+  queries:
+    - [ 0, -1, -1 ]   # green-heavy digit, and green pulls the background to black
+    - [ 5, -1, -1 ]   # p(fg | 5) is uniform although p(green) is 0.40 overall
+    - [ 5, 1, -1 ]    # a green 5: black 0.7, the pairwise fg -> bg rule
+    - [ 3, 1, -1 ]    # a green 3: white 0.7, the three-way exception to that rule
+    - [ 7, -1, -1 ]   # grey 0.6 whatever the foreground: fg and bg independent here
+    - [ 8, -1, -1 ]   # two signature foregrounds, cyan and yellow
+    - [ -1, 1, -1 ]   # green, digit free: p(digit | green) leans on 0-4
+    - [ -1, 1, 1 ]    # green on black: which digits?
+    - [ -1, -1, 2 ]   # grey background: 7 is over-represented
+    - [ -1, -1, -1 ]  # nothing given: the whole p(y), 180 cells jointly
+  n_per_query: 2000

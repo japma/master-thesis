@@ -6,8 +6,7 @@ import pandas as pd
 import pytest
 import torch
 
-from dataset_loaders.colour_mnist import NUM_FG
-from evaluation.colour import BG_PALETTE, FG_PALETTE
+from dataset_loaders.colour_mnist import NUM_BG, NUM_FG
 from evaluation.conditionals import UNSPECIFIED, conditional, total_variation
 from evaluation.marginal import (
     MIXTURE,
@@ -15,11 +14,10 @@ from evaluation.marginal import (
     calibration,
     calibration_histogram,
     free_factors,
-    read_factor,
     run_marginal,
     sample_labels,
 )
-from evaluation.samples import BG, FG
+from evaluation.samples import BG, DIGIT, FG
 from utils.config import (
     CheckpointConfig,
     DatasetConfig,
@@ -38,21 +36,6 @@ RED, GREEN = 0, 1
 WHITE, BLACK = 0, 1
 
 
-def painted(labels: torch.Tensor) -> torch.Tensor:
-    """A centre square of each row's foreground colour on its background colour."""
-    inset = IMAGE_SIZE // 4
-    images = (
-        torch.tensor(BG_PALETTE[labels[:, BG]])
-        .reshape(-1, 3, 1, 1)
-        .expand(-1, 3, IMAGE_SIZE, IMAGE_SIZE)
-        .clone()
-    )
-    images[:, :, inset:-inset, inset:-inset] = torch.tensor(
-        FG_PALETTE[labels[:, FG]]
-    ).reshape(-1, 3, 1, 1)
-    return images
-
-
 def skewed_labels() -> torch.Tensor:
     """Digit 0 is 50% red / 50% green on black; digit 1 is uniform over six colours."""
     rows = []
@@ -64,9 +47,8 @@ def skewed_labels() -> torch.Tensor:
 
 
 # --- queries ---
-def test_a_query_must_specify_the_digit() -> None:
-    with pytest.raises(ValueError, match="digit must be specified"):
-        as_query([-1, RED, BLACK])
+def test_the_digit_can_be_left_free() -> None:
+    assert free_factors(as_query([-1, RED, BLACK])) == [DIGIT]
 
 
 def test_a_query_must_leave_something_to_the_model() -> None:
@@ -113,16 +95,17 @@ def test_a_query_with_no_training_rows_is_refused() -> None:
 def test_a_held_out_query_has_no_conditional_to_score_against() -> None:
     labels = skewed_labels()
     with pytest.raises(ValueError, match="held out"):
-        conditional(labels, torch.tensor([0, UNSPECIFIED, WHITE]), FG)
+        conditional(labels, torch.tensor([0, UNSPECIFIED, WHITE]), [FG])
 
 
 # --- calibration ---
+# The judge is taken to be perfect here: its predictions are the labels themselves.
 def test_a_correctly_distributed_set_scores_near_zero() -> None:
     labels = skewed_labels()
     query = as_query([0, -1, BLACK])
     drawn = sample_labels(query, 2000, labels, torch.Generator().manual_seed(0))
 
-    scores = calibration(painted(drawn), query, labels)
+    scores = calibration(drawn, query, labels)
 
     assert list(scores.columns) == ["digit", "fg", "bg", "factor", "value", "n"]
     assert scores["factor"].tolist() == ["fg"]
@@ -134,10 +117,40 @@ def test_a_collapsed_set_is_caught() -> None:
     query = as_query([0, -1, BLACK])
     always_red = torch.tensor([[0, RED, BLACK]] * 2000)
 
-    scores = calibration(painted(always_red), query, labels)
+    scores = calibration(always_red, query, labels)
 
     # Half the training mass sits on green, and this set never emits it.
     assert scores["value"].iloc[0] == pytest.approx(0.5, abs=0.02)
+
+
+def test_several_free_factors_are_also_scored_jointly() -> None:
+    labels = skewed_labels()
+    drawn = sample_labels(as_query([-1, -1, -1]), 10, labels)
+
+    scores = calibration(drawn, as_query([-1, -1, -1]), labels)
+
+    assert scores["factor"].tolist() == ["digit", "fg", "bg", "digit+fg+bg"]
+
+
+def test_the_joint_catches_independently_sampled_factors() -> None:
+    """Right marginals, wrong dependence: red and black always go together in
+    training, but this set pairs them at random."""
+    labels = torch.tensor([[0, RED, BLACK]] * 500 + [[0, GREEN, WHITE]] * 500)
+    query = as_query([0, -1, -1])
+    generator = torch.Generator().manual_seed(0)
+    independent = torch.stack(
+        [
+            torch.zeros(4000, dtype=torch.long),
+            torch.tensor([RED, GREEN])[torch.randint(2, (4000,), generator=generator)],
+            torch.tensor([BLACK, WHITE])[torch.randint(2, (4000,), generator=generator)],
+        ],
+        dim=1,
+    )
+
+    scores = calibration(independent, query, labels).set_index("factor")["value"]
+
+    assert scores["fg"] < 0.05 and scores["bg"] < 0.05
+    assert scores["fg+bg"] == pytest.approx(0.5, abs=0.05)
 
 
 def test_the_histogram_shows_both_distributions() -> None:
@@ -145,20 +158,21 @@ def test_the_histogram_shows_both_distributions() -> None:
     query = as_query([0, -1, BLACK])
     always_red = torch.tensor([[0, RED, BLACK]] * 100)
 
-    rows = calibration_histogram(painted(always_red), query, labels)
+    rows = calibration_histogram(always_red, query, labels)
 
     assert len(rows) == NUM_FG
     assert rows["generated"].sum() == pytest.approx(1.0)
     assert rows["truth"].sum() == pytest.approx(1.0)
-    assert rows.loc[rows["colour"] == RED, "generated"].item() == 1.0
+    assert rows.loc[rows["class"] == RED, "generated"].item() == 1.0
 
 
-def test_colours_are_read_back_off_the_pixels() -> None:
-    labels = torch.tensor([[0, GREEN, BLACK], [1, RED, WHITE]])
-    images = painted(labels)
+def test_the_joint_histogram_is_laid_out_row_major() -> None:
+    labels = torch.tensor([[0, GREEN, BLACK]] * 10)
+    rows = calibration_histogram(labels, as_query([0, -1, -1]), labels)
 
-    assert read_factor(images, FG).tolist() == [GREEN, RED]
-    assert read_factor(images, BG).tolist() == [BLACK, WHITE]
+    joint = rows[rows["factor"] == "fg+bg"]
+    assert len(joint) == NUM_FG * NUM_BG
+    assert joint.loc[joint["truth"] == 1.0, "class"].item() == GREEN * NUM_BG + BLACK
 
 
 def test_total_variation_is_zero_for_identical_distributions() -> None:
@@ -168,16 +182,23 @@ def test_total_variation_is_zero_for_identical_distributions() -> None:
 
 
 # --- end to end ---
-class PaintingSampler:
-    """A 'model' whose latent is the label, so the decoder paints what was asked."""
+class LabelSampler:
+    """A 'model' whose latent is the label."""
 
     def sample(self, labels: torch.Tensor, std_correction: float = 1.0) -> torch.Tensor:
         return labels.float()
 
 
-class PaintingDecoder:
+class LabelDecoder:
+    """Writes the label into the pixels, one factor per channel."""
+
     def decode(self, z: torch.Tensor) -> torch.Tensor:
-        return painted(z.long())
+        return z.reshape(-1, 3, 1, 1) / 255.0
+
+
+class LabelJudge:
+    def predict(self, images: torch.Tensor) -> torch.Tensor:
+        return (images * 255).round().long().flatten(1)
 
 
 def build_config(root: Path, queries: list[list[int]]) -> EvaluationRunConfig:
@@ -202,7 +223,7 @@ def build_config(root: Path, queries: list[list[int]]) -> EvaluationRunConfig:
 def patch_loaders(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "evaluation.marginal.load_generative_model",
-        lambda *args, **kwargs: (PaintingSampler(), "cspn:v2", Path("model.pt")),
+        lambda *args, **kwargs: (LabelSampler(), "cspn:v2", Path("model.pt")),
     )
     monkeypatch.setattr(
         "evaluation.marginal.resolve_autoencoder",
@@ -210,7 +231,11 @@ def patch_loaders(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     monkeypatch.setattr(
         "evaluation.marginal.load_vae",
-        lambda *args, **kwargs: (PaintingDecoder(), "vae:v1"),
+        lambda *args, **kwargs: (LabelDecoder(), "vae:v1"),
+    )
+    monkeypatch.setattr(
+        "evaluation.marginal.load_judge",
+        lambda *args, **kwargs: (LabelJudge(), "judge:v3"),
     )
     monkeypatch.setattr("evaluation.marginal.check_latent_dim", lambda *a, **k: None)
     monkeypatch.setattr(
@@ -234,8 +259,9 @@ def test_run_marginal_writes_both_csvs(
 
     scores = pd.read_csv(results / "colour_calibration.csv")
     assert {"checkpoint", "seed", "std_correction", "source"} <= set(scores.columns)
+    assert scores["classifier"].unique().tolist() == ["judge:v3"]
     assert scores["source"].unique().tolist() == [MIXTURE]
-    # The stub paints exactly what the mixture drew, so it sits at the floor.
+    # The stub renders exactly what the mixture drew, so it sits at the floor.
     assert scores["value"].max() < 0.05
 
 
@@ -255,5 +281,5 @@ def test_re_running_replaces_rows_rather_than_appending(
 
 
 def test_an_unknown_query_shape_fails_at_config_load(tmp_path: Path) -> None:
-    with pytest.raises(ValueError, match="digit must be specified"):
-        build_config(tmp_path, queries=[[-1, -1, BLACK]])
+    with pytest.raises(ValueError, match=r"a query is \[digit, fg, bg\]"):
+        build_config(tmp_path, queries=[[-1, BLACK]])

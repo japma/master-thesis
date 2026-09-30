@@ -1,0 +1,50 @@
+# The correlated colour-MNIST pool: every model trained on this variant, sampled once into
+# results/pools/colour_mnist_correlated and scored from there.
+#
+#   uv run generate_pools   configs/pools/colour_mnist_correlated.yaml
+#   uv run evaluate_samples configs/pools/colour_mnist_correlated.yaml
+#   uv run evaluate_sets    configs/pools/colour_mnist_correlated.yaml
+#
+# A listed model wandb does not have is reported and skipped. Omit `version` for the
+# latest, which is resolved to its vN; pin one with e.g. `version: v3`. Each model is
+# decoded by the autoencoder its checkpoint records.
+
+type: pools
+
+dataset:
+  name: colour_mnist_correlated
+
+models:
+  - { type: cspn, name: cspn_colour_mnist_correlated_variational }
+  - { type: cspn, name: cspn_colour_mnist_correlated_variational_dontcare }
+  - { type: nn_baseline, name: nn_baseline_colour_mnist_correlated_variational_deterministic }
+  - { type: nn_baseline, name: nn_baseline_colour_mnist_correlated_variational_mixture }
+  - { type: cspn, name: cspn_colour_mnist_correlated_anchored }
+  - { type: cspn, name: cspn_colour_mnist_correlated_anchored_dontcare }
+  - { type: nn_baseline, name: nn_baseline_colour_mnist_correlated_anchored_deterministic }
+  - { type: nn_baseline, name: nn_baseline_colour_mnist_correlated_anchored_mixture }
+  - { type: cspn, name: cspn_colour_mnist_correlated_supervised }
+  - { type: cspn, name: cspn_colour_mnist_correlated_supervised_dontcare }
+  - { type: nn_baseline, name: nn_baseline_colour_mnist_correlated_supervised_deterministic }
+  - { type: nn_baseline, name: nn_baseline_colour_mnist_correlated_supervised_mixture }
+  - { type: joint_pc, name: joint_pc_colour_mnist_correlated_variational, std_correction: 0.5 }
+
+# Deliberately the uniform judge for every variant, so it is not itself weaker on
+# combinations the model under test never saw.
+classifier:
+  name: digit_classifier_colour_mnist_uniform
+  tag: latest
+
+generation:
+  # Every (digit, fg, bg) cell, held-out ones included: a schedule that only asked for
+  # what the model saw could not show the generalization gap.
+  labels: stratified
+  n_per_cell: 100
+  seeds: [0]
+  batch_size: 256
+
+evaluation:
+  batch_size: 512
+  results_root: results
+  # Every metric in `evaluation.metrics.METRICS` runs by default; pin a subset with e.g.
+  # metrics: [accuracy, accuracy_by_combination]

@@ -9,6 +9,7 @@ from dataset_loaders import build_data_loaders
 from dataset_loaders.latent_normalizer import LatentNormalizer
 from models.cspn.joint_pc import JointPC
 from training.inputs import load_training_autoencoder
+from training.early_stopping import build_early_stopping
 from training.loop import CheckpointSpec, run_training_loop
 from training.objectives.joint_pc import JointPCObjective
 from utils.checkpoints import (
@@ -132,6 +133,7 @@ def main() -> None:
         resume=resume,
         sample_probe=sample_labels,
         sample_log_key="samples/joint_pc_generated_images",
+        early_stopping=build_early_stopping(training_cfg),
     )
 
     wandb.finish()

@@ -1,0 +1,40 @@
+# colour-MNIST, correlated variant (configs/colour_mnist/correlated.csv).
+#
+# No cell is zero (the rarest is 1.1% of its digit, ~60 images), and the factors are
+# deliberately dependent, so marginalizing one is a real test of the density:
+#   p(fg | digit)      0-4 are 70% green, 5 uniform, 6 red, 7 blue, 8 cyan+yellow, 9 pink.
+#                      Globally p(green) = 0.40 while p(green | 5) = 0.17.
+#   p(bg | fg)         green -> black 0.7, red -> white 0.6, cyan -> grey 0.6,
+#                      yellow -> black 0.6, blue and pink uniform.
+#   three-way          green 3s flip to white (0.7): p(bg | green, 3) != p(bg | green).
+#   p(bg | digit)      digit 7 is 60% grey whatever its foreground.
+#
+# `seen_mask` is all-True, so the held-out column of an eval report is empty by design.
+#
+# On the supervised VAE: vae_colour_mnist_correlated_supervised.
+
+type: nn_baseline
+
+dataset:
+  name: colour_mnist_correlated
+
+autoencoder:
+  name: "vae_colour_mnist_correlated_supervised"
+  external: false
+  tag: "latest"
+
+model:
+  model_type: mixture
+  num_vars: 16
+  h_dims: [ 256, 128 ]
+  num_components: 16
+  min_std: 0.001
+  max_std: 2.0
+  encoder_config:
+    encoder_type: multi_categorical
+    num_classes: [ 10, 6, 3 ]
+
+training:
+  epochs: 200
+  learning_rate: 0.0003
+  batch_size: 128

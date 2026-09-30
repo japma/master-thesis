@@ -221,6 +221,7 @@ _DATASETS = {
     "colour_mnist_uniform": partial(_load_colour_mnist, variant="uniform"),
     "colour_mnist_skewed": partial(_load_colour_mnist, variant="skewed"),
     "colour_mnist_rgb": partial(_load_colour_mnist, variant="rgb"),
+    "colour_mnist_correlated": partial(_load_colour_mnist, variant="correlated"),
     "colour_mnist_uniform_x2": partial(_load_colour_mnist, variant="uniform_x2"),
     "colour_mnist_skewed_x2": partial(_load_colour_mnist, variant="skewed_x2"),
 }

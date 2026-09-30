@@ -12,6 +12,7 @@ from dataset_loaders.latent_normalizer import LatentNormalizer
 from models.cspn.psinet.label_pc import LabelPC
 from models.cspn.psinet_cspn import PsiNetCSPN
 from training.inputs import load_training_autoencoder
+from training.early_stopping import build_early_stopping
 from training.loop import CheckpointSpec, run_training_loop
 from training.objectives.cspn import CSPNObjective
 from utils.checkpoints import (
@@ -260,6 +261,7 @@ def main() -> None:
         resume=resume,
         sample_probe=sample_labels,
         sample_log_key="samples/cspn_generated_images",
+        early_stopping=build_early_stopping(training_cfg),
     )
 
     wandb.finish()

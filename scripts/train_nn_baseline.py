@@ -8,7 +8,7 @@ from torchinfo import summary
 import wandb
 from dataset_loaders import build_data_loaders
 from models.neural_baseline import build_neural_baseline
-from training.early_stopping import EarlyStopping
+from training.early_stopping import build_early_stopping
 from training.inputs import load_training_autoencoder
 from training.loop import CheckpointSpec, run_training_loop
 from training.objectives.nn_baseline import NeuralBaselineObjective
@@ -95,16 +95,6 @@ def main() -> None:
     )
     rtpt.start()
 
-    early_stopping = EarlyStopping(
-        patience=training_cfg.early_stopping_patience,
-        min_delta=training_cfg.early_stopping_min_delta,
-    )
-    print(
-        f"Early stopping on val total: patience "
-        f"{training_cfg.early_stopping_patience}, min_delta "
-        f"{training_cfg.early_stopping_min_delta}"
-    )
-
     checkpoint = CheckpointSpec(
         intermediate_path=ckpt_path,
         final_path=final_checkpoint_path(run_name),
@@ -123,7 +113,7 @@ def main() -> None:
         resume=resume,
         sample_probe=_sample_labels(cfg, test_loader, device),
         sample_log_key="samples/nn_baseline_generated_images",
-        early_stopping=None,
+        early_stopping=build_early_stopping(training_cfg),
     )
 
     wandb.finish()

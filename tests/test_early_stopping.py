@@ -57,6 +57,18 @@ def test_improvement_must_exceed_min_delta() -> None:
     assert stopper.best_epoch == 2
 
 
+def test_no_stop_before_min_epochs_but_best_is_still_tracked() -> None:
+    stopper = EarlyStopping(patience=2, min_delta=0.0, min_epochs=5)
+    model = model_with(0.0)
+
+    stopper.step(1.0, model, epoch=0)
+    for epoch in range(1, 4):
+        assert stopper.step(2.0, model, epoch=epoch) is False
+    assert stopper.epochs_without_improvement == 3
+    assert stopper.step(2.0, model, epoch=4) is True
+    assert stopper.best_epoch == 0
+
+
 def test_restores_the_best_weights_not_the_last() -> None:
     stopper = EarlyStopping(patience=5, min_delta=0.0)
 

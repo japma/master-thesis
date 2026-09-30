@@ -5,6 +5,9 @@ model was actually trained on, not read from the weight table: the table is the 
 the labels are what happened.
 """
 
+import math
+from collections.abc import Sequence
+
 import torch
 
 from dataset_loaders import build_dataset
@@ -40,15 +43,30 @@ def matching(labels: torch.Tensor, query: torch.Tensor) -> torch.Tensor:
     return rows
 
 
-def conditional(labels: torch.Tensor, query: torch.Tensor, factor: int) -> torch.Tensor:
-    """p(factor | the query's specified factors), as a `(cardinality,)` tensor."""
+def cell_index(values: torch.Tensor, factors: Sequence[int]) -> torch.Tensor:
+    """Flat index of each row's values over `factors`, row-major in the order given."""
+    index = torch.zeros(values.shape[0], dtype=torch.long)
+    for column, factor in enumerate(factors):
+        index = index * CARDINALITIES[factor] + values[:, column]
+    return index
+
+
+def num_cells(factors: Sequence[int]) -> int:
+    return math.prod(CARDINALITIES[f] for f in factors)
+
+
+def conditional(
+    labels: torch.Tensor, query: torch.Tensor, factors: Sequence[int]
+) -> torch.Tensor:
+    """p(factors | the query's specified factors), flattened as `cell_index` lays it out."""
     rows = matching(labels, query)
     if not bool(rows.any()):
         raise ValueError(
             f"no training rows match query {query.tolist()}, so it has no conditional "
             "to be scored against -- that combination was held out"
         )
-    counts = torch.bincount(labels[rows, factor], minlength=CARDINALITIES[factor])
+    cells = cell_index(labels[rows][:, list(factors)], factors)
+    counts = torch.bincount(cells, minlength=num_cells(factors))
     return counts / counts.sum()
 
 

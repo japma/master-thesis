@@ -168,6 +168,38 @@ def test_sample_partial_labels_completes_the_unspecified_factors(
         assert z[rows, 0].mean().item() == pytest.approx(BG_MEANS[bg].item(), abs=0.5)
 
 
+@pytest.mark.parametrize("known", [{0: 3}, {1: 2, 2: 0}])
+def test_partial_label_samples_follow_the_exact_conditional(
+    known: dict[int, int],
+) -> None:
+    """The labels `sample_partial_labels` completes must be distributed as
+    p(y_free | y_known) computed exactly from `label_log_marginal`. Untrained, because
+    random sum weights give a p(y) far from uniform, which a broken sampler would miss.
+    """
+    model = build()
+    combinations = torch.cartesian_prod(*(torch.arange(c) for c in CARDINALITIES))
+    with torch.no_grad():
+        joint = model.label_log_marginal(combinations).exp()
+    rows = torch.ones(len(combinations), dtype=torch.bool)
+    for factor, value in known.items():
+        rows &= combinations[:, factor] == value
+    exact = joint[rows] / joint[rows].sum()
+
+    torch.manual_seed(5)
+    n = 4000
+    with torch.no_grad():
+        _, labels = model.sample_partial_labels(known, batch_size=n)
+    cell = {tuple(c): i for i, c in enumerate(combinations[rows].tolist())}
+    counts = torch.zeros(len(exact))
+    for row in labels.tolist():
+        counts[cell[tuple(row)]] += 1
+    sampled = counts / n
+
+    uniform = torch.full_like(exact, 1 / len(exact))
+    assert 0.5 * (exact - uniform).abs().sum() > 0.1
+    assert 0.5 * (sampled - exact).abs().sum() < 0.05
+
+
 def test_conditional_partial_holds_known_latents(trained: JointPC) -> None:
     labels = torch.tensor([[3, 1, 2]] * 8)
     z = trained.sample_conditional_partial(labels, known={1: 1.5, 4: -2.0})

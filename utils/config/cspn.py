@@ -114,8 +114,12 @@ class CSPNConfig(BaseModel):
 
 
 class CSPNTrainingConfig(BaseTrainingConfig):
-    early_stopping_patience: int = 10
-    early_stopping_min_delta: float = 0.01
+    # On val `total`, and the best epoch's weights are what gets saved. The LR follows a
+    # cosine over `epochs`, so a plateau while it is still high is not a real one: no
+    # stop before `early_stopping_min_epochs`. None patience turns stopping off.
+    early_stopping_patience: int | None = Field(default=25, ge=1)
+    early_stopping_min_delta: float = Field(default=0.001, ge=0.0)
+    early_stopping_min_epochs: int = Field(default=100, ge=0)
 
 
 class PretrainedLabelPCConfig(BaseModel):

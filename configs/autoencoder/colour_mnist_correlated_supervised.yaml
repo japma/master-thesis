@@ -1,0 +1,48 @@
+# colour-MNIST, correlated variant (configs/colour_mnist/correlated.csv).
+#
+# No cell is zero (the rarest is 1.1% of its digit, ~60 images), and the factors are
+# deliberately dependent, so marginalizing one is a real test of the density:
+#   p(fg | digit)      0-4 are 70% green, 5 uniform, 6 red, 7 blue, 8 cyan+yellow, 9 pink.
+#                      Globally p(green) = 0.40 while p(green | 5) = 0.17.
+#   p(bg | fg)         green -> black 0.7, red -> white 0.6, cyan -> grey 0.6,
+#                      yellow -> black 0.6, blue and pink uniform.
+#   three-way          green 3s flip to white (0.7): p(bg | green, 3) != p(bg | green).
+#   p(bg | digit)      digit 7 is 60% grey whatever its foreground.
+#
+# `seen_mask` is all-True, so the held-out column of an eval report is empty by design.
+#
+# Cross-entropy heads per factor: the latent blocks are *sufficient* for each
+# factor without being exclusive to it, so a block can still leak.
+
+type: ae
+
+dataset:
+  name: colour_mnist_correlated
+
+model:
+  model_type: supervised
+  latent_dim: 16
+  num_blocks: 2
+  base_channels: 32
+  # Targets are [digit, fg, bg]; 6 of the 16 dimensions stay free for style.
+  supervision:
+    names: [digit, fg, bg]
+    dims: [5, 3, 2]
+    cardinalities: [10, 6, 3]
+
+training:
+  vae_type: beta
+  epochs: 100
+  learning_rate: 0.0005
+  batch_size: 128
+  beta: 1.0
+  beta_start: 0.0
+  beta_end: 1.0
+  kl_warmup_epochs: 10
+  lambda_perceptual: 0.0
+  # Recon is a per-image BCE sum (hundreds); a cross-entropy starts near 2.3, so the
+  # classification term only bites once gamma is well above 1. Tune against the
+  # per-factor accuracies in wandb.
+  gamma_start: 0.0
+  gamma_end: 10.0
+  classifier_warmup_epochs: 10

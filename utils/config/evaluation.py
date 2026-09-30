@@ -116,8 +116,8 @@ class MarginalConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    # Each query is [digit, fg, bg]; -1 leaves that factor free. The digit must be
-    # given: reading a digit back needs the judge, the colours are read off pixels.
+    # Each query is [digit, fg, bg]; -1 leaves that factor free. The judge reads every
+    # factor back, so any subset may be free.
     queries: list[list[int]]
     n_per_query: int = Field(default=1000, ge=1)
 

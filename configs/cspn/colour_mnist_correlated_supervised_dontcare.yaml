@@ -1,0 +1,51 @@
+# colour-MNIST, correlated variant (configs/colour_mnist/correlated.csv).
+#
+# No cell is zero (the rarest is 1.1% of its digit, ~60 images), and the factors are
+# deliberately dependent, so marginalizing one is a real test of the density:
+#   p(fg | digit)      0-4 are 70% green, 5 uniform, 6 red, 7 blue, 8 cyan+yellow, 9 pink.
+#                      Globally p(green) = 0.40 while p(green | 5) = 0.17.
+#   p(bg | fg)         green -> black 0.7, red -> white 0.6, cyan -> grey 0.6,
+#                      yellow -> black 0.6, blue and pink uniform.
+#   three-way          green 3s flip to white (0.7): p(bg | green, 3) != p(bg | green).
+#   p(bg | digit)      digit 7 is 60% grey whatever its foreground.
+#
+# `seen_mask` is all-True, so the held-out column of an eval report is empty by design.
+#
+# On the supervised VAE: vae_colour_mnist_correlated_supervised.
+# Identical to colour_mnist_correlated_supervised.yaml except for label_dropout_prob,
+# so the pair isolates what the don't-care token costs and buys. Not
+# checkpoint-compatible with the plain CSPN: the conditioning input is wider.
+
+type: cspn
+
+dataset:
+  name: colour_mnist_correlated
+
+autoencoder:
+  name: "vae_colour_mnist_correlated_supervised"
+  external: false
+  tag: "latest"
+
+model:
+  model_type: "psinet"
+  num_vars: 16
+  num_repetitions: 3
+  num_input_distributions: 8
+  num_sums: 8
+  min_var: 0.001
+  max_var: 4.0
+  h_dims: [ 256, 128 ]
+  normalize_latents: true
+  encoder_config:
+    encoder_type: multi_categorical
+    # classes, fg colours, bg colours
+    num_classes: [ 10, 6, 3 ]
+    # Adds an 11th digit / 7th fg / 4th bg meaning "unspecified". Each factor is dropped
+    # independently, so at 0.3: 34% of rows stay fully specified, 6% lose both colours
+    # (what a [digit, -1, -1] query asks for) and 2.7% lose all three.
+    label_dropout_prob: 0.3
+
+training:
+  epochs: 200
+  learning_rate: 0.0003
+  batch_size: 128

@@ -21,6 +21,7 @@ class DatasetName(StrEnum):
     COLOUR_MNIST_UNIFORM = "colour_mnist_uniform"
     COLOUR_MNIST_SKEWED = "colour_mnist_skewed"
     COLOUR_MNIST_RGB = "colour_mnist_rgb"
+    COLOUR_MNIST_CORRELATED = "colour_mnist_correlated"
     COLOUR_MNIST_UNIFORM_X2 = "colour_mnist_uniform_x2"
     COLOUR_MNIST_SKEWED_X2 = "colour_mnist_skewed_x2"
 

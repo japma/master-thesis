@@ -2,13 +2,14 @@
 
 A query is a label row with `UNSPECIFIED` where a factor is free. Nothing here scores a
 single sample: with a factor free there is no single right answer, only a right *mix*,
-so the unit of measurement is the histogram over one query's samples.
+so the unit of measurement is the histogram over one query's samples, read by the judge.
 
 Two pieces:
   `sample_labels`  the mixture reference -- free factors drawn from the training
                    conditional, then the model is asked a fully specified question.
                    Correct by construction, so its calibration is the floor.
-  `calibration`    how far a set of images is from the distribution it should have.
+  `calibration`    how far a set of judged images is from the distribution it should
+                   have: each free factor alone, and all of them jointly.
 """
 
 from collections.abc import Sequence
@@ -17,22 +18,16 @@ import pandas as pd
 import torch
 
 from dataset_loaders.colour_mnist import FACTOR_NAMES
-from evaluation.colour import (
-    BG_PALETTE,
-    FG_PALETTE,
-    border_colour,
-    foreground_colour,
-    nearest_palette_index,
-)
 from evaluation.conditionals import (
-    CARDINALITIES,
     UNSPECIFIED,
+    cell_index,
     conditional,
     matching,
+    num_cells,
     total_variation,
     training_labels,
 )
-from evaluation.evaluate import RUN_KEYS, tag, write_metric
+from evaluation.evaluate import RUN_KEYS, load_judge, predict, tag, write_metric
 from evaluation.generate import (
     check_latent_dim,
     load_generative_model,
@@ -40,42 +35,43 @@ from evaluation.generate import (
     resolve_autoencoder,
     sample_and_decode,
 )
-from evaluation.samples import BG, DIGIT, FG, to_float, to_uint8
+from evaluation.samples import to_uint8
 from models.cspn.joint_pc import JointPC
 from models.cspn.psinet_cspn import PsiNetCSPN
 from utils.config import EvaluationRunConfig
 from utils.progress import start_rtpt
 from utils.reproducibility import seed_everything
 
-# The judge reads digits, the palette reads colours; only the latter is available here,
-# so a query has to say which digit it wants.
-READABLE = (FG, BG)
-
 
 def as_query(query: Sequence[int]) -> torch.Tensor:
     """Validate a `[digit, fg, bg]` spec and return it as a tensor."""
     row = torch.tensor(list(query), dtype=torch.long)
-    if row.shape != (3,):
+    if row.shape != (len(FACTOR_NAMES),):
         raise ValueError(f"a query is [digit, fg, bg], got {list(query)}")
-    if int(row[DIGIT]) == UNSPECIFIED:
-        raise ValueError(
-            "digit must be specified: reading a digit back needs the judge, which "
-            "this path does not load"
-        )
-    free = free_factors(row)
-    if not free:
+    if not free_factors(row):
         raise ValueError(
             f"query {list(query)} specifies every factor -- nothing is marginalized"
         )
-    for factor in free:
-        if factor not in READABLE:
-            raise ValueError(f"factor {FACTOR_NAMES[factor]} cannot be read off pixels")
     return row
 
 
 def free_factors(query: torch.Tensor) -> list[int]:
     """Which factors the query leaves to the model."""
     return [f for f, value in enumerate(query.tolist()) if value == UNSPECIFIED]
+
+
+def scored_groups(query: torch.Tensor) -> list[list[int]]:
+    """Each free factor alone, then all of them jointly when there are several.
+
+    The joint row is what catches a model that gets every marginal right but samples
+    the free factors independently of each other.
+    """
+    free = free_factors(query)
+    return [[f] for f in free] + ([free] if len(free) > 1 else [])
+
+
+def group_name(factors: Sequence[int]) -> str:
+    return "+".join(FACTOR_NAMES[f] for f in factors)
 
 
 def sample_labels(
@@ -97,18 +93,10 @@ def sample_labels(
     return candidates[idx].clone()
 
 
-def read_factor(images: torch.Tensor, factor: int) -> torch.Tensor:
-    """The factor each image actually shows, read off the pixels."""
-    if factor == FG:
-        return nearest_palette_index(foreground_colour(images), FG_PALETTE)
-    if factor == BG:
-        return nearest_palette_index(border_colour(images), BG_PALETTE)
-    raise ValueError(f"factor {factor} cannot be read off pixels")
-
-
-def histogram(values: torch.Tensor, factor: int) -> torch.Tensor:
-    """Frequency of each value of `factor`, over a query's samples."""
-    counts = torch.bincount(values, minlength=CARDINALITIES[factor])
+def histogram(predictions: torch.Tensor, factors: Sequence[int]) -> torch.Tensor:
+    """Frequency of each cell over `factors`, over a query's judged samples."""
+    cells = cell_index(predictions[:, list(factors)], factors)
+    counts = torch.bincount(cells, minlength=num_cells(factors))
     return counts / counts.sum()
 
 
@@ -117,41 +105,47 @@ def _query_columns(query: torch.Tensor) -> dict[str, int]:
 
 
 def calibration(
-    images: torch.Tensor, query: torch.Tensor, labels: torch.Tensor
+    predictions: torch.Tensor, query: torch.Tensor, labels: torch.Tensor
 ) -> pd.DataFrame:
-    """One row per free factor: how far the generated mix is from the training one."""
+    """One row per scored group: how far the generated mix is from the training one.
+
+    :param predictions: `(N, factors)` the judge's reading of the query's samples.
+    """
     rows = []
-    for factor in free_factors(query):
-        generated = histogram(read_factor(images, factor), factor)
-        truth = conditional(labels, query, factor)
+    for factors in scored_groups(query):
+        generated = histogram(predictions, factors)
+        truth = conditional(labels, query, factors)
         rows.append(
             {
                 **_query_columns(query),
-                "factor": FACTOR_NAMES[factor],
+                "factor": group_name(factors),
                 "value": total_variation(generated, truth),
-                "n": int(images.shape[0]),
+                "n": int(predictions.shape[0]),
             }
         )
     return pd.DataFrame(rows)
 
 
 def calibration_histogram(
-    images: torch.Tensor, query: torch.Tensor, labels: torch.Tensor
+    predictions: torch.Tensor, query: torch.Tensor, labels: torch.Tensor
 ) -> pd.DataFrame:
-    """The two distributions behind each `calibration` row, for the diagnostic plot."""
+    """The two distributions behind each `calibration` row, for the diagnostic plot.
+
+    `class` is the cell index over the group's factors, row-major in `factor`'s order.
+    """
     rows = []
-    for factor in free_factors(query):
-        generated = histogram(read_factor(images, factor), factor)
-        truth = conditional(labels, query, factor)
-        for value in range(CARDINALITIES[factor]):
+    for factors in scored_groups(query):
+        generated = histogram(predictions, factors)
+        truth = conditional(labels, query, factors)
+        for cell in range(num_cells(factors)):
             rows.append(
                 {
                     **_query_columns(query),
-                    "factor": FACTOR_NAMES[factor],
-                    "colour": value,
-                    "generated": float(generated[value]),
-                    "truth": float(truth[value]),
-                    "n": int(images.shape[0]),
+                    "factor": group_name(factors),
+                    "class": cell,
+                    "generated": float(generated[cell]),
+                    "truth": float(truth[cell]),
+                    "n": int(predictions.shape[0]),
                 }
             )
     return pd.DataFrame(rows)
@@ -250,20 +244,10 @@ def dont_care_samples(
     return images
 
 
-def score(
-    images: torch.Tensor, query: torch.Tensor, labels: torch.Tensor
-) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Both tables for one arm of one query: the distance, and the two histograms."""
-    pixels = to_float(images)
-    return (
-        calibration(pixels, query, labels),
-        calibration_histogram(pixels, query, labels),
-    )
-
-
-def run_columns(cfg: EvaluationRunConfig, model: str, vae: str, seed: int) -> dict:
-    """The identity columns, as a pool's metrics carry them. No `classifier`: nothing
-    here runs the judge, the colours are read straight off the pixels."""
+def run_columns(
+    cfg: EvaluationRunConfig, model: str, vae: str, classifier: str, seed: int
+) -> dict:
+    """The identity columns, as a pool's metrics carry them."""
     return {
         "model": cfg.model.model_type,
         "dataset": cfg.dataset.name,
@@ -271,6 +255,7 @@ def run_columns(cfg: EvaluationRunConfig, model: str, vae: str, seed: int) -> di
         "seed": seed,
         "std_correction": cfg.generation.std_correction,
         "vae": vae,
+        "classifier": classifier,
     }
 
 
@@ -281,6 +266,10 @@ def run_marginal(cfg: EvaluationRunConfig, device: torch.device) -> None:
             "this config has no `marginal:` block, so there are no queries to run"
         )
 
+    if cfg.classifier is None:
+        raise ValueError(
+            "this config has no `classifier:`, and every factor is read by the judge"
+        )
     if cfg.dataset.labels is not None:
         raise ValueError(
             f"dataset.labels is {list(cfg.dataset.labels)}, but marginal queries "
@@ -295,9 +284,10 @@ def run_marginal(cfg: EvaluationRunConfig, device: torch.device) -> None:
     vae, resolved_vae = load_vae(name, tag_, external, cfg.dataset, device)
     seed = seed_everything(cfg.generation.seed)
     generator = torch.Generator().manual_seed(seed)
+    judge, classifier = load_judge(cfg.classifier, device)
     labels = training_labels(cfg.dataset.name)
     check_latent_dim(model, vae, device, resolved_model, resolved_vae, labels)
-    columns = run_columns(cfg, resolved_model, resolved_vae, seed)
+    columns = run_columns(cfg, resolved_model, resolved_vae, classifier, seed)
     keys = {key: columns[key] for key in RUN_KEYS}
 
     n = cfg.marginal.n_per_query
@@ -351,9 +341,13 @@ def run_marginal(cfg: EvaluationRunConfig, device: torch.device) -> None:
             )
         for arm, images in arms.items():
             rtpt.step(subtitle=f"{arm} {spec}")
-            distance, histogram_table = score(images, query, labels)
-            distances.append(tag(distance, columns, arm))
-            histograms.append(tag(histogram_table, columns, arm))
+            predictions = predict(
+                judge, images, device, cfg.evaluation.batch_size, f"judging {arm}"
+            )
+            distances.append(tag(calibration(predictions, query, labels), columns, arm))
+            histograms.append(
+                tag(calibration_histogram(predictions, query, labels), columns, arm)
+            )
 
     results_root = cfg.evaluation.results_root
     distance_table = pd.concat(distances, ignore_index=True)
@@ -370,4 +364,4 @@ def _print_summary(distances: pd.DataFrame) -> None:
     print("\ncolour calibration (total variation, lower is better)")
     for row in distances.itertuples(index=False):
         query = f"[{row.digit}, {row.fg}, {row.bg}]"
-        print(f"  {query:<14} {row.source:<13} {row.factor:<3} {row.value:.4f}")
+        print(f"  {query:<14} {row.source:<13} {row.factor:<13} {row.value:.4f}")
