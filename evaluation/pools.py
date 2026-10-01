@@ -6,6 +6,9 @@
     vaes/<vae>/<vN>/           real/ encoded (latents) and decoded again (images)
     seed<s>/<type>/<model>/<vN>/std<x>/
                                generated latents and images, one per conditioning row
+    marginal/real/<query>/     training images matching a query with factors left free
+    marginal/seed<s>/<type>/<model>/<vN>/std<x>/<arm>/<query>/
+                               one model's answer to that query, by one sampling arm
 
 Nothing in real/ or vaes/ is random, so only the generated samples sit under a seed.
 Conditioning labels are either real/'s own (`real`, sample i conditioned on image i) or
@@ -77,7 +80,31 @@ class ModelManifest:
     kind: str = "samples"
 
 
-Manifest = RealManifest | ConditioningManifest | ReconstructionManifest | ModelManifest
+@dataclass(frozen=True)
+class MarginalManifest:
+    """One query's set of images. `query` is `[digit, fg, bg]` with -1 for a free
+    factor; the model fields are None for the real set."""
+
+    dataset: str
+    query: list[int]
+    arm: str
+    n: int
+    git_commit: str | None
+    model_type: str | None = None
+    model_checkpoint: str | None = None
+    vae_checkpoint: str | None = None
+    seed: int | None = None
+    std_correction: float | None = None
+    kind: str = "marginal"
+
+
+Manifest = (
+    RealManifest
+    | ConditioningManifest
+    | ReconstructionManifest
+    | ModelManifest
+    | MarginalManifest
+)
 
 
 # --- layout ---
@@ -116,6 +143,32 @@ def model_dir(
 ) -> Path:
     name, version = split_ref(model_ref)
     return model_root(dataset_dir, seed, model_type, name) / version / f"std{std:g}"
+
+
+def marginal_dir(dataset_dir: Path) -> Path:
+    return dataset_dir / "marginal"
+
+
+def query_key(query: list[int]) -> str:
+    """`[3, 1, -1]` -> `3_1_x`."""
+    return "_".join("x" if value < 0 else str(value) for value in query)
+
+
+def real_marginal_dir(dataset_dir: Path, query: list[int]) -> Path:
+    return marginal_dir(dataset_dir) / "real" / query_key(query)
+
+
+def model_marginal_dir(
+    dataset_dir: Path,
+    seed: int,
+    model_type: str,
+    model_ref: str,
+    std: float,
+    arm: str,
+    query: list[int],
+) -> Path:
+    base = model_dir(marginal_dir(dataset_dir), seed, model_type, model_ref, std)
+    return base / arm / query_key(query)
 
 
 # --- writing ---

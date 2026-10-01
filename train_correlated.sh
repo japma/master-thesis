@@ -155,7 +155,7 @@ if [[ ${#FAILED[@]} -eq 0 ]]; then
     echo
     echo "Next: uv run generate_pools    configs/pools/colour_mnist_correlated.yaml"
     echo "Then: uv run evaluate_samples  configs/pools/colour_mnist_correlated.yaml"
-    echo "      uv run evaluate_marginal configs/evaluation/colour_mnist_correlated.yaml"
+    echo "      uv run evaluate_marginal configs/pools/colour_mnist_correlated.yaml"
 else
     echo "${#FAILED[@]} run(s) failed:"
     printf '  %s\n' "${FAILED[@]}"

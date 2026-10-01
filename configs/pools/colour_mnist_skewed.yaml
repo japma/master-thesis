@@ -47,3 +47,12 @@ evaluation:
   results_root: results
   # Every metric in `evaluation.metrics.METRICS` runs by default; pin a subset with e.g.
   # metrics: [accuracy, accuracy_by_combination]
+
+# Queries with factors left free, sampled into <pool>/marginal/ by generate_pools and
+# scored by evaluate_marginal.
+marginal:
+  queries:
+    - [0, -1, -1]   # the skewed digit: p(fg | 0) leans red
+    - [1, -1, -1]   # control: digit 1 is uniform over the six foregrounds
+    - [0, 0, -1]    # a red 0, background free
+  n_per_query: 1000

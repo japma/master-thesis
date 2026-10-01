@@ -766,11 +766,17 @@ def test_shipped_pool_configs_validate() -> None:
         assert all(model.type in MODEL_TYPES for model in cfg.models)
 
 
-def test_shipped_marginal_configs_validate() -> None:
+def test_shipped_evaluation_configs_validate() -> None:
     for path in sorted(Path("configs/evaluation").glob("*.yaml")):
         raw = _apply_dataset_defaults(yaml.safe_load(path.read_text()))
-        cfg = EvaluationRunConfig.model_validate(raw)
-        assert cfg.marginal is not None
+        EvaluationRunConfig.model_validate(raw)
+
+
+def test_the_colour_mnist_pools_carry_marginal_queries() -> None:
+    for variant in ("uniform", "skewed", "correlated"):
+        path = Path(f"configs/pools/colour_mnist_{variant}.yaml")
+        raw = _apply_dataset_defaults(yaml.safe_load(path.read_text()))
+        assert PoolRunConfig.model_validate(raw).marginal is not None
 
 
 def test_an_unknown_config_key_is_refused() -> None:

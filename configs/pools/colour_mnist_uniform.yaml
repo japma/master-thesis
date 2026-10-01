@@ -30,3 +30,11 @@ generation:
 evaluation:
   batch_size: 512
   results_root: results
+
+# Queries with factors left free, sampled into <pool>/marginal/ by generate_pools and
+# scored by evaluate_marginal.
+marginal:
+  queries:
+    - [0, -1, -1]
+    - [5, -1, -1]
+  n_per_query: 1000

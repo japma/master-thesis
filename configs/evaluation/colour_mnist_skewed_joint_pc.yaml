@@ -1,7 +1,5 @@
-# The joint PC on skewed colour-MNIST, evaluated exactly like the CSPN beside it.
-#
-# Same dataset, same judge, same queries as colour_mnist_skewed.yaml -- only the model
-# differs, so the two are directly comparable row by row in results/*.csv.
+# The joint PC on skewed colour-MNIST, for `diagnose_joint_pc`. Marginal queries live in
+# configs/pools/colour_mnist_skewed.yaml.
 
 type: evaluation
 
@@ -29,10 +27,3 @@ generation:
 evaluation:
   batch_size: 512
   results_root: results
-
-marginal:
-  queries:
-    - [ 0, -1, -1 ]   # the skewed digit: p(fg | 0) leans red
-    - [ 1, -1, -1 ]   # control: digit 1 is uniform over the six foregrounds
-    - [ 0, 0, -1 ]    # a red 0, background free
-  n_per_query: 1000

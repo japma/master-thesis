@@ -6,6 +6,9 @@ carries the model's name on the axis beside it.
 
     uv run plot_results                                     # colour_mnist_skewed
     uv run plot_results --dataset colour_mnist_uniform
+
+With `colour_calibration*.csv` present (from `evaluate_marginal`), also an overview of
+every marginal query and one histogram figure per query.
 """
 
 import argparse
@@ -13,6 +16,8 @@ from pathlib import Path
 
 import matplotlib
 import pandas as pd
+
+from dataset_loaders.colour_mnist import BG_NAMES, FG_NAMES
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -274,6 +279,184 @@ def plot_steering(results: Path, out: Path, dataset: str) -> Path | None:
     return figure
 
 
+# The sampling arms of a marginal query, in reading order.
+ARMS = ("real", "mixture", "dont_care", "marginalized")
+FACTOR_VALUES = {"digit": [str(d) for d in range(10)], "fg": FG_NAMES, "bg": BG_NAMES}
+
+
+def newest_versions(table: pd.DataFrame) -> pd.DataFrame:
+    """Only the newest scored version of each model; the real rows stay."""
+    named = table["checkpoint"].notna()
+    collection = table.loc[named, "checkpoint"].str.rsplit(":", n=1).str[0]
+    version = table.loc[named, "checkpoint"].str.rsplit(":v", n=1).str[1].astype(int)
+    newest = version == version.groupby(collection).transform("max")
+    return pd.concat([table[~named], table[named][newest]])
+
+
+def calibration_rows(results: Path, name: str, dataset: str) -> pd.DataFrame | None:
+    """A calibration CSV for one dataset, labelled with a row name per source."""
+    path = results / name
+    if not path.exists():
+        return None
+    table = pd.read_csv(path)
+    table = newest_versions(table[table["dataset"] == dataset])
+    if table.empty:
+        return None
+    model = table["checkpoint"].map(
+        lambda c: "real (floor)" if pd.isna(c) else short_name(c, dataset)
+    )
+    source = model.where(table["source"] == "real", model + "  ·  " + table["source"])
+    return table.assign(row=source, model_name=model)
+
+
+def row_order(table: pd.DataFrame) -> list[str]:
+    ranked = table.drop_duplicates("row").assign(
+        arm=lambda t: t["source"].map(ARMS.index),
+        rank=lambda t: t["model_name"].map(
+            lambda m: (-1, m) if m == "real (floor)" else model_rank(m)
+        ),
+    )
+    return ranked.sort_values(["rank", "arm"])["row"].tolist()
+
+
+def query_label(digit: int, fg: int, bg: int) -> str:
+    """`[3, 1, -1]` -> `3 · green · any`."""
+    parts = [
+        "any" if value < 0 else FACTOR_VALUES[factor][value]
+        for factor, value in zip(FACTORS, (digit, fg, bg), strict=True)
+    ]
+    return " · ".join(parts)
+
+
+def plot_calibration(results: Path, out: Path, dataset: str) -> Path | None:
+    """TV per query and source, scored on all of the query's free factors jointly:
+    the strictest row, since it is the one that sees dependence between them."""
+    table = calibration_rows(results, "colour_calibration.csv", dataset)
+    if table is None:
+        return None
+    width = table["factor"].str.count(r"\+")
+    table = table[width == width.groupby([table[f] for f in FACTORS]).transform("max")]
+    table = table.assign(
+        query=[query_label(*q) for q in table[FACTORS].itertuples(index=False)]
+    )
+    queries = list(dict.fromkeys(table.sort_values(FACTORS)["query"]))
+    rows = row_order(table)
+    grid = table.pivot_table(index="row", columns="query", values="value").reindex(
+        index=rows, columns=queries
+    )
+
+    fig, ax = plt.subplots(
+        figsize=(max(9.0, 1.1 * len(queries) + 4.5), 0.42 * len(rows) + 1.8)
+    )
+    fig.set_facecolor(SURFACE)
+    vmax = max(0.5, float(grid.max().max()))
+    image = ax.imshow(grid.to_numpy(), cmap="Blues", vmin=0, vmax=vmax, aspect="auto")
+    for (y, x), value in pd.DataFrame(grid.to_numpy()).stack().items():
+        ax.text(
+            x,
+            y,
+            f"{value:.2f}",
+            ha="center",
+            va="center",
+            fontsize=8,
+            color="white" if value > 0.6 * vmax else INK,
+        )
+    ax.set_xticks(range(len(queries)), queries, rotation=35, ha="right", color=INK)
+    ax.set_yticks(range(len(rows)), rows, color=INK)
+    ax.tick_params(length=0)
+    for side in ax.spines.values():
+        side.set_visible(False)
+    bar = fig.colorbar(image, ax=ax, fraction=0.03, pad=0.02)
+    bar.set_label("TV, lower is better", color=INK, labelpad=8)
+    bar.outline.set_visible(False)
+    ax.set_title(
+        f"{dataset}: distance to the training mix, all free factors jointly",
+        color=INK,
+        fontsize=12,
+        loc="left",
+    )
+    fig.tight_layout()
+    figure = out / "calibration.png"
+    fig.savefig(figure, dpi=200, bbox_inches="tight")
+    plt.close(fig)
+    return figure
+
+
+def plot_calibration_histograms(results: Path, out: Path, dataset: str) -> list[Path]:
+    """Per query: every source's mix of each free factor against the training one."""
+    table = calibration_rows(results, "colour_calibration_histogram.csv", dataset)
+    if table is None:
+        return []
+    table = table[~table["factor"].str.contains("+", regex=False)]
+    figures = []
+    for query, rows in table.groupby(FACTORS):
+        sources = row_order(rows)
+        factors = [f for f in FACTORS if f in set(rows["factor"])]
+        fig, axes = plt.subplots(
+            len(sources),
+            len(factors),
+            squeeze=False,
+            sharey=True,
+            figsize=(3.4 * len(factors) + 2.2, 0.9 * len(sources) + 1.2),
+        )
+        fig.set_facecolor(SURFACE)
+        for y, source in enumerate(sources):
+            for x, factor in enumerate(factors):
+                ax = axes[y][x]
+                ax.set_facecolor(SURFACE)
+                cells = rows[(rows["row"] == source) & (rows["factor"] == factor)]
+                cells = cells.sort_values("class")
+                ax.bar(
+                    cells["class"], cells["generated"], width=0.8, color=BAR, zorder=2
+                )
+                ax.step(
+                    cells["class"],
+                    cells["truth"],
+                    where="mid",
+                    color=INK,
+                    linewidth=1.5,
+                    zorder=3,
+                )
+                ax.set_xticks(
+                    cells["class"],
+                    FACTOR_VALUES[factor][: len(cells)],
+                    fontsize=7,
+                    color=MUTED,
+                    rotation=0 if factor == "digit" else 30,
+                )
+                ax.tick_params(axis="y", labelsize=7, colors=MUTED, length=0)
+                ax.tick_params(axis="x", length=0, labelbottom=y == len(sources) - 1)
+                for side in ("top", "right", "left"):
+                    ax.spines[side].set_visible(False)
+                ax.spines["bottom"].set_color(GRID)
+                if y == 0:
+                    ax.set_title(FACTOR_LABELS[factor], color=INK, fontsize=10)
+                if x == 0:
+                    ax.set_ylabel(
+                        source,
+                        rotation=0,
+                        ha="right",
+                        va="center",
+                        fontsize=8,
+                        color=INK,
+                    )
+        fig.suptitle(
+            f"{query_label(*query)}   (bars = generated, line = training)",
+            color=INK,
+            fontsize=11,
+            x=0.01,
+            ha="left",
+        )
+        fig.tight_layout()
+        figure = (
+            out / f"calibration_{'_'.join('x' if v < 0 else str(v) for v in query)}.png"
+        )
+        fig.savefig(figure, dpi=160, bbox_inches="tight")
+        plt.close(fig)
+        figures.append(figure)
+    return figures
+
+
 def print_table(table: pd.DataFrame, results: Path, dataset: str) -> None:
     """Every number behind the figures, as markdown for the slides."""
     wide = table.pivot_table(index="model", columns="factor", values="value").reindex(
@@ -335,9 +518,11 @@ def main() -> None:
                 for metric in SET_METRICS
             ),
             plot_steering(args.results, out, args.dataset),
+            plot_calibration(args.results, out, args.dataset),
         )
         if figure is not None
     ]
+    written += plot_calibration_histograms(args.results, out, args.dataset)
     print_table(table, args.results, args.dataset)
     print("\nwrote:")
     for figure in written:

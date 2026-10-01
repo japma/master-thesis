@@ -4,19 +4,30 @@ A query is a label row with `UNSPECIFIED` where a factor is free. Nothing here s
 single sample: with a factor free there is no single right answer, only a right *mix*,
 so the unit of measurement is the histogram over one query's samples, read by the judge.
 
-Two pieces:
-  `sample_labels`  the mixture reference -- free factors drawn from the training
-                   conditional, then the model is asked a fully specified question.
-                   Correct by construction, so its calibration is the floor.
-  `calibration`    how far a set of judged images is from the distribution it should
-                   have: each free factor alone, and all of them jointly.
+Two stages around the pool, like the stratified sets (see `evaluation.pools`):
+  `generate_marginal`  every listed model's answer to every query, once per arm it
+                       supports, plus the training images matching the query.
+  `evaluate_marginal`  the judge reads each set, and `calibration` scores how far its
+                       mix is from the training conditional: each free factor alone,
+                       and all of them jointly.
+
+The arms, i.e. how a model is made to answer a query with factors left free:
+  real          training images matching the query. Not a model: the floor, judge
+                error plus sampling noise.
+  mixture       free factors drawn from the training labels, then a fully specified
+                question. Any conditional model can do it, and it is correct whenever
+                every conditional is -- so it checks the conditionals, not a marginal.
+  dont_care     a CSPN trained with label dropout, given its "unspecified" index.
+  marginalized  the joint PC, marginalizing the free factors exactly.
 """
 
 from collections.abc import Sequence
+from pathlib import Path
 
 import pandas as pd
 import torch
 
+from dataset_loaders import build_dataset
 from dataset_loaders.colour_mnist import FACTOR_NAMES
 from evaluation.conditionals import (
     UNSPECIFIED,
@@ -27,20 +38,44 @@ from evaluation.conditionals import (
     total_variation,
     training_labels,
 )
-from evaluation.evaluate import RUN_KEYS, load_judge, predict, tag, write_metric
+from evaluation.evaluate import (
+    SET_KEYS,
+    load_judge,
+    pinned_version,
+    predict,
+    tag,
+    write_metric,
+)
 from evaluation.generate import (
+    ConditionalSampler,
+    VAECache,
     check_latent_dim,
-    load_generative_model,
-    load_vae,
-    resolve_autoencoder,
+    load_pool_model,
     sample_and_decode,
 )
-from evaluation.samples import to_uint8
+from evaluation.pools import (
+    IMAGES,
+    LABELS,
+    LATENTS,
+    MarginalManifest,
+    is_complete,
+    load_manifest,
+    load_tensor,
+    marginal_dir,
+    model_marginal_dir,
+    model_root,
+    real_marginal_dir,
+    version_number,
+    write_dir,
+)
+from evaluation.samples import current_git_commit, to_uint8
+from models.autoencoder import AbstractAutoencoder
 from models.cspn.joint_pc import JointPC
 from models.cspn.psinet_cspn import PsiNetCSPN
-from utils.config import EvaluationRunConfig
+from utils.config import GenerativeModelType, PoolModelConfig, PoolRunConfig
 from utils.progress import start_rtpt
 from utils.reproducibility import seed_everything
+from utils.wandb_utils import resolve_artifact
 
 
 def as_query(query: Sequence[int]) -> torch.Tensor:
@@ -151,217 +186,312 @@ def calibration_histogram(
     return pd.DataFrame(rows)
 
 
-# Which sampler produced a set of images, the way `source` names it for a pool.
+REAL = "real"
 MIXTURE = "mixture"
-MARGINALIZED = "marginalized"
 DONT_CARE = "dont_care"
+MARGINALIZED = "marginalized"
+ARMS = (REAL, MIXTURE, DONT_CARE, MARGINALIZED)
+
+# The conditional models; the others ignore their labels, so no query applies to them.
+QUERYABLE = (
+    GenerativeModelType.CSPN,
+    GenerativeModelType.JOINT_PC,
+    GenerativeModelType.NN_BASELINE,
+)
+
+# The real set is the same for every model, so it gets one fixed draw.
+REAL_SEED = 0
 
 CALIBRATION_FILENAME = "colour_calibration.csv"
 HISTOGRAM_FILENAME = "colour_calibration_histogram.csv"
 
 
+# --- stage 1: sampling ---
+def model_arms(model: object) -> list[str]:
+    """The arms a model can answer a query by."""
+    arms = [MIXTURE]
+    if isinstance(model, PsiNetCSPN) and model.supports_unknown:
+        arms.append(DONT_CARE)
+    if isinstance(model, JointPC):
+        arms.append(MARGINALIZED)
+    return arms
+
+
+def real_images(
+    dataset: str,
+    size: tuple[int, int],
+    query: torch.Tensor,
+    n: int,
+    labels: torch.Tensor,
+    generator: torch.Generator,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """`n` training images matching `query`, drawn with replacement, and their labels."""
+    rows = matching(labels, query).nonzero(as_tuple=True)[0]
+    if rows.numel() == 0:
+        raise ValueError(f"no training rows match query {query.tolist()}")
+    picked = rows[torch.randint(rows.numel(), (n,), generator=generator)]
+    split = build_dataset(dataset, train=True, size=size)
+    images = torch.stack([split[int(i)][0] for i in picked])
+    return to_uint8(images), labels[picked].clone()
+
+
 @torch.no_grad()
-def mixture_samples(
-    model: object,
-    vae: object,
+def answer(
+    arm: str,
+    model: ConditionalSampler,
+    vae: AbstractAutoencoder,
     query: torch.Tensor,
     n: int,
     labels: torch.Tensor,
     device: torch.device,
-    std_correction: float = 1.0,
-    batch_size: int = 256,
-    generator: torch.Generator | None = None,
-) -> torch.Tensor:
-    """The reference arm: draw the free factors from training, then ask for a full label.
-
-    p(z | given) = sum_free p(free | given) p(z | given, free), sampled ancestrally. The
-    model answers only fully specified questions, so this is correct whenever the model
-    can render each combination -- which is what makes it the floor.
-    """
-    drawn = sample_labels(query, n, labels, generator)
-    _, images = sample_and_decode(
-        model, vae, drawn, device, std_correction=std_correction, batch_size=batch_size
-    )
-    return images
-
-
-@torch.no_grad()
-def marginalized_samples(
-    model: object,
-    vae: object,
-    query: torch.Tensor,
-    n: int,
-    device: torch.device,
-    std_correction: float = 1.0,
-    batch_size: int = 256,
-) -> torch.Tensor:
-    """The model marginalizing the free factors itself, for a PC that has a `p(y)`."""
-    known = {
-        factor: int(value)
-        for factor, value in enumerate(query.tolist())
-        if value != UNSPECIFIED
-    }
-    images = []
-    remaining = n
-    while remaining > 0:
-        size = min(batch_size, remaining)
-        latents, _ = model.sample_partial_labels(
-            known, size, device=device, std_correction=std_correction
+    std_correction: float,
+    batch_size: int,
+    generator: torch.Generator,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """One model's `n` samples for a query by one arm: latents, images, and the labels
+    behind them (`UNSPECIFIED` where the arm left a factor to the model)."""
+    if arm == MIXTURE:
+        drawn = sample_labels(query, n, labels, generator)
+        latents, images = sample_and_decode(
+            model, vae, drawn, device, std_correction, batch_size
         )
-        images.append(to_uint8(vae.decode(latents)).cpu())
-        remaining -= size
-    return torch.cat(images)
-
-
-@torch.no_grad()
-def dont_care_samples(
-    model: PsiNetCSPN,
-    vae: object,
-    query: torch.Tensor,
-    n: int,
-    device: torch.device,
-    std_correction: float = 1.0,
-    batch_size: int = 256,
-) -> torch.Tensor:
-    """The learned stand-in: free factors carry the encoder's "unspecified" index.
-
-    Not a marginal. The hypernetwork saw that index during training and learned *a*
-    parameter set for it; whether that set matches the true conditional is exactly what
-    the calibration number measures.
-    """
-    if not model.supports_unknown:
-        raise ValueError(
-            "this CSPN was trained without label dropout, so it has no unknown index; "
-            "set encoder_config.label_dropout_prob above 0 and retrain"
+        return latents, images, drawn
+    if arm == DONT_CARE:
+        assert isinstance(model, PsiNetCSPN)
+        asked = query.clone()
+        for factor in free_factors(query):
+            asked[factor] = model.unknown_indices[factor]
+        latents, images = sample_and_decode(
+            model, vae, asked.repeat(n, 1), device, std_correction, batch_size
         )
-    labels = query.clone()
-    for factor in free_factors(query):
-        labels[factor] = model.unknown_indices[factor]
-    rows = labels.unsqueeze(0).repeat(n, 1)
-    _, images = sample_and_decode(
-        model, vae, rows, device, std_correction=std_correction, batch_size=batch_size
+        return latents, images, query.repeat(n, 1)
+    if arm == MARGINALIZED:
+        assert isinstance(model, JointPC)
+        known = {
+            factor: int(value)
+            for factor, value in enumerate(query.tolist())
+            if value != UNSPECIFIED
+        }
+        latents, images, completed = [], [], []
+        for size in torch.arange(n).split(batch_size):
+            z, y = model.sample_partial_labels(
+                known, len(size), device=device, std_correction=std_correction
+            )
+            latents.append(z.float().cpu())
+            images.append(to_uint8(vae.decode(z)).cpu())
+            completed.append(y.cpu())
+        return torch.cat(latents), torch.cat(images), torch.cat(completed)
+    raise ValueError(f"unknown arm {arm!r}")
+
+
+def up_to_date(directory: Path, n: int) -> bool:
+    return is_complete(directory) and load_manifest(directory, MarginalManifest).n == n
+
+
+def generate_marginal(cfg: PoolRunConfig, device: torch.device) -> None:
+    """Fill `<pool>/marginal/` with every query's real set and every listed model's
+    answers, skipping whatever is already there."""
+    if cfg.marginal is None:
+        raise ValueError("this pool config has no `marginal:` block")
+    dataset_dir = cfg.dataset_dir
+    n = cfg.marginal.n_per_query
+    batch_size = cfg.generation.batch_size
+    queries = [as_query(spec) for spec in cfg.marginal.queries]
+    labels = training_labels(cfg.dataset.name)
+    size = (cfg.dataset.height, cfg.dataset.width)
+
+    generator = torch.Generator().manual_seed(REAL_SEED)
+    for query in queries:
+        directory = real_marginal_dir(dataset_dir, query.tolist())
+        if up_to_date(directory, n):
+            continue
+        images, real_labels = real_images(
+            cfg.dataset.name, size, query, n, labels, generator
+        )
+        manifest = MarginalManifest(
+            dataset=cfg.dataset.name,
+            query=query.tolist(),
+            arm=REAL,
+            n=n,
+            git_commit=current_git_commit(),
+        )
+        write_dir(directory, manifest, {IMAGES: images, LABELS: real_labels})
+
+    entries = [entry for entry in cfg.models if queryable(entry)]
+    rtpt = start_rtpt(
+        f"marginal_{cfg.dataset.name}",
+        len(entries) * len(cfg.generation.seeds) * len(queries),
     )
-    return images
+    vaes: VAECache = {}
+    for entry in entries:
+        ref = resolve_artifact(entry.name, entry.version or "latest")
+        if ref is None:
+            print(f"WARNING: {entry.name} is not on wandb; skipping its queries")
+            continue
+        try:
+            model, ref, vae, vae_ref = load_pool_model(
+                entry, ref, cfg.dataset, device, vaes
+            )
+        except ValueError as error:
+            print(f"WARNING: {error}")
+            continue
+        check_latent_dim(model, vae, device, ref, vae_ref, labels)
+        arms = model_arms(model)
+        for seed in cfg.generation.seeds:
+            seed_everything(seed)
+            generator = torch.Generator().manual_seed(seed)
+            for query in queries:
+                rtpt.step(subtitle=f"{entry.name} {query.tolist()}")
+                for arm in arms:
+                    directory = model_marginal_dir(
+                        dataset_dir,
+                        seed,
+                        entry.type,
+                        ref,
+                        entry.std_correction,
+                        arm,
+                        query.tolist(),
+                    )
+                    if up_to_date(directory, n):
+                        continue
+                    latents, images, asked = answer(
+                        arm,
+                        model,
+                        vae,
+                        query,
+                        n,
+                        labels,
+                        device,
+                        entry.std_correction,
+                        batch_size,
+                        generator,
+                    )
+                    manifest = MarginalManifest(
+                        dataset=cfg.dataset.name,
+                        query=query.tolist(),
+                        arm=arm,
+                        n=n,
+                        git_commit=current_git_commit(),
+                        model_type=entry.type,
+                        model_checkpoint=ref,
+                        vae_checkpoint=vae_ref,
+                        seed=seed,
+                        std_correction=entry.std_correction,
+                    )
+                    write_dir(
+                        directory,
+                        manifest,
+                        {LATENTS: latents, IMAGES: images, LABELS: asked},
+                    )
+        del model
 
 
-def run_columns(
-    cfg: EvaluationRunConfig, model: str, vae: str, classifier: str, seed: int
-) -> dict:
-    """The identity columns, as a pool's metrics carry them."""
+def queryable(entry: PoolModelConfig) -> bool:
+    """Conditioned on every factor; a query needs all three to leave some free."""
+    if entry.type not in QUERYABLE or entry.labels is not None:
+        print(f"{entry.name}: not conditioned on every factor; no marginal queries")
+        return False
+    return True
+
+
+# --- stage 2: scoring ---
+def find_marginal(cfg: PoolRunConfig) -> list[Path]:
+    """Every complete set for the config's queries: the real ones, then each listed
+    model's pinned version or newest one with anything sampled, per seed and arm."""
+    assert cfg.marginal is not None
+    dataset_dir = cfg.dataset_dir
+    queries = [as_query(spec).tolist() for spec in cfg.marginal.queries]
+    found = [real_marginal_dir(dataset_dir, query) for query in queries]
+    for seed in cfg.generation.seeds:
+        for entry in cfg.models:
+            if entry.type not in QUERYABLE or entry.labels is not None:
+                continue
+            root = model_root(marginal_dir(dataset_dir), seed, entry.type, entry.name)
+            version = pinned_version(entry)
+            candidates = (
+                [root / version]
+                if version is not None
+                else sorted(root.glob("v*"), key=version_number, reverse=True)
+            )
+            std = f"std{entry.std_correction:g}"
+            sampled = [v for v in candidates if (v / std).is_dir()]
+            if not sampled:
+                print(f"WARNING: no marginal sets for {entry.name} (seed={seed})")
+                continue
+            ref = f"{entry.name}:{sampled[0].name}"
+            found += [
+                model_marginal_dir(
+                    dataset_dir, seed, entry.type, ref, entry.std_correction, arm, q
+                )
+                for arm in ARMS
+                for q in queries
+            ]
+    complete = [directory for directory in found if is_complete(directory)]
+    if not complete:
+        raise FileNotFoundError(
+            f"No marginal sets under {marginal_dir(dataset_dir)}. Run "
+            "`uv run generate_pools` with this config first."
+        )
+    return complete
+
+
+def identity(manifest: MarginalManifest, classifier: str) -> dict:
+    """The columns every pool metric starts with; the real set leaves the model's
+    columns empty."""
     return {
-        "model": cfg.model.model_type,
-        "dataset": cfg.dataset.name,
-        "checkpoint": model,
-        "seed": seed,
-        "std_correction": cfg.generation.std_correction,
-        "vae": vae,
+        "model": manifest.model_type,
+        "dataset": manifest.dataset,
+        "checkpoint": manifest.model_checkpoint,
+        "seed": manifest.seed,
+        "std_correction": manifest.std_correction,
+        "vae": manifest.vae_checkpoint,
         "classifier": classifier,
     }
 
 
-def run_marginal(cfg: EvaluationRunConfig, device: torch.device) -> None:
-    """Every query, every arm the model supports, into two CSVs under `results_root`."""
+def evaluate_marginal(cfg: PoolRunConfig, device: torch.device) -> None:
+    """Judge every marginal set in the pool, and write both calibration CSVs."""
     if cfg.marginal is None:
-        raise ValueError(
-            "this config has no `marginal:` block, so there are no queries to run"
-        )
-
+        raise ValueError("this pool config has no `marginal:` block")
     if cfg.classifier is None:
-        raise ValueError(
-            "this config has no `classifier:`, and every factor is read by the judge"
-        )
-    if cfg.dataset.labels is not None:
-        raise ValueError(
-            f"dataset.labels is {list(cfg.dataset.labels)}, but marginal queries "
-            "condition on every factor"
-        )
-    model, resolved_model, model_path = load_generative_model(
-        cfg.model.model_type, cfg.model.name, device, cfg.model.tag
-    )
-    name, tag_, external = resolve_autoencoder(
-        cfg.autoencoder, model_path, resolved_model
-    )
-    vae, resolved_vae = load_vae(name, tag_, external, cfg.dataset, device)
-    seed = seed_everything(cfg.generation.seed)
-    generator = torch.Generator().manual_seed(seed)
-    judge, classifier = load_judge(cfg.classifier, device)
+        raise ValueError("every factor is read by the judge; the config has none")
+    directories = find_marginal(cfg)
     labels = training_labels(cfg.dataset.name)
-    check_latent_dim(model, vae, device, resolved_model, resolved_vae, labels)
-    columns = run_columns(cfg, resolved_model, resolved_vae, classifier, seed)
-    keys = {key: columns[key] for key in RUN_KEYS}
+    judge, classifier = load_judge(cfg.classifier, device)
+    batch_size = cfg.evaluation.batch_size
+    results = cfg.evaluation.results_root
+    rtpt = start_rtpt(f"evaluate_marginal_{cfg.dataset.name}", len(directories))
 
-    n = cfg.marginal.n_per_query
-    batch_size = cfg.generation.batch_size
-    std_correction = cfg.generation.std_correction
-
-    arms_per_query = 1 + int(
-        isinstance(model, JointPC)
-        or (isinstance(model, PsiNetCSPN) and model.supports_unknown)
-    )
-    rtpt = start_rtpt(
-        f"marginal_{cfg.dataset.name}", len(cfg.marginal.queries) * arms_per_query
-    )
-
-    distances: list[pd.DataFrame] = []
-    histograms: list[pd.DataFrame] = []
-    for spec in cfg.marginal.queries:
-        query = as_query(spec)
-        arms = {
-            MIXTURE: mixture_samples(
-                model,
-                vae,
-                query,
-                n,
-                labels,
-                device,
-                std_correction=std_correction,
-                batch_size=batch_size,
-                generator=generator,
-            )
-        }
-        if isinstance(model, PsiNetCSPN) and model.supports_unknown:
-            arms[DONT_CARE] = dont_care_samples(
-                model,
-                vae,
-                query,
-                n,
-                device,
-                std_correction=std_correction,
-                batch_size=batch_size,
-            )
-        if isinstance(model, JointPC):
-            arms[MARGINALIZED] = marginalized_samples(
-                model,
-                vae,
-                query,
-                n,
-                device,
-                std_correction=std_correction,
-                batch_size=batch_size,
-            )
-        for arm, images in arms.items():
-            rtpt.step(subtitle=f"{arm} {spec}")
-            predictions = predict(
-                judge, images, device, cfg.evaluation.batch_size, f"judging {arm}"
-            )
-            distances.append(tag(calibration(predictions, query, labels), columns, arm))
-            histograms.append(
-                tag(calibration_histogram(predictions, query, labels), columns, arm)
-            )
-
-    results_root = cfg.evaluation.results_root
-    distance_table = pd.concat(distances, ignore_index=True)
-    write_metric(results_root / CALIBRATION_FILENAME, distance_table, keys)
-    write_metric(
-        results_root / HISTOGRAM_FILENAME,
-        pd.concat(histograms, ignore_index=True),
-        keys,
-    )
-    _print_summary(distance_table)
+    distances = []
+    for directory in directories:
+        manifest = load_manifest(directory, MarginalManifest)
+        query = torch.tensor(manifest.query)
+        rtpt.step(subtitle=f"{manifest.arm} {manifest.query}")
+        desc = f"{manifest.model_checkpoint or 'real'} {manifest.arm} {manifest.query}"
+        predictions = predict(
+            judge, load_tensor(directory, IMAGES), device, batch_size, desc
+        )
+        columns = identity(manifest, classifier)
+        keys = {key: columns[key] for key in SET_KEYS} | {"source": manifest.arm}
+        keys |= {name: int(query[f]) for f, name in enumerate(FACTOR_NAMES)}
+        distance = tag(calibration(predictions, query, labels), columns, manifest.arm)
+        write_metric(results / CALIBRATION_FILENAME, distance, keys)
+        write_metric(
+            results / HISTOGRAM_FILENAME,
+            tag(
+                calibration_histogram(predictions, query, labels), columns, manifest.arm
+            ),
+            keys,
+        )
+        distances.append(distance)
+    _print_summary(pd.concat(distances, ignore_index=True))
 
 
 def _print_summary(distances: pd.DataFrame) -> None:
     print("\ncolour calibration (total variation, lower is better)")
     for row in distances.itertuples(index=False):
         query = f"[{row.digit}, {row.fg}, {row.bg}]"
-        print(f"  {query:<14} {row.source:<13} {row.factor:<13} {row.value:.4f}")
+        name = row.checkpoint if isinstance(row.checkpoint, str) else "real"
+        print(
+            f"  {name:<55} {query:<14} {row.source:<13} {row.factor:<12} {row.value:.4f}"
+        )

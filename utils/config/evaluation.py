@@ -1,11 +1,11 @@
 """Pool and evaluation configs.
 
 `PoolRunConfig` (`type: pools`) describes one dataset: every generative model to sample
-into its pool, and how the pool is scored. `generate_pools`, `evaluate_samples` and
-`evaluate_sets` all read it.
+into its pool, and how the pool is scored. `generate_pools`, `evaluate_samples`,
+`evaluate_sets` and `evaluate_marginal` all read it.
 
 `EvaluationRunConfig` (`type: evaluation`) is one model at a time, and only
-`evaluate_marginal` still reads it.
+`diagnose_joint_pc` still reads it.
 """
 
 import re
@@ -147,7 +147,6 @@ class EvaluationRunConfig(BaseModel):
     classifier: CheckpointConfig | None = None
     generation: GenerationConfig = Field(default_factory=GenerationConfig)
     evaluation: EvaluationConfig = Field(default_factory=EvaluationConfig)
-    marginal: MarginalConfig | None = None
 
 
 class PoolModelConfig(BaseModel):
@@ -199,6 +198,8 @@ class PoolRunConfig(BaseModel):
     classifier: CheckpointConfig | None = None
     generation: PoolGenerationConfig
     evaluation: EvaluationConfig = Field(default_factory=EvaluationConfig)
+    # Queries with factors left free, sampled into the pool beside the stratified set.
+    marginal: MarginalConfig | None = None
 
     @model_validator(mode="after")
     def _unique_models(self) -> Self:

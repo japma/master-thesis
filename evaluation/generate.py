@@ -361,6 +361,29 @@ def describe(entry: PoolModelConfig, ref: str, seed: int) -> str:
     return f"{ref}  std={entry.std_correction:g}  seed={seed}"
 
 
+VAECache = dict[str, tuple[AbstractAutoencoder, str]]
+
+
+def load_pool_model(
+    entry: PoolModelConfig,
+    ref: str,
+    dataset: DatasetConfig,
+    device: torch.device,
+    vaes: VAECache,
+) -> tuple[ConditionalSampler, str, AbstractAutoencoder, str]:
+    """A listed model and the VAE that decodes it, each with its exact `name:vN`.
+    VAEs are loaded once into `vaes`. Raises ValueError when no autoencoder is known."""
+    model, ref, model_path = load_generative_model(entry.type, ref, device)
+    if entry.type == GenerativeModelType.VAE_PRIOR:
+        vae_name, vae_tag = ref, "latest"
+    else:
+        vae_name, vae_tag, _ = resolve_autoencoder(None, model_path, ref)
+    if vae_name not in vaes:
+        vaes[vae_name] = load_vae(vae_name, vae_tag, False, dataset, device)
+    vae, vae_ref = vaes[vae_name]
+    return model, ref, vae, vae_ref
+
+
 def generate_pools(cfg: PoolRunConfig, device: torch.device) -> PoolReport:
     """Fill `cfg.dataset_dir` with everything the config lists that is not there yet."""
     dataset_dir = cfg.dataset_dir
@@ -403,21 +426,16 @@ def generate_pools(cfg: PoolRunConfig, device: torch.device) -> PoolReport:
     n_round_trips = len(todo) * batch_count(real_images.shape[0], batch_size)
     rtpt = start_rtpt(f"pools_{cfg.dataset.name}", n_samples + n_round_trips)
 
-    vaes: dict[str, tuple[AbstractAutoencoder, str]] = {}
+    vaes: VAECache = {}
     for entry, ref, seeds in todo:
-        model, ref, model_path = load_generative_model(entry.type, ref, device)
-        if entry.type == GenerativeModelType.VAE_PRIOR:
-            vae_name, vae_tag = ref, "latest"
-        else:
-            try:
-                vae_name, vae_tag, _ = resolve_autoencoder(None, model_path, ref)
-            except ValueError as error:
-                print(f"WARNING: {error}")
-                report.failed.append(f"{ref}: no autoencoder recorded")
-                continue
-        if vae_name not in vaes:
-            vaes[vae_name] = load_vae(vae_name, vae_tag, False, cfg.dataset, device)
-        vae, vae_ref = vaes[vae_name]
+        try:
+            model, ref, vae, vae_ref = load_pool_model(
+                entry, ref, cfg.dataset, device, vaes
+            )
+        except ValueError as error:
+            print(f"WARNING: {error}")
+            report.failed.append(f"{ref}: no autoencoder recorded")
+            continue
         ensure_reconstructions(
             vae,
             vae_ref,
