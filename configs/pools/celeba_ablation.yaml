@@ -1,0 +1,48 @@
+# The CelebA stack of configs/pools/celeba.yaml on the other `variational_celeba`
+# versions: beta 4 (v2), beta-TCVAE (v3) and beta 0.5 (v4). Trained by
+# train_celeba_beta4.sh, train_celeba_tcvae.sh and train_celeba_beta0p5.sh.
+#
+#   uv run generate_pools configs/pools/celeba_ablation.yaml
+#   uv run evaluate_sets  configs/pools/celeba_ablation.yaml
+#
+# Same dataset, so the same pool directory and result CSVs as the main pool: rows are
+# keyed by checkpoint, and each VAE's round trip is its own `vae`. Models wandb does
+# not have are skipped, so this can run before all three stacks are trained.
+
+type: pools
+
+dataset:
+  name: celeba
+
+models:
+  - { type: cspn, name: cspn_celeba_variational_beta4 }
+  - { type: vae_prior, name: variational_celeba, version: v2 }
+  - { type: gmm, name: gmm_celeba_variational_beta4_k10 }
+  - { type: spn, name: spn_celeba_variational_beta4 }
+  - { type: nn_baseline, name: nn_baseline_celeba_variational_beta4_deterministic }
+  - { type: nn_baseline, name: nn_baseline_celeba_variational_beta4_mixture }
+
+  - { type: cspn, name: cspn_celeba_variational_tcvae }
+  - { type: vae_prior, name: variational_celeba, version: v3 }
+  - { type: gmm, name: gmm_celeba_variational_tcvae_k10 }
+  - { type: spn, name: spn_celeba_variational_tcvae }
+  - { type: nn_baseline, name: nn_baseline_celeba_variational_tcvae_deterministic }
+  - { type: nn_baseline, name: nn_baseline_celeba_variational_tcvae_mixture }
+
+  - { type: cspn, name: cspn_celeba_variational_beta0p5 }
+  - { type: vae_prior, name: variational_celeba, version: v4 }
+  - { type: gmm, name: gmm_celeba_variational_beta0p5_k10 }
+  - { type: spn, name: spn_celeba_variational_beta0p5 }
+  - { type: nn_baseline, name: nn_baseline_celeba_variational_beta0p5_deterministic }
+  - { type: nn_baseline, name: nn_baseline_celeba_variational_beta0p5_mixture }
+
+generation:
+  labels: real
+  seeds: [0]
+  batch_size: 128
+
+evaluation:
+  batch_size: 128
+  results_root: results
+  halvings: 5
+  set_metrics: [fid, kid, precision, recall, cmmd]

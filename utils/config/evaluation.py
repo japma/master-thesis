@@ -203,11 +203,12 @@ class PoolRunConfig(BaseModel):
 
     @model_validator(mode="after")
     def _unique_models(self) -> Self:
-        keys = [(m.name, m.std_correction) for m in self.models]
+        keys = [(m.name, m.version or "", m.std_correction) for m in self.models]
         repeated = sorted({key for key in keys if keys.count(key) > 1})
         if repeated:
             raise ValueError(
-                f"models lists the same (name, std_correction) twice: {repeated}"
+                "models lists the same (name, version, std_correction) twice: "
+                f"{repeated}"
             )
         return self
 
