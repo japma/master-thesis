@@ -16,6 +16,8 @@ from utils.config.label_pc import LabelPCRunConfig
 from utils.config.neural_baseline import NeuralBaselineRunConfig
 from utils.config.spn import SPNRunConfig
 
+DATASET_FRAGMENTS = Path(__file__).resolve().parents[2] / "configs" / "datasets"
+
 
 def _deep_merge(base: dict, override: dict) -> dict:
     """override's keys win; nested dicts are merged recursively rather than replaced
@@ -35,7 +37,7 @@ def _apply_dataset_defaults(raw: dict) -> dict:
     if not isinstance(dataset, dict) or "name" not in dataset:
         return raw
 
-    fragment_path = Path("configs/datasets") / f"{dataset['name']}.yaml"
+    fragment_path = DATASET_FRAGMENTS / f"{dataset['name']}.yaml"
     if not fragment_path.exists():
         return raw
 

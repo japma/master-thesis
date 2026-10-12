@@ -8,6 +8,7 @@ import wandb
 from dataset_loaders import build_data_loaders
 from dataset_loaders.latent_normalizer import LatentNormalizer
 from models.cspn.spn import SPN
+from training.early_stopping import build_early_stopping
 from training.inputs import load_training_autoencoder
 from training.loop import CheckpointSpec, run_training_loop
 from training.objectives.spn import SPNObjective
@@ -120,6 +121,7 @@ def main() -> None:
         # Only the count matters: the SPN samples p(z) whatever the labels say.
         sample_probe=torch.zeros(NUM_SAMPLE_PROBES, 1, device=device),
         sample_log_key="samples/spn_generated_images",
+        early_stopping=build_early_stopping(training_cfg),
     )
 
     wandb.finish()

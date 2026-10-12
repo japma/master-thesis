@@ -29,3 +29,4 @@ training:
   epochs: 200
   learning_rate: 0.0003
   batch_size: 256
+  early_stopping_min_epochs: 20

@@ -38,11 +38,11 @@ models:
 
 generation:
   labels: real
-  seeds: [0]
+  seeds: [ 0 ]
   batch_size: 128
 
 evaluation:
   batch_size: 128
   results_root: results
   halvings: 5
-  set_metrics: [fid, kid, precision, recall, cmmd]
+  set_metrics: [ fid, kid, precision, recall ]

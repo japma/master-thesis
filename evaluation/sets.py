@@ -113,7 +113,10 @@ def write_set_metric(
     write_metric(cfg.evaluation.results_root / f"{name}.csv", table, keys)
 
     summary = table.groupby("source", sort=False)["value"].agg(["mean", "std"])
-    print(f"\n{name}")
+    print(
+        f"\n{name} | {manifest.model_checkpoint} (std={manifest.std_correction:g}, "
+        f"seed={manifest.seed}): {len(scores)} halvings, n={n}"
+    )
     for source, row in summary.iterrows():
         print(f"  {source:<16} {row['mean']:.4f} ± {row['std']:.4f}")
 
@@ -146,7 +149,6 @@ def run_sets(cfg: PoolRunConfig, device: torch.device) -> None:
         )
         for _, manifest in models
     ]
-    scores: dict[tuple[int, str], list[dict[str, float]]] = {}
     for network_name in networks:
         network = NETWORKS[network_name](device)
         embed = partial(
@@ -167,9 +169,7 @@ def run_sets(cfg: PoolRunConfig, device: torch.device) -> None:
             for vae_ref in vae_refs
         }
         shared: dict[tuple, float] = {}
-        for index, ((directory, manifest), (n, splits)) in enumerate(
-            zip(models, plans, strict=True)
-        ):
+        for (directory, manifest), (n, splits) in zip(models, plans, strict=True):
             generated = embed(
                 load_tensor(directory, IMAGES),
                 desc=f"{network_name} {manifest.model_checkpoint}",
@@ -194,15 +194,5 @@ def run_sets(cfg: PoolRunConfig, device: torch.device) -> None:
                             GENERATED: score(generated[sampled], real[reference]),
                         }
                     )
-                scores[(index, name)] = per_split
+                write_set_metric(cfg, manifest, name, per_split, n)
         del network, embed
-
-    for index, ((_, manifest), (n, splits)) in enumerate(
-        zip(models, plans, strict=True)
-    ):
-        print(
-            f"\n=== {manifest.model_checkpoint} (std={manifest.std_correction:g}, "
-            f"seed={manifest.seed}): {len(splits)} halvings, every set cut to n={n}"
-        )
-        for name in names:
-            write_set_metric(cfg, manifest, name, scores[(index, name)], n)
