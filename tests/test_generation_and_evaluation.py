@@ -918,6 +918,13 @@ def stub_networks(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(sets, "NETWORKS", dict.fromkeys(sets.NETWORKS, stub))
 
+    class StubClassifier:
+        embed = staticmethod(stub(DEVICE))
+
+    monkeypatch.setattr(
+        sets, "load_judge", lambda cfg, device: (StubClassifier(), "features:v0")
+    )
+
 
 def test_set_metrics_write_one_row_per_halving_and_source(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -928,6 +935,7 @@ def test_set_metrics_write_one_row_per_halving_and_source(
     cfg = generated_pool(tmp_path, monkeypatch)
     cfg.evaluation.set_metrics = list(sets.SET_METRICS)
     cfg.evaluation.halvings = 2
+    cfg.set_features = CheckpointConfig(name="features")
 
     sets.run_sets(cfg, DEVICE)
 
@@ -936,6 +944,8 @@ def test_set_metrics_write_one_row_per_halving_and_source(
         assert len(table) == 2 * 3
         assert set(table["source"]) == {"real", "reconstruction", "generated"}
         assert (table["n"] == NUM_COMBINATIONS // 2).all()
+        expected = "features:v0" if name.endswith("_classifier") else "none"
+        assert (table["classifier"] == expected).all()
 
 
 def test_paired_halvings_score_the_held_out_halfs_own_samples() -> None:
@@ -957,6 +967,17 @@ def test_paired_halvings_score_the_held_out_halfs_own_samples() -> None:
 def test_an_unknown_set_metric_is_refused(tmp_path: Path) -> None:
     with pytest.raises(ValidationError, match="unknown set metrics"):
         EvaluationConfig(results_root=tmp_path, set_metrics=["fid", "isc"])
+
+
+def test_classifier_set_metrics_need_set_features(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = generated_pool(tmp_path, monkeypatch).model_dump()
+    cfg["evaluation"]["set_metrics"] = ["fd_classifier"]
+    cfg["set_features"] = None
+
+    with pytest.raises(ValidationError, match="need `set_features`"):
+        PoolRunConfig.model_validate(cfg)
 
 
 def test_a_flat_label_dataset_hands_the_model_flat_labels(

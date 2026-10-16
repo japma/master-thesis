@@ -3,7 +3,7 @@
     vae_<dataset>_<vae kind>
     <family>_<dataset>_<vae kind>[_<extra>...]      cspn, joint_pc, nn_baseline, gmm, spn
     label_pc_<dataset>
-    digit_classifier_<dataset>
+    digit_classifier_<dataset>[_features]
 
 Underscores only. The dataset part includes a label selection
 (`colour_mnist_skewed_labels_digit`). The VAE kind names the latent space a model lives

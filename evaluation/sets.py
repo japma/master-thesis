@@ -1,6 +1,7 @@
 """Set metrics: each model's images against the real ones, as whole sets rather than per
 sample, averaged over random halvings of the val split. No judge and no labels, which
-is why this is its own entrypoint and not a module in `metrics/`.
+is why this is its own entrypoint and not a module in `metrics/`. The `classifier`
+features come from `set_features`, a colour-MNIST classifier trained apart from the judge.
 
 Each halving cuts the val set in two: one half is the reference, the other is scored
 against it as the `real` floor -- the distance of the data to itself at this n. The
@@ -33,11 +34,12 @@ from evaluation.evaluate import (
     RECONSTRUCTION,
     RUN_KEYS,
     find_models,
+    load_judge,
     run_columns,
     tag,
     write_metric,
 )
-from evaluation.features import NETWORKS, extract
+from evaluation.features import NETWORKS, Network, extract
 from evaluation.pools import (
     IMAGES,
     REAL_LABELS,
@@ -46,9 +48,12 @@ from evaluation.pools import (
     real_dir,
     vae_dir,
 )
+from evaluation.samples import to_float
 from utils.config import PoolRunConfig
 from utils.progress import batch_count, start_rtpt
 from utils.reproducibility import float64_device
+
+CLASSIFIER = "classifier"
 
 # Each metric: the network whose features it compares, and its score of a sample set
 # against the reference set. Written to `<name>.csv`.
@@ -59,6 +64,10 @@ SET_METRICS: dict[str, tuple[str, Callable[[torch.Tensor, torch.Tensor], float]]
     "recall": ("vgg16", recall),
     "cmmd": ("clip", cmmd),
     "fd_dinov2": ("dinov2", frechet_distance),
+    "fd_classifier": (CLASSIFIER, frechet_distance),
+    "kd_classifier": (CLASSIFIER, kernel_inception_distance),
+    "precision_classifier": (CLASSIFIER, precision),
+    "recall_classifier": (CLASSIFIER, recall),
 }
 
 
@@ -94,15 +103,27 @@ def halvings(
     return n, splits
 
 
+def load_network(
+    name: str, cfg: PoolRunConfig, device: torch.device
+) -> tuple[Network, str | None]:
+    """The network, and the `name:vN` of the feature classifier when it is that one."""
+    if name != CLASSIFIER:
+        return NETWORKS[name](device), None
+    assert cfg.set_features is not None
+    model, checkpoint = load_judge(cfg.set_features, device)
+    return lambda images: model.embed(to_float(images)), checkpoint
+
+
 def write_set_metric(
     cfg: PoolRunConfig,
     manifest: ModelManifest,
     name: str,
     scores: list[dict[str, float]],
     n: int,
+    classifier: str | None,
 ) -> None:
     """One row per split and source in `<name>.csv`, and the mean ± std per source."""
-    columns = run_columns(manifest)
+    columns = run_columns(manifest, classifier)
     keys = {key: columns[key] for key in RUN_KEYS}
     rows = [
         tag(pd.DataFrame([{"split": split, "value": score, "n": n}]), columns, source)
@@ -150,7 +171,7 @@ def run_sets(cfg: PoolRunConfig, device: torch.device) -> None:
         for _, manifest in models
     ]
     for network_name in networks:
-        network = NETWORKS[network_name](device)
+        network, classifier = load_network(network_name, cfg, device)
         embed = partial(
             extract,
             network,
@@ -194,5 +215,5 @@ def run_sets(cfg: PoolRunConfig, device: torch.device) -> None:
                             GENERATED: score(generated[sampled], real[reference]),
                         }
                     )
-                write_set_metric(cfg, manifest, name, per_split, n)
+                write_set_metric(cfg, manifest, name, per_split, n, classifier)
         del network, embed

@@ -301,7 +301,7 @@ def render_digit_rows(
         path,
         FULL_WIDTH_CM,
         cell_of(images),
-        row_labels=[str(digit) for digit in range(NUM_DIGITS)],
+        # row_labels=[str(digit) for digit in range(NUM_DIGITS)],
     )
 
 
@@ -502,8 +502,8 @@ FIGURES: dict[str, Callable[[Path], list[Path]]] = {
     "diversity_cspn": partial(
         few_labels_figure,
         model_type="cspn",
-        name="cspn_colour_mnist_uniform_anchored",
-        filename="colour_cspn_anchored_diversity.pdf",
+        name="cspn_colour_mnist_uniform_variational",
+        filename="colour_cspn_variational_diversity.pdf",
     ),
     "diversity_deterministic": partial(
         few_labels_figure,

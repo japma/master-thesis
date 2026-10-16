@@ -132,14 +132,39 @@ def _create_autoencoder_from_checkpoint(cfg: AutoencoderConfig) -> AbstractAutoe
             return VariationalAutoencoder(config=cfg)
 
 
-def load_ae_from_path(path: Path, device=None) -> AbstractAutoencoder:
+ENCODER_PREFIXES = (
+    "input_proj.",
+    "encoder.",
+    "bottleneck_attn.",
+    "mu_head.",
+    "log_var_head.",
+)
+
+
+def load_ae_from_path(
+    path: Path, device=None, decoder_only: bool = False
+) -> AbstractAutoencoder:
+    """`decoder_only` tolerates a stale encoder (checkpoints from before f9e0814); only
+    `decode` is then trustworthy."""
     with torch.serialization.safe_globals(
         [AnchorScheme, AutoencoderType, AutoencoderVariant, *_LEGACY_CONFIG_GLOBALS]
     ):
         ckpt = torch.load(path, map_location=device, weights_only=True)
     cfg = AutoencoderConfig.model_validate(ckpt["model_cfg"])
     model = _create_autoencoder_from_checkpoint(cfg)
-    model.load_state_dict(ckpt["model_state"])
+    if not decoder_only:
+        model.load_state_dict(ckpt["model_state"])
+        return model
+
+    result = model.load_state_dict(ckpt["model_state"], strict=False)
+    mismatched = result.missing_keys + result.unexpected_keys
+    outside_encoder = [
+        key for key in mismatched if not key.startswith(ENCODER_PREFIXES)
+    ]
+    if outside_encoder:
+        raise RuntimeError(f"{path}: decoder keys do not match: {outside_encoder}")
+    if mismatched:
+        print(f"{path}: encoder is stale ({', '.join(mismatched)}); decode only")
     return model
 
 
@@ -220,6 +245,14 @@ def load_cspn_from_path(path: Path, device=None) -> AbstractCSPN:
         raise AssertionError(f"Checkpoint at {path} has no saved `graph` entry")
 
     cfg = CSPNConfig.model_validate(ckpt["model_cfg"])
+    # Checkpoints from before b3c00ea always reserved an unknown label slot, whatever
+    # their config says; a positive dropout rebuilds that slot (dropout is off in eval).
+    if (
+        "label_dropout.unknown_indices" in ckpt["model_state"]
+        and cfg.encoder_config.label_dropout_prob == 0.0
+    ):
+        encoder = cfg.encoder_config.model_copy(update={"label_dropout_prob": 0.15})
+        cfg = cfg.model_copy(update={"encoder_config": encoder})
     model = _create_cspn_from_checkpoint(cfg, graph=ckpt["graph"])
     model.load_state_dict(ckpt["model_state"])
     return model

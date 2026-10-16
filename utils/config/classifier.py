@@ -62,6 +62,9 @@ class ClassifierRunConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     type: Literal["classifier"]
+    # `judge` scores samples; `features` embeds images for the set metrics. A separate
+    # network, so the two evaluations do not share one network's blind spots.
+    purpose: Literal["judge", "features"] = "judge"
     dataset: DatasetConfig
     model: ClassifierConfig
     training: BaseTrainingConfig

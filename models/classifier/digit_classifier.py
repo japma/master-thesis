@@ -36,9 +36,13 @@ class DigitClassifier(nn.Module):
             for cardinality in self.config.cardinalities
         )
 
+    def embed(self, images: torch.Tensor) -> torch.Tensor:
+        """`(N, hidden_dim)` shared-trunk features, before the heads."""
+        return self.trunk(self.features(images))
+
     def forward(self, images: torch.Tensor) -> list[torch.Tensor]:
         """Logits per label factor, in label-column order."""
-        hidden = self.trunk(self.features(images))
+        hidden = self.embed(images)
         return [head(hidden) for head in self.heads]
 
     @torch.no_grad()

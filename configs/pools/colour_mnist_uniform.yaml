@@ -21,6 +21,11 @@ classifier:
   name: digit_classifier_colour_mnist_uniform
   tag: latest
 
+# The feature network of the *_classifier set metrics, apart from the judge.
+set_features:
+  name: digit_classifier_colour_mnist_uniform_features
+  tag: latest
+
 generation:
   labels: stratified
   n_per_cell: 100
@@ -30,6 +35,7 @@ generation:
 evaluation:
   batch_size: 512
   results_root: results
+  set_metrics: [ fd_classifier, kd_classifier, precision_classifier, recall_classifier ]
 
 # Queries with factors left free, sampled into <pool>/marginal/ by generate_pools and
 # scored by evaluate_marginal.

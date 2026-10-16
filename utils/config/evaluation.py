@@ -196,6 +196,9 @@ class PoolRunConfig(BaseModel):
     models: list[PoolModelConfig] = Field(min_length=1)
     # Omit when no judge applies: CelebA has no attribute classifier yet.
     classifier: CheckpointConfig | None = None
+    # The classifier whose hidden layer the `*_classifier` set metrics compare images in;
+    # a separate network from the judge.
+    set_features: CheckpointConfig | None = None
     generation: PoolGenerationConfig
     evaluation: EvaluationConfig = Field(default_factory=EvaluationConfig)
     # Queries with factors left free, sampled into the pool beside the stratified set.
@@ -210,6 +213,19 @@ class PoolRunConfig(BaseModel):
                 "models lists the same (name, version, std_correction) twice: "
                 f"{repeated}"
             )
+        return self
+
+    @model_validator(mode="after")
+    def _set_features_given(self) -> Self:
+        from evaluation.sets import CLASSIFIER, SET_METRICS
+
+        needing = [
+            name
+            for name in self.evaluation.set_metrics
+            if SET_METRICS[name][0] == CLASSIFIER
+        ]
+        if needing and self.set_features is None:
+            raise ValueError(f"set metrics {needing} need `set_features`")
         return self
 
     @property

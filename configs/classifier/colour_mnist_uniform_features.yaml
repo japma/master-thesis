@@ -1,0 +1,23 @@
+# The feature network of the colour-MNIST set metrics (fd/kd/precision/recall_classifier),
+# trained apart from the judge so the set metrics and the judged metrics are two opinions.
+# Wider and without dropout, so the hidden layer keeps within-class variation.
+
+type: classifier
+purpose: features
+
+dataset:
+  name: colour_mnist_uniform
+
+model:
+  cardinalities: [ 10, 6, 3 ]
+  names: [ digit, fg, bg ]
+  channels: 3
+  image_size: 28
+  conv_channels: [ 32, 64, 64 ]
+  hidden_dim: 256
+  dropout: 0.0
+
+training:
+  epochs: 100
+  learning_rate: 0.001
+  batch_size: 256

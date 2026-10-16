@@ -1,4 +1,5 @@
-"""Entry point for training the colour-MNIST judge (digit, fg and bg heads)."""
+"""Entry point for training a colour-MNIST classifier (digit, fg and bg heads): the judge,
+or with `purpose: features` the separate feature network of the set metrics."""
 
 import torch
 from rtpt import RTPT
@@ -37,14 +38,15 @@ def main() -> None:
     device = resolve_device()
     dataset_name = dataset_cfg.artifact_name
 
-    run_name = f"digit_classifier_{dataset_name}"
-    init_run(cfg.wandb, run_name, cfg.model_dump())
+    extras = ["features"] if cfg.purpose == "features" else []
+    name = artifact_name(ModelFamily.DIGIT_CLASSIFIER, dataset_cfg, *extras)
+    init_run(cfg.wandb, name, cfg.model_dump())
 
     print(
-        f"Training digit classifier on {dataset_name} | device={device} | seed={seed}"
+        f"Training digit classifier ({cfg.purpose}) on {dataset_name} | "
+        f"device={device} | seed={seed}"
     )
 
-    name = artifact_name(ModelFamily.DIGIT_CLASSIFIER, dataset_cfg)
     ckpt_path = intermediate_checkpoint_path(name)
     if resume and ckpt_path.exists():
         model = load_classifier_from_path(ckpt_path, device=device).to(device)
@@ -77,7 +79,7 @@ def main() -> None:
 
     rtpt = RTPT(
         name_initials="JM",
-        experiment_name=run_name,
+        experiment_name=name,
         max_iterations=max(training_cfg.epochs, 1),
     )
     rtpt.start()

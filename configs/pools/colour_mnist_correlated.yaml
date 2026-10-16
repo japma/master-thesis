@@ -35,6 +35,11 @@ classifier:
   name: digit_classifier_colour_mnist_uniform
   tag: latest
 
+# The feature network of the *_classifier set metrics, apart from the judge.
+set_features:
+  name: digit_classifier_colour_mnist_uniform_features
+  tag: latest
+
 generation:
   # Every (digit, fg, bg) cell, held-out ones included: a schedule that only asked for
   # what the model saw could not show the generalization gap.
@@ -46,6 +51,7 @@ generation:
 evaluation:
   batch_size: 512
   results_root: results
+  set_metrics: [ fd_classifier, kd_classifier, precision_classifier, recall_classifier ]
   # Every metric in `evaluation.metrics.METRICS` runs by default; pin a subset with e.g.
   # metrics: [accuracy, accuracy_by_combination]
 
