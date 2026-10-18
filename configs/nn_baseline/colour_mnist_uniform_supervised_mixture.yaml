@@ -1,0 +1,27 @@
+# colour-MNIST uniform, mixture baseline on the supervised latent space.
+
+type: nn_baseline
+
+dataset:
+  name: colour_mnist_uniform
+
+autoencoder:
+  name: "vae_colour_mnist_uniform_supervised"
+  external: false
+  tag: "latest"
+
+model:
+  model_type: mixture
+  num_vars: 16
+  h_dims: [ 256, 128 ]
+  num_components: 16
+  min_std: 0.001
+  max_std: 2.0
+  encoder_config:
+    encoder_type: multi_categorical
+    num_classes: [ 10, 6, 3 ]
+
+training:
+  epochs: 200
+  learning_rate: 0.0003
+  batch_size: 128

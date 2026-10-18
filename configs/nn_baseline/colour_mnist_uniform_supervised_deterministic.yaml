@@ -1,0 +1,29 @@
+# colour-MNIST uniform, deterministic baseline on the supervised latent space.
+
+type: nn_baseline
+
+dataset:
+  name: colour_mnist_uniform
+
+autoencoder:
+  name: "vae_colour_mnist_uniform_supervised"
+  external: false
+  tag: "latest"
+
+model:
+  model_type: deterministic
+  num_vars: 16
+  h_dims: [ 256, 128 ]
+  num_components: 1
+  # The width of the Gaussian around the predicted mean. At 1.0 the NLL is MSE plus a
+  # constant; it also sets how this model's NLL compares to the mixture's, so it is
+  # worth matching to the residual scale rather than leaving it arbitrary.
+  fixed_std: 1.0
+  encoder_config:
+    encoder_type: multi_categorical
+    num_classes: [ 10, 6, 3 ]
+
+training:
+  epochs: 200
+  learning_rate: 0.0003
+  batch_size: 128
