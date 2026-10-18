@@ -8,14 +8,18 @@ dataset:
 models:
   - { type: cspn, name: cspn_colour_mnist_uniform_variational }
   - { type: cspn, name: cspn_colour_mnist_uniform_anchored }
+  - { type: cspn, name: cspn_colour_mnist_uniform_supervised }
   - { type: joint_pc, name: joint_pc_colour_mnist_uniform_variational }
   - { type: joint_pc, name: joint_pc_colour_mnist_uniform_anchored }
+  - { type: joint_pc, name: joint_pc_colour_mnist_uniform_supervised }
   - { type: joint_pc, name: joint_pc_colour_mnist_uniform_labels_digit_variational, labels: [digit] }
   - { type: joint_pc, name: joint_pc_colour_mnist_uniform_x2_variational }
   - { type: nn_baseline, name: nn_baseline_colour_mnist_uniform_variational_deterministic }
   - { type: nn_baseline, name: nn_baseline_colour_mnist_uniform_variational_mixture }
   - { type: nn_baseline, name: nn_baseline_colour_mnist_uniform_anchored_deterministic }
   - { type: nn_baseline, name: nn_baseline_colour_mnist_uniform_anchored_mixture }
+  - { type: nn_baseline, name: nn_baseline_colour_mnist_uniform_supervised_deterministic }
+  - { type: nn_baseline, name: nn_baseline_colour_mnist_uniform_supervised_mixture }
 
 classifier:
   name: digit_classifier_colour_mnist_uniform
